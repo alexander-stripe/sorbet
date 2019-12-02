@@ -40,8 +40,8 @@ ParsedSig TypeSyntax::parseSig(core::MutableContext ctx, ast::Send *sigSend, con
 
 core::TypePtr TypeSyntax::getResultType(core::MutableContext ctx, ast::Expression &expr,
                                         const ParsedSig &sigBeingParsed, TypeSyntaxArgs args) {
-    return core::Types::unwrapSelfTypeParam(
-        ctx, getResultTypeWithSkolems(ctx, expr, sigBeingParsed, args.withoutRebind()));
+    return core::Types::unwrapSelfTypeParam(ctx,
+                                            getResultTypeWithSkolems(ctx, expr, sigBeingParsed, args.withoutRebind()));
 }
 
 TypeSyntax::ResultType TypeSyntax::getResultTypeAndBind(core::MutableContext ctx, ast::Expression &expr,
