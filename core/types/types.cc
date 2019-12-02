@@ -865,14 +865,14 @@ TypePtr Types::unwrapSelfTypeParam(Context ctx, const TypePtr &type) {
     TypePtr ret;
 
     typecase(
-        type.get(),
+        type.get(), [&](ClassType *klass) { ret = type; }, [&](TypeVar *tv) { ret = type; },
+        [&](LambdaParam *tv) { ret = type; }, [&](SelfType *self) { ret = type; },
         [&](AndType *andType) {
-            ret = AndType::make_shared(unwrapSelfTypeParam(ctx, andType->left),
-                                       unwrapSelfTypeParam(ctx, andType->right));
+            ret =
+                AndType::make_shared(unwrapSelfTypeParam(ctx, andType->left), unwrapSelfTypeParam(ctx, andType->right));
         },
         [&](OrType *orType) {
-            ret = OrType::make_shared(unwrapSelfTypeParam(ctx, orType->left),
-                                      unwrapSelfTypeParam(ctx, orType->right));
+            ret = OrType::make_shared(unwrapSelfTypeParam(ctx, orType->left), unwrapSelfTypeParam(ctx, orType->right));
         },
         [&](ShapeType *shape) {
             std::vector<TypePtr> values;
@@ -912,7 +912,7 @@ TypePtr Types::unwrapSelfTypeParam(Context ctx, const TypePtr &type) {
                 ret = type;
             }
         },
-        [&](Type *tp) { ret = type; });
+        [&](Type *tp) { Exception::notImplemented(); });
 
     ENFORCE(ret != nullptr);
 
@@ -941,4 +941,3 @@ core::SymbolRef Types::getRepresentedClass(core::Context ctx, const core::Type *
 DispatchArgs DispatchArgs::withSelfRef(const TypePtr &newSelfRef) {
     return DispatchArgs{name, locs, args, newSelfRef, fullType, block};
 }
-} // namespace sorbet::core
