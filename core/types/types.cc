@@ -859,7 +859,7 @@ TypePtr Types::widen(Context ctx, const TypePtr &type) {
     return ret;
 }
 
-TypePtr Types::unwrapSkolemVariables(Context ctx, const TypePtr &type) {
+TypePtr Types::unwrapSelfTypeParam(Context ctx, const TypePtr &type) {
     ENFORCE(type != nullptr);
 
     TypePtr ret;
@@ -867,39 +867,39 @@ TypePtr Types::unwrapSkolemVariables(Context ctx, const TypePtr &type) {
     typecase(
         type.get(),
         [&](AndType *andType) {
-            ret = AndType::make_shared(unwrapSkolemVariables(ctx, andType->left),
-                                       unwrapSkolemVariables(ctx, andType->right));
+            ret = AndType::make_shared(unwrapSelfTypeParam(ctx, andType->left),
+                                       unwrapSelfTypeParam(ctx, andType->right));
         },
         [&](OrType *orType) {
-            ret = OrType::make_shared(unwrapSkolemVariables(ctx, orType->left),
-                                      unwrapSkolemVariables(ctx, orType->right));
+            ret = OrType::make_shared(unwrapSelfTypeParam(ctx, orType->left),
+                                      unwrapSelfTypeParam(ctx, orType->right));
         },
         [&](ShapeType *shape) {
             std::vector<TypePtr> values;
             values.reserve(shape->values.size());
 
             for (auto &value : shape->values) {
-                values.emplace_back(unwrapSkolemVariables(ctx, value));
+                values.emplace_back(unwrapSelfTypeParam(ctx, value));
             }
 
-            ret = make_type<ShapeType>(unwrapSkolemVariables(ctx, shape->underlying_), shape->keys, std::move(values));
+            ret = make_type<ShapeType>(unwrapSelfTypeParam(ctx, shape->underlying_), shape->keys, std::move(values));
         },
         [&](TupleType *tuple) {
             std::vector<TypePtr> elems;
             elems.reserve(tuple->elems.size());
 
             for (auto &value : tuple->elems) {
-                elems.emplace_back(unwrapSkolemVariables(ctx, value));
+                elems.emplace_back(unwrapSelfTypeParam(ctx, value));
             }
 
-            ret = make_type<TupleType>(unwrapSkolemVariables(ctx, tuple->underlying_), std::move(elems));
+            ret = make_type<TupleType>(unwrapSelfTypeParam(ctx, tuple->underlying_), std::move(elems));
         },
-        [&](MetaType *meta) { ret = make_type<MetaType>(unwrapSkolemVariables(ctx, meta->wrapped)); },
+        [&](MetaType *meta) { ret = make_type<MetaType>(unwrapSelfTypeParam(ctx, meta->wrapped)); },
         [&](AppliedType *appliedType) {
             vector<TypePtr> newTargs;
             newTargs.reserve(appliedType->targs.size());
             for (const auto &t : appliedType->targs) {
-                newTargs.emplace_back(unwrapSkolemVariables(ctx, t));
+                newTargs.emplace_back(unwrapSelfTypeParam(ctx, t));
             }
             ret = make_type<AppliedType>(appliedType->klass, newTargs);
         },

@@ -28,11 +28,11 @@ ParsedSig TypeSyntax::parseSig(core::MutableContext ctx, ast::Send *sigSend, con
     auto result = parseSigWithSkolems(ctx, sigSend, parent, args);
 
     for (auto &arg : result.argTypes) {
-        auto type = core::Types::unwrapSkolemVariables(ctx, arg.type);
+        auto type = core::Types::unwrapSelfTypeParam(ctx, arg.type);
         arg.type = type;
     }
 
-    auto returns = core::Types::unwrapSkolemVariables(ctx, result.returns);
+    auto returns = core::Types::unwrapSelfTypeParam(ctx, result.returns);
     result.returns = returns;
 
     return result;
@@ -40,14 +40,14 @@ ParsedSig TypeSyntax::parseSig(core::MutableContext ctx, ast::Send *sigSend, con
 
 core::TypePtr TypeSyntax::getResultType(core::MutableContext ctx, ast::Expression &expr,
                                         const ParsedSig &sigBeingParsed, TypeSyntaxArgs args) {
-    return core::Types::unwrapSkolemVariables(
+    return core::Types::unwrapSelfTypeParam(
         ctx, getResultTypeWithSkolems(ctx, expr, sigBeingParsed, args.withoutRebind()));
 }
 
 TypeSyntax::ResultType TypeSyntax::getResultTypeAndBind(core::MutableContext ctx, ast::Expression &expr,
                                                         const ParsedSig &sigBeingParsed, TypeSyntaxArgs args) {
     auto result = getResultTypeAndBindWithSkolems(ctx, expr, sigBeingParsed, args);
-    result.type = core::Types::unwrapSkolemVariables(ctx, result.type);
+    result.type = core::Types::unwrapSelfTypeParam(ctx, result.type);
     return result;
 }
 
