@@ -55,7 +55,7 @@ module Sorbet::Private
 #   https://github.com/sorbet/sorbet-typed/new/master?filename=lib/#{gem[:gem]}/all/#{gem[:gem]}.rbi
 #
 ")
-            f.write("# #{gem[:gem]}-#{gem[:version]}\n")
+            f.write("# #{gem[:gem]}-#{gem[:version]}\n\n")
             klass_ids.each do |klass_id, class_def|
               klass = class_def.klass
 
@@ -74,7 +74,8 @@ module Sorbet::Private
                     next
                   end
                   begin
-                    method = item[:singleton] ? klass.method(item[:method]) : klass.instance_method(item[:method])
+                    method = item[:singleton] ? Sorbet::Private::RealStdlib.real_method(klass, item[:method]) : klass.instance_method(item[:method])
+
                     "#{generate_method(method, !item[:singleton])}"
                   rescue NameError
                   end
@@ -194,11 +195,20 @@ module Sorbet::Private
           when :key
             "#{name}: nil"
           when :rest
-            "*#{name}"
+            case name
+            when :* then "*"
+            else "*#{name}"
+            end
           when :keyrest
-            "**#{name}"
+            case name
+            when :** then "**"
+            else "**#{name}"
+            end
           when :block
-            "&#{name}"
+            case name
+            when :& then "&"
+            else "&#{name}"
+            end
           else
             raise "Unknown parameter type: #{type}"
           end
@@ -214,17 +224,12 @@ module Sorbet::Private
 
       def gem_from_location(location)
         match =
+          location&.match(/^.*\/(?:gems\/(?:(?:j?ruby-)?[\d.]+(?:@[^\/]+)?(?:\/bundler)?\/)?|ruby\/[\d.]+\/)gems\/([^\/]+)-([^-\/]+)\//i) || # gem
           location&.match(/^.*\/(ruby)\/([\d.]+)\//) || # ruby stdlib
-          location&.match(/^.*\/(site_ruby)\/([\d.]+)\//) || # rubygems
-          location&.match(/^.*\/gems\/(?:ruby-)?[\d.]+(?:@[^\/]+)?(?:\/bundler)?\/gems\/([^\/]+)-([^-\/]+)\//i) # gem
+          location&.match(/^.*\/(jruby)-([\d.]+)\//) || # jvm ruby stdlib
+          location&.match(/^.*\/(site_ruby)\/([\d.]+)\//) # rubygems
         if match.nil?
-          # uncomment to generate files for methods outside of gems
-          # {
-          #   path: location,
-          #   gem: location.gsub(/[\/\.]/, '_'),
-          #   version: '1.0.0',
-          # }
-          nil
+          match_via_bundler_specs(location)
         else
           {
             path: match[0],
@@ -259,6 +264,44 @@ module Sorbet::Private
         string = symbol.to_s
         return true if SPECIAL_METHOD_NAMES.include?(string)
         string =~ /^[[:word:]]+[?!=]?$/
+      end
+
+      def match_via_bundler_specs(location)
+        @bundler_specs ||= begin
+          require 'bundler'
+          begin
+            Bundler.load.specs.map do |spec|
+              spec.load_paths.map do |path|
+                [path, [spec.name, spec.version.to_s]]
+              end
+            end.flatten(1).to_h
+          rescue Bundler::BundlerError # bail out on any bundler error
+            {}
+          end
+        rescue LoadError # bundler can't be loaded, abort!
+          {}
+        end
+
+        path_to_find = Pathname.new(location)
+        parent_path, (gem_name, gem_version) = @bundler_specs.detect do |path, _gem|
+          path_to_find.fnmatch?(File.join(path, '**'))
+        end
+
+        if parent_path.nil? || gem_name.nil? || gem_version.nil?
+          # uncomment to generate files for methods outside of gems
+          # {
+          #   path: location,
+          #   gem: location.gsub(/[\/\.]/, '_'),
+          #   version: '1.0.0',
+          # }
+          nil
+        else
+          {
+            path: location,
+            gem: gem_name,
+            version: gem_version,
+          }
+        end
       end
     end
   end

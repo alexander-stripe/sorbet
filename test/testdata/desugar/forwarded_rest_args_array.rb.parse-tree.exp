@@ -1,0 +1,60 @@
+Begin {
+  stmts = [
+    DefMethod {
+      name = <U forwarded_rest_args>
+      params = Params {
+        params = [
+          RestParam {
+            name = <U *>
+          }
+        ]
+      }
+      body = Begin {
+        stmts = [
+          Assign {
+            lhs = LVarLhs {
+              name = <U xs>
+            }
+            rhs = Array {
+              elts = [
+                Symbol {
+                  val = <U before>
+                }
+                ForwardedRestArg {
+                }
+                Symbol {
+                  val = <U after>
+                }
+              ]
+            }
+          }
+          Send {
+            receiver = Const {
+              scope = NULL
+              name = <C <U T>>
+            }
+            method = <U reveal_type>
+            args = [
+              LVar {
+                name = <U xs>
+              }
+            ]
+          }
+        ]
+      }
+    }
+    DefMethod {
+      name = <U start_dotdotdot>
+      params = Params {
+        params = [
+          RestParam {
+            name = <U *>
+          }
+          ForwardArg {
+          }
+        ]
+      }
+      body = NULL
+    }
+  ]
+}

@@ -2,129 +2,183 @@
 #include "ast/Helpers.h"
 #include "ast/treemap/treemap.h"
 #include "common/typecase.h"
-#include "core/GlobalSubstitution.h"
+#include "core/NameSubstitution.h"
 namespace sorbet::ast {
 
 namespace {
-class SubstWalk {
+// Is used with NameSubstitution and LazyNameSubstitution, which implement the same interface.
+template <typename T> class SubstWalk {
 private:
-    const core::GlobalSubstitution &subst;
+    T &subst;
 
-    unique_ptr<Expression> substClassName(core::MutableContext ctx, unique_ptr<Expression> node) {
-        auto constLit = cast_tree<UnresolvedConstantLit>(node.get());
-        if (constLit == nullptr) { // uncommon case. something is strange
-            if (isa_tree<EmptyTree>(node.get())) {
-                return node;
+    void substClassName(core::Context ctx, ExpressionPtr &node) {
+        ExpressionPtr *cur = &node;
+        while (true) {
+            auto constLit = cast_tree<UnresolvedConstantLit>(*cur);
+            if (constLit == nullptr) { // uncommon case. something is strange
+                if (isa_tree<EmptyTree>(*cur)) {
+                    return;
+                }
+                TreeWalk::apply(ctx, *this, *cur);
+                return;
             }
-            return TreeMap::apply(ctx, *this, move(node));
+
+            constLit->cnst = subst.substituteSymbolName(constLit->cnst);
+            cur = &constLit->scope;
         }
-
-        auto scope = substClassName(ctx, move(constLit->scope));
-        auto cnst = subst.substitute(constLit->cnst);
-
-        return make_unique<UnresolvedConstantLit>(constLit->loc, move(scope), cnst);
     }
 
-    unique_ptr<Expression> substArg(core::MutableContext ctx, unique_ptr<Expression> argp) {
-        Expression *arg = argp.get();
+    void substArg(ExpressionPtr &argp) {
+        ExpressionPtr *arg = &argp;
         while (arg != nullptr) {
             typecase(
-                arg, [&](RestArg *rest) { arg = rest->expr.get(); }, [&](KeywordArg *kw) { arg = kw->expr.get(); },
-                [&](OptionalArg *opt) { arg = opt->expr.get(); }, [&](BlockArg *opt) { arg = opt->expr.get(); },
-                [&](ShadowArg *opt) { arg = opt->expr.get(); },
-                [&](Local *local) {
-                    local->localVariable._name = subst.substitute(local->localVariable._name);
+                *arg, [&](RestParam &rest) { arg = &rest.expr; }, [&](KeywordArg &kw) { arg = &kw.expr; },
+                [&](OptionalParam &opt) { arg = &opt.expr; }, [&](BlockParam &param) { arg = &param.expr; },
+                [&](ShadowArg &opt) { arg = &opt.expr; },
+                [&](Local &local) {
+                    local.localVariable._name = subst.substitute(local.localVariable._name);
                     arg = nullptr;
                 },
-                [&](UnresolvedIdent *nm) { Exception::raise("UnresolvedIdent remaining after local_vars"); });
+                [&](const UnresolvedIdent &nm) { Exception::raise("UnresolvedIdent remaining after local_vars"); });
         }
-        return argp;
+    }
+
+    core::NameRef unwrapLiteralToName(ExpressionPtr &arg) {
+        auto literal = cast_tree<Literal>(arg);
+        if (literal == nullptr || !literal->isName()) {
+            return core::NameRef::noName();
+        }
+
+        return literal->asName();
     }
 
 public:
-    SubstWalk(const core::GlobalSubstitution &subst) : subst(subst) {}
+    SubstWalk(T &subst) : subst(subst) {}
 
-    unique_ptr<ClassDef> preTransformClassDef(core::MutableContext ctx, unique_ptr<ClassDef> original) {
-        original->name = substClassName(ctx, move(original->name));
-        for (auto &anc : original->ancestors) {
-            anc = substClassName(ctx, move(anc));
+    void preTransformClassDef(core::Context ctx, ExpressionPtr &tree) {
+        auto &original = cast_tree_nonnull<ClassDef>(tree);
+        substClassName(ctx, original.name);
+        for (auto &anc : original.ancestors) {
+            substClassName(ctx, anc);
         }
-        return original;
     }
 
-    unique_ptr<MethodDef> preTransformMethodDef(core::MutableContext ctx, unique_ptr<MethodDef> original) {
-        original->name = subst.substitute(original->name);
-        for (auto &arg : original->args) {
-            arg = substArg(ctx, move(arg));
+    void preTransformMethodDef(core::Context ctx, ExpressionPtr &tree) {
+        auto &original = cast_tree_nonnull<MethodDef>(tree);
+        original.name = subst.substituteSymbolName(original.name);
+        for (auto &param : original.params) {
+            substArg(param);
         }
-        return original;
     }
 
-    unique_ptr<Block> preTransformBlock(core::MutableContext ctx, unique_ptr<Block> original) {
-        for (auto &arg : original->args) {
-            arg = substArg(ctx, move(arg));
+    void preTransformBlock(core::Context ctx, ExpressionPtr &tree) {
+        auto &original = cast_tree_nonnull<Block>(tree);
+        for (auto &param : original.params) {
+            substArg(param);
         }
-        return original;
     }
 
-    unique_ptr<Expression> postTransformUnresolvedIdent(core::MutableContext ctx,
-                                                        unique_ptr<UnresolvedIdent> original) {
-        original->name = subst.substitute(original->name);
-        return original;
+    void postTransformUnresolvedIdent(core::Context ctx, ExpressionPtr &original) {
+        auto &id = cast_tree_nonnull<UnresolvedIdent>(original);
+        if (id.kind != ast::UnresolvedIdent::Kind::Local) {
+            id.name = subst.substituteSymbolName(cast_tree<UnresolvedIdent>(original)->name);
+        } else {
+            id.name = subst.substitute(cast_tree<UnresolvedIdent>(original)->name);
+        }
     }
 
-    unique_ptr<Expression> postTransformLocal(core::MutableContext ctx, unique_ptr<Local> local) {
-        local->localVariable._name = subst.substitute(local->localVariable._name);
-        return local;
+    void postTransformLocal(core::Context ctx, ExpressionPtr &local) {
+        cast_tree_nonnull<Local>(local).localVariable._name =
+            subst.substitute(cast_tree_nonnull<Local>(local).localVariable._name);
     }
 
-    unique_ptr<Send> preTransformSend(core::MutableContext ctx, unique_ptr<Send> original) {
-        original->fun = subst.substitute(original->fun);
-        return original;
-    }
+    void preTransformSend(core::Context ctx, ExpressionPtr &original) {
+        auto &send = cast_tree_nonnull<Send>(original);
+        if (send.fun == core::Names::aliasMethod()) {
+            // `alias_method :foo :bar` is very similar to `def foo; self.bar(); end`, so in
+            // addition to handling the `alias_method` fun, we also want to look at the two
+            // possibly-Symbol-literal arguments and call substituteSymbolName on them as well.
 
-    unique_ptr<Expression> postTransformLiteral(core::MutableContext ctx, unique_ptr<Literal> original) {
-        if (original->isString(ctx)) {
-            auto nameRef = original->asString(ctx);
-            // The 'from' and 'to' GlobalState in this substitution will always be the same,
-            // because the newly created nameRef reuses our current GlobalState id
-            bool allowSameFromTo = true;
-            auto newName = subst.substitute(nameRef, allowSameFromTo);
-            if (newName == nameRef) {
-                return original;
+            // Discards the new name. We only care to do this for the side effect of recording the entry in
+            // acc.symbols in the NameSubstitution. When the tree traversal actually visits the arg
+            // nodes, they will get substituted like normal.
+            if (send.numPosArgs() > 0) {
+                auto name = unwrapLiteralToName(send.getPosArg(0));
+                if (name.exists()) {
+                    [[maybe_unused]] auto _substituted = subst.substituteSymbolName(name);
+                }
             }
-            return MK::String(original->loc, newName);
-        }
-        if (original->isSymbol(ctx)) {
-            auto nameRef = original->asSymbol(ctx);
-            // The 'from' and 'to' GlobalState in this substitution will always be the same,
-            // because the newly created nameRef reuses our current GlobalState id
-            bool allowSameFromTo = true;
-            auto newName = subst.substitute(nameRef, allowSameFromTo);
-            if (newName == nameRef) {
-                return original;
+            if (send.numPosArgs() > 1) {
+                auto name = unwrapLiteralToName(send.getPosArg(1));
+                if (name.exists()) {
+                    [[maybe_unused]] auto _substituted = subst.substituteSymbolName(name);
+                }
             }
-            return MK::Symbol(original->loc, newName);
+        } else if (send.fun == core::Names::callWithSplat() || send.fun == core::Names::callWithBlockPass() ||
+                   send.fun == core::Names::callWithSplatAndBlockPass() || send.fun == core::Names::checkAndAnd()) {
+            ENFORCE(send.numPosArgs() > 2, "These are special desugar methods, should have at least two args");
+
+            // We're lucky because all of these methods have the symbol they dispatch to as the
+            // positional arg at index 1.
+            auto name = unwrapLiteralToName(send.getPosArg(1));
+            ENFORCE(name.exists(), "Name should exist because this arg should be a Literal");
+            [[maybe_unused]] auto _substituted = subst.substituteSymbolName(name);
         }
-        return original;
+
+        send.fun = subst.substituteSymbolName(send.fun);
+
+        // Some intrinsic method dispatch to other methods. Defensively assume that any method that
+        // shares a name with an intrinsic might be an intrinsic method.
+        for (const auto &[source, targets] : core::intrinsicMethodsDispatchMap()) {
+            for (const auto target : targets) {
+                [[maybe_unused]] auto _substituted = subst.substituteSymbolName(target);
+            }
+        }
     }
 
-    unique_ptr<Expression> postTransformUnresolvedConstantLit(core::MutableContext ctx,
-                                                              unique_ptr<UnresolvedConstantLit> original) {
-        original->cnst = subst.substitute(original->cnst);
-        original->scope = substClassName(ctx, move(original->scope));
-        return original;
+    void postTransformLiteral(core::Context ctx, ExpressionPtr &tree) {
+        auto &original = cast_tree_nonnull<Literal>(tree);
+        auto nameRef = unwrapLiteralToName(tree);
+        if (!nameRef.exists()) {
+            return;
+        }
+        auto newName = subst.substitute(nameRef);
+
+        if (newName == nameRef) {
+            return;
+        }
+
+        if (original.isString()) {
+            original.value = core::make_type<core::NamedLiteralType>(core::Symbols::String(), newName);
+        } else if (original.isSymbol()) {
+            original.value = core::make_type<core::NamedLiteralType>(core::Symbols::Symbol(), newName);
+        } else {
+            ENFORCE(false, "Should be guaranteed by unwrapLiteralToName");
+        }
+    }
+
+    void postTransformUnresolvedConstantLit(core::Context ctx, ExpressionPtr &tree) {
+        auto &original = cast_tree_nonnull<UnresolvedConstantLit>(tree);
+        original.cnst = subst.substituteSymbolName(original.cnst);
+        substClassName(ctx, original.scope);
+    }
+
+    void postTransformRuntimeMethodDefinition(core::Context ctx, ExpressionPtr &original) {
+        auto &def = cast_tree_nonnull<RuntimeMethodDefinition>(original);
+        def.name = subst.substitute(def.name);
     }
 };
 } // namespace
 
-unique_ptr<Expression> Substitute::run(core::MutableContext ctx, const core::GlobalSubstitution &subst,
-                                       unique_ptr<Expression> what) {
-    if (subst.useFastPath()) {
-        return what;
-    }
+ParsedFile Substitute::run(core::Context ctx, const core::NameSubstitution &subst, ParsedFile what) {
     SubstWalk walk(subst);
-    what = TreeMap::apply(ctx, walk, move(what));
+    TreeWalk::apply(ctx, walk, what.tree);
+    return what;
+}
+
+ParsedFile Substitute::run(core::Context ctx, core::LazyNameSubstitution &subst, ParsedFile what) {
+    SubstWalk walk(subst);
+    TreeWalk::apply(ctx, walk, what.tree);
     return what;
 }
 

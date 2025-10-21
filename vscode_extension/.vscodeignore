@@ -1,0 +1,10 @@
+.vscode/**
+.vscode-test/**
+out/**/*.map
+out/scripts/**
+out/test/**
+scripts/**
+src/**
+.gitignore
+tsconfig.json
+xvfb.out

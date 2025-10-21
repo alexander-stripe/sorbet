@@ -8,11 +8,11 @@ class A
   extend T::Sig
   extend T::Generic
 
-  T1 = type_member(upper: Animal, lower: Cat)
+  T1 = type_member {{upper: Animal, lower: Cat}}
 
   sig {params(x: T1).void}
   def test1(x)
-    T.cast(x, Animal) # error: Useless cast
+    T.cast(x, Animal) # error: `T.cast` is useless
   end
 end
 
@@ -20,8 +20,8 @@ class B
   extend T::Sig
   extend T::Generic
 
-  T1 = type_member(upper: Object)
-  T2 = type_member(lower: Object)
+  T1 = type_member {{upper: Object}}
+  T2 = type_member {{lower: Object}}
 
   sig {params(x: T1).void}
   def test1(x)
@@ -38,8 +38,8 @@ module C
   extend T::Sig
   extend T::Generic
 
-  Out = type_member(:out, upper: Animal)
-  In = type_member(:in, lower: Cat)
+  Out = type_member(:out) {{upper: Animal}}
+  In = type_member(:in) {{lower: Cat}}
 
   sig {void}
   def test1

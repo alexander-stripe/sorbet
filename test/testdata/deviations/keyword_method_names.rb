@@ -6,7 +6,7 @@
 # keyword was both (1) being used as a method name and (2) broken across two
 # lines like this.
 #
-# We decided that this was a worthwile tradeoff, because it makes it far easier
+# We decided that this was a worthwhile tradeoff, because it makes it far easier
 # for the parser to recover gracefully and locally from syntax errors.
 
 def method_named_alias(x)
@@ -15,6 +15,8 @@ def method_named_alias(x)
     .alias # ok
   x.
     alias # error: unexpected token
+    # need these here because Sorbet will try to parse 'alias end def' otherwise
+    foo bar
 end
 
 def method_named_and(x)
@@ -31,6 +33,10 @@ def method_named_begin(x)
     .begin # ok
   x.
     begin # error: unexpected token
+
+  # due to how we've chosen to deviate, the above begin will look like a normal
+  # begin token so we need an extra end token to balance it.
+  end
 end
 
 def method_named_break(x)
@@ -46,7 +52,10 @@ def method_named_case(x)
   x
     .case # ok
   x.
-    case # error: unexpected token
+    case
+  # ^^^^ error: unexpected token "case"
+  # ^^^^ error: "case" statement must at least have one "when" clause
+  # ^^^^ error: Hint: this "case" token might not be properly closed
 end
 
 def method_named_class(x)
@@ -63,7 +72,7 @@ def method_named_defined?(x)
     .defined? # ok
   x.
     defined? # error: unexpected token
-end
+end # error: unexpected token
 
 def method_named_do(x)
   x.do # ok
@@ -157,7 +166,7 @@ def method_named_not(x)
     .not # ok
   x.
     not # error: unexpected token
-end
+end # error: unexpected token
 
 def method_named_or(x)
   x.or # ok
@@ -172,7 +181,9 @@ def method_named_redo(x)
   x
     .redo # ok
   x.
-    redo # error: unexpected token
+    redo
+  # ^^^^ error: unexpected token "redo"
+  # ^^^^ error: Unsupported node type `Redo`
 end
 
 def method_named_rescue(x)
@@ -278,4 +289,4 @@ def method_named_end(x)
     .end # ok
   x.
     end # error: unexpected token
-end
+end # error: unexpected token

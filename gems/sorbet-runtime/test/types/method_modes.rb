@@ -7,7 +7,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
     extend T::Helpers
     abstract!
 
-    sig {abstract.returns(Object)}
+    sig { abstract.returns(Object) }
     def foo; end
   end
 
@@ -21,7 +21,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
         extend T::Sig
         extend T::Helpers
         include mixin
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def foo; end
       end
 
@@ -35,16 +35,20 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
       mixin = Module.new do
         extend T::Sig
         extend T::Helpers
-        sig {override.returns(Object)}
-        def self.name; 'foo'; end
+        sig { override.returns(Object) }
+        def self.name
+          'foo'
+        end
       end
 
       mod = Module.new do
         extend T::Sig
         extend T::Helpers
         extend mixin
-        sig {override.returns(Object)}
-        def self.name; 'bar'; end
+        sig { override.returns(Object) }
+        def self.name
+          'bar'
+        end
       end
 
       mod.name
@@ -54,7 +58,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
       mixin = Module.new do
         extend T::Sig
         extend T::Helpers
-        sig {overridable.returns(Object)}
+        sig { overridable.returns(Object) }
         def foo; end
       end
 
@@ -62,7 +66,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
         extend T::Sig
         extend T::Helpers
         include mixin
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def foo; end
       end
 
@@ -77,7 +81,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
         extend T::Sig
         include AbstractMixin
         extend T::Helpers
-        sig {override.overridable.returns(Object)}
+        sig { override.overridable.returns(Object) }
         def foo; end
       end
 
@@ -85,7 +89,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
         extend T::Sig
         include mixin
         extend T::Helpers
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def foo; end
       end
 
@@ -99,14 +103,14 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
       parent = Class.new do
         extend T::Sig
         extend T::Helpers
-        sig {returns(Object)}
+        sig { returns(Object) }
         def foo; end
       end
 
-      klass = Class.new(parent) do
+      Class.new(parent) do
         extend T::Sig
         extend T::Helpers
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def foo; end
       end
     end
@@ -119,7 +123,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
       klass = Class.new(parent) do
         extend T::Sig
         extend T::Helpers
-        sig {returns(Object)}
+        sig { returns(Object) }
         def foo; end
       end
 
@@ -130,14 +134,14 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
       parent = Class.new do
         extend T::Sig
         extend T::Helpers
-        sig {returns(Object)}
+        sig { returns(Object) }
         def foo; end
       end
 
       klass = Class.new(parent) do
         extend T::Sig
         extend T::Helpers
-        sig {returns(Object)}
+        sig { returns(Object) }
         def foo; end
       end
 
@@ -149,7 +153,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
         extend T::Sig
         extend T::Helpers
         include AbstractMixin
-        sig {returns(Object)}
+        sig { returns(Object) }
         def foo; end
       end
 
@@ -170,7 +174,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
       klass = Class.new do
         extend T::Sig
         extend T::Helpers
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def foo; end
       end
 
@@ -188,7 +192,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
       klass = Class.new do
         extend T::Sig
         extend T::Helpers
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def foo; end
       end
 
@@ -198,7 +202,7 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
 
       assert_includes(
         err.message,
-        "You marked `foo` as .override, but that method doesn't already exist in this class/module to be overriden"
+        "You marked `foo` as .override, but that method doesn't already exist in this class/module to be overridden"
       )
     end
 
@@ -215,7 +219,9 @@ class Opus::Types::Test::MethodModesTest < Critic::Unit::UnitTest
             .params(blk: T.proc.params(arg0: Elem).returns(BasicObject))
             .returns(T.untyped)
         end
-        def each(&blk); yield; end
+        def each(&blk)
+          yield
+        end
       end
 
       called = false

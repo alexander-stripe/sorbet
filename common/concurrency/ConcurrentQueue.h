@@ -9,10 +9,11 @@
 */
 
 #include "blockingconcurrentqueue.h"
-#include "common/Timer.h"
 #include "common/common.h"
+#include "common/timers/Timer.h"
 #include <atomic>
 #include <chrono>
+#include <type_traits>
 
 struct DequeueResult {
     bool returned;
@@ -37,7 +38,10 @@ public:
     AbstractConcurrentBoundedQueue(const AbstractConcurrentBoundedQueue &other) = delete;
     AbstractConcurrentBoundedQueue(AbstractConcurrentBoundedQueue &&other) = delete;
 
-    inline void push(Elem &&elem, int count) noexcept {
+    // When `Elem` is a fundamental type (int, bool, etc) push takes a value, but if it's anything else it expects an
+    // rvalue reference so that we don't forget to move the argument.
+    inline void push(typename std::conditional<std::is_trivially_copyable_v<Elem>, Elem, Elem &&>::type elem,
+                     int count) noexcept {
         _queue.enqueue(std::move(elem));
         elementsLeftToPush.fetch_add(-count, std::memory_order_release);
         ENFORCE(elementsLeftToPush.load(std::memory_order_relaxed) >= 0);
@@ -57,7 +61,7 @@ public:
     inline DequeueResult wait_pop_timed(Elem &elem, std::chrono::duration<Rep, Period> const &timeout,
                                         spdlog::logger &log, bool silent = false) noexcept {
         DequeueResult ret;
-        if (!sorbet::emscripten_build) {
+        if constexpr (!sorbet::emscripten_build) {
             ret.shouldRetry = elementsLeftToPush.load(std::memory_order_acquire) != 0;
             if (ret.shouldRetry) {
                 std::unique_ptr<sorbet::Timer> time;
@@ -82,6 +86,10 @@ public:
 
     int enqueuedEstimate() {
         return bound - elementsLeftToPush.load(std::memory_order_relaxed);
+    }
+
+    int sizeEstimate() const {
+        return _queue.size_approx();
     }
 };
 

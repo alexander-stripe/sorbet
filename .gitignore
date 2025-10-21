@@ -9,6 +9,7 @@
 
 .idea/
 .vscode/
+.vim/
 
 /website/lib/core/metadata.js
 /website/lib/core/MetadataBlog.js
@@ -27,10 +28,27 @@
 gems/sorbet/Gemfile.lock
 gems/sorbet-static/Gemfile.lock
 gems/sorbet-runtime/Gemfile.lock
+gems/sorbet-static-and-runtime/Gemfile.lock
 *.gem
 
 # To distribute sorbet, we copy the built C++ binary here.
 /gems/sorbet-static/libexec/sorbet
 
-# clangd caches data in this folder.
+# Used by tools/scripts/run_benchmarks.sh
+/tmp
+
+# Used by tools/scripts/ll-view.sh
+/ll-view.out
+
+# clangd caches data in these folders
 /.clangd
+/.cache/clangd
+
+# for YARD documentation
+.yardoc/
+doc/
+
+# Sandbox folders
+test/sandbox/*/*.log
+test/sandbox/*/*.rb
+test/sandbox/*/*.rbi

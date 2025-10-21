@@ -1,27 +1,23 @@
 #ifndef SORBET_COMMON_HPP
 #define SORBET_COMMON_HPP
 
-#if __cplusplus < 201402L
+#if __cplusplus < 201703L
 #define STRINGIZE(x) "C++ = " #x
 #define SSTRINGIZE(x) STRINGIZE(x)
 #pragma message(SSTRINGIZE(__cplusplus))
-static_assert(false, "Need c++14 to compile this codebase");
+static_assert(false, "Need c++17 to compile this codebase");
 #endif
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
+#include "sorbet_version/sorbet_version.h"
+#include "spdlog/fmt/ranges.h"
 #include "spdlog/spdlog.h"
 #include <stdint.h>
 #include <string>
 #include <string_view>
 #include <type_traits>
-
-#if !defined(NDEBUG)
-// So you can use `cout` when debugging. Not included in production as it is a
-// performance hit.
-#include <iostream>
-#endif
 
 namespace sorbet {
 
@@ -31,45 +27,57 @@ template <class E> using UnorderedSet = absl::flat_hash_set<E>;
 // Uncomment to make vectors debuggable
 // template <class T, size_t N> using InlinedVector = std::vector<T>;
 
-#if defined(NDEBUG) && !defined(FORCE_DEBUG)
-constexpr bool debug_mode = false;
-#undef DEBUG_MODE
-#else
-#define DEBUG_MODE
-constexpr bool debug_mode = true;
-#endif
+// Wraps input in double quotes. https://stackoverflow.com/a/6671729
+#define Q(x) #x
+#define QUOTED(x) Q(x)
 
-#if !defined(EMSCRIPTEN)
-constexpr bool emscripten_build = false;
-#else
-constexpr bool emscripten_build = true;
-#endif
-
-#if !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
-constexpr bool fuzz_mode = false;
-#else
-constexpr bool fuzz_mode = true;
-#endif
-
-#define _MAYBE_ADD_COMMA(...) , ##__VA_ARGS__
+// Timing ENFORCEs is rather expensive for tests, so it is disabled by default.
+// If you want to collect timing data on particular ENFORCEs, flip this to `false`
+// and recompile.
+constexpr bool skip_enforce_timer = true;
 
 // Used for cases like https://xkcd.com/2200/
 // where there is some assumption that you believe should always hold.
 // Please use this to explicitly write down what assumptions was the code written under.
 // One day they might be violated and you'll help the next person debug the issue.
-#define ENFORCE(x, ...)                                                                             \
-    ((::sorbet::debug_mode && !(x)) ? ({                                                            \
-        ::sorbet::Exception::failInFuzzer();                                                        \
-        if (stopInDebugger()) {                                                                     \
-            (void)!(x);                                                                             \
-        }                                                                                           \
-        ::sorbet::Exception::enforce_handler(#x, __FILE__, __LINE__ _MAYBE_ADD_COMMA(__VA_ARGS__)); \
-    })                                                                                              \
-                                    : false)
+// Emits a timer so that expensive checks show up in traces in debug builds.
+#define ENFORCE(...)                                                                                                  \
+    do {                                                                                                              \
+        if (::sorbet::debug_mode) {                                                                                   \
+            if constexpr (::sorbet::skip_enforce_timer) {                                                             \
+                ENFORCE_NO_TIMER(__VA_ARGS__);                                                                        \
+            } else {                                                                                                  \
+                auto __enforceTimer =                                                                                 \
+                    ::sorbet::Timer(*(::spdlog::default_logger_raw()), "ENFORCE(" __FILE__ ":" QUOTED(__LINE__) ")"); \
+                ENFORCE_NO_TIMER(__VA_ARGS__);                                                                        \
+            }                                                                                                         \
+        }                                                                                                             \
+    } while (false);
 
-#define DEBUG_ONLY(X) \
-    if (debug_mode) { \
-        X;            \
+#ifdef SKIP_SLOW_ENFORCE
+constexpr bool skip_slow_enforce = true;
+#else
+constexpr bool skip_slow_enforce = false;
+#endif
+
+// Some ENFORCEs are super slow and/or don't pass on Stripe's codebase.
+// Long term we should definitely make these checks pass and maybe even make them fast,
+// but for now we provide a way to skip slow debug checks (for example, when compiling debug release builds)
+#define SLOW_ENFORCE(...)                   \
+    do {                                    \
+        if (!::sorbet::skip_slow_enforce) { \
+            ENFORCE(__VA_ARGS__);           \
+        }                                   \
+    } while (false);
+
+#define DEBUG_ONLY(X)           \
+    if constexpr (debug_mode) { \
+        X;                      \
+    }
+
+#define SLOW_DEBUG_ONLY(X)                                      \
+    if constexpr (!::sorbet::skip_slow_enforce && debug_mode) { \
+        X;                                                      \
     }
 
 constexpr bool skip_check_memory_layout = debug_mode || emscripten_build;
@@ -92,42 +100,52 @@ template <typename ToCheck, std::size_t ExpectedAlign, std::size_t RealAlign = a
 #endif
 
 #define CheckSize(T, ExpSize, ExpAlign)                                              \
-    inline void _##T##is##ExpSize##_bytes_long_() {                                  \
+    [[maybe_unused]] inline void _##T##is##ExpSize##_bytes_long_() {                 \
         sorbet::check_size<T, ExpSize> UNUSED(_##T##is##ExpSize##_bytes_long);       \
         sorbet::check_align<T, ExpAlign> UNUSED(_##T##is##ExpAlign##_bytes_aligned); \
     }
 
-/**
- * Shorter aliases for unsigned ints of specified byte widths.
- */
-typedef uint8_t u1;
-CheckSize(u1, 1, 1);
-
-typedef uint16_t u2;
-CheckSize(u2, 2, 2);
-
-typedef uint32_t u4;
-CheckSize(u4, 4, 4);
-
-typedef uint64_t u8;
-CheckSize(u8, 8, 8);
-
 template <class From, class To> To *fast_cast(From *what) {
-    constexpr bool isFinal = std::is_final<To>::value;
-    if (std::is_same<From, To>::value)
+    constexpr bool isFinal = std::is_final_v<To>;
+    if (std::is_same_v<From, To>) {
         return static_cast<To *>(what);
+    }
     if (what == nullptr) {
         return nullptr;
     }
     if (isFinal) {
         From &nonNull = *what;
         const std::type_info &ty = typeid(nonNull);
-        if (ty == typeid(To))
+        if (ty == typeid(To)) {
             return static_cast<To *>(what);
+        }
         return nullptr;
     }
     return dynamic_cast<To *>(what);
 };
+
+// Rounds the provided number up to the nearest power of two. If v is already a power of two, it returns v.
+uint32_t nextPowerOfTwo(uint32_t v);
+
+std::vector<uint32_t> findLineBreaks(std::string_view s);
+
+enum class ProcessStatus {
+    // The process exists and is running.
+    Running,
+
+    // The process does not exist.
+    Missing,
+
+    // Unable to determine if the process exists.
+    Unknown,
+};
+
+// Check if the process with the given pid exists.
+ProcessStatus processExists(pid_t pid);
+
+// To get exhaustiveness checking with std::visit.
+// From: https://en.cppreference.com/w/cpp/utility/variant/visit#Example
+template <class> inline constexpr bool always_false_v = false;
 
 } // namespace sorbet
 
@@ -164,5 +182,7 @@ std::string demangle(const char *mangled);
 #pragma GCC poison cuserid
 #pragma GCC poison rexec rexec_af
 
-#include "Exception.h"
+#include "enforce_no_timer/EnforceNoTimer.h"
+#include "exception/Exception.h"
+#include "timers/Timer.h"
 #endif

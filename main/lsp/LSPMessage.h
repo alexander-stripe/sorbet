@@ -1,14 +1,18 @@
 #ifndef RUBY_TYPER_LSP_LSPMESSAGE_H
 #define RUBY_TYPER_LSP_LSPMESSAGE_H
 
-#include "common/Counters.h"
-#include "common/Timer.h"
-#include "main/lsp/json_types.h"
+#include "common/common.h"
+#include "common/timers/Timer.h"
+#include "main/lsp/json_enums.h"
 #include "rapidjson/document.h"
-#include <chrono>
+#include "rapidjson/stringbuffer.h"
 #include <variant>
 
 namespace sorbet::realmain::lsp {
+
+class RequestMessage;
+class ResponseMessage;
+class NotificationMessage;
 
 /**
  * Represents the ID on an LSP message.
@@ -28,6 +32,8 @@ public:
     int asInt() const;
     bool isString() const;
     std::string asString() const;
+    bool isNull() const;
+    bool equals(const MessageId &id) const;
 };
 
 /**
@@ -35,9 +41,8 @@ public:
  */
 class LSPMessage final {
 public:
-    typedef std::variant<std::unique_ptr<RequestMessage>, std::unique_ptr<NotificationMessage>,
-                         std::unique_ptr<ResponseMessage>>
-        RawLSPMessage;
+    using RawLSPMessage = std::variant<std::unique_ptr<RequestMessage>, std::unique_ptr<NotificationMessage>,
+                                       std::unique_ptr<ResponseMessage>>;
 
 private:
     RawLSPMessage msg;
@@ -49,31 +54,27 @@ public:
      * these SorbetErrors to return the error to the client (or to print it in the log), so it can be passed along as if
      * parsing succeeded.
      */
-    static std::unique_ptr<LSPMessage> fromClient(const std::string &json);
+    static std::unique_ptr<LSPMessage> fromClient(std::string_view json);
 
     LSPMessage(RawLSPMessage msg);
     LSPMessage(rapidjson::Document &d);
-    LSPMessage(const std::string &json);
+    LSPMessage(std::string_view json);
+    ~LSPMessage();
 
-    /** A tracer for following LSP message in time traces. May contain multiple tracers if other messages were merged
-     * into this one.*/
-    std::vector<FlowId> startTracers;
-    /** Used to calculate latency of message processing. If this message represents multiple edits, it contains the
-     * oldest timer.*/
-    std::unique_ptr<Timer> timer;
+    /**
+     * Tracks the latency of this specific message.
+     */
+    std::unique_ptr<Timer> latencyTimer;
 
-    /** If `true`, then this LSPMessage contains a canceled LSP request. */
-    bool canceled = false;
+    /**
+     * Initializes the `latencyTimer` of this message with a new Timer
+     */
+    void tagNewRequest(spdlog::logger &logger);
 
     /**
      * Returns an ID if the message has one. Otherwise, returns nullopt.
      */
     std::optional<MessageId> id() const;
-
-    /**
-     * If `true`, this message can be delayed in favor of processing newer requests sooner (like file updates).
-     */
-    bool isDelayable() const;
 
     /**
      * Returns true if this is a request message.
@@ -136,6 +137,8 @@ public:
      * Returns the message in JSON form.
      */
     std::string toJSON(bool prettyPrint = false) const;
+
+    rapidjson::StringBuffer toJSONBuffer(bool prettyPrint = false) const;
 };
 } // namespace sorbet::realmain::lsp
 

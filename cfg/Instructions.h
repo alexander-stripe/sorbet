@@ -1,222 +1,468 @@
 #ifndef SORBET_INSTRUCTIONS_H
 #define SORBET_INSTRUCTIONS_H
 
+#include "cfg/LocalRef.h"
 #include "core/Context.h"
 #include "core/GlobalState.h"
 #include "core/LocalVariable.h"
 #include "core/NameRef.h"
 #include "core/Types.h"
+#include "core/UntaggedPtr.h"
 #include <climits>
 #include <memory>
 
 namespace sorbet::cfg {
-
-class VariableUseSite {
+class VariableUseSite final {
 public:
-    core::LocalVariable variable;
+    LocalRef variable;
     core::TypePtr type;
     VariableUseSite() = default;
-    VariableUseSite(core::LocalVariable local) : variable(local){};
+    VariableUseSite(LocalRef local) : variable(local){};
+    VariableUseSite(LocalRef local, core::TypePtr type) : variable(local), type(std::move(type)){};
     VariableUseSite(const VariableUseSite &) = delete;
     const VariableUseSite &operator=(const VariableUseSite &rhs) = delete;
     VariableUseSite(VariableUseSite &&) = default;
     VariableUseSite &operator=(VariableUseSite &&rhs) = default;
-    std::string toString(const core::GlobalState &gs) const;
-    std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
 
 // TODO: convert it to implicitly numbered instead of explicitly bound
 // implicitly numbered: result of every instruction can be uniquely referenced
 // by its position in a linear array.
 
+enum class Tag : uint8_t {
+    Ident = 1,
+    Alias,
+    SolveConstraint,
+    Send,
+    Return,
+    BlockReturn,
+    LoadSelf,
+    Literal,
+    GetCurrentException,
+    LoadArg,
+    ArgPresent,
+    LoadYieldParams,
+    YieldParamPresent,
+    YieldLoadArg,
+    Cast,
+    TAbsurd,
+    KeepAlive,
+};
+
+// A mapping from instruction type to its corresponding tag.
+template <typename T> struct InsnToTag;
+
+class InstructionPtr;
+class Instruction;
+
 // When adding a new subtype, see if you need to add it to fillInBlockArguments
 class Instruction {
-public:
-    virtual ~Instruction() = default;
-    virtual std::string toString(const core::GlobalState &gs) const = 0;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const = 0;
+protected:
     Instruction() = default;
-    bool isSynthetic = false;
+    ~Instruction() = default;
+
+private:
+    friend InstructionPtr;
 };
 
-template <class To> To *cast_instruction(Instruction *what) {
-    static_assert(!std::is_pointer<To>::value, "To has to be a pointer");
-    static_assert(std::is_assignable<Instruction *&, To *>::value,
-                  "Ill Formed To, has to be a subclass of Instruction");
-    return fast_cast<Instruction, To>(what);
-}
+#define INSN(name)                              \
+    class name;                                 \
+    template <> struct InsnToTag<name> {        \
+        static constexpr Tag value = Tag::name; \
+    };                                          \
+    class __attribute__((aligned(8))) name final
 
-template <class To> bool isa_instruction(Instruction *what) {
-    return cast_instruction<To>(what) != nullptr;
-}
-
-class Ident final : public Instruction {
+INSN(Ident) : public Instruction {
 public:
-    core::LocalVariable what;
+    LocalRef what;
 
-    Ident(core::LocalVariable what);
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    Ident(LocalRef what);
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(Ident, 24, 8);
+CheckSize(Ident, 8, 8);
 
-class Alias final : public Instruction {
+INSN(Alias) : public Instruction {
 public:
     core::SymbolRef what;
+    core::NameRef name;
 
-    Alias(core::SymbolRef what);
+    Alias(core::SymbolRef what, core::NameRef name = core::NameRef::noName());
 
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(Alias, 16, 8);
+CheckSize(Alias, 8, 8);
 
-class SolveConstraint final : public Instruction {
+INSN(SolveConstraint) : public Instruction {
 public:
+    LocalRef send;
     std::shared_ptr<core::SendAndBlockLink> link;
-    core::LocalVariable send;
-    SolveConstraint(const std::shared_ptr<core::SendAndBlockLink> &link, core::LocalVariable send)
-        : link(link), send(send){};
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    SolveConstraint(std::shared_ptr<core::SendAndBlockLink> link, LocalRef send) : send(send), link(std::move(link)) {
+        categoryCounterInc("cfg", "solveconstraint");
+    };
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(SolveConstraint, 40, 8);
+CheckSize(SolveConstraint, 24, 8);
 
-class Send final : public Instruction {
+INSN(Send) : public Instruction {
 public:
-    VariableUseSite recv;
-    core::NameRef fun;
-    core::Loc receiverLoc;
-    InlinedVector<VariableUseSite, 2> args;
-    InlinedVector<core::Loc, 2> argLocs;
     bool isPrivateOk;
+    uint16_t numPosArgs;
+    core::NameRef fun;
+    VariableUseSite recv;
+    core::LocOffsets funLoc;
+    core::LocOffsets receiverLoc;
+    InlinedVector<VariableUseSite, 2> args;
+    InlinedVector<core::LocOffsets, 2> argLocs;
     std::shared_ptr<core::SendAndBlockLink> link;
 
-    Send(core::LocalVariable recv, core::NameRef fun, core::Loc receiverLoc,
-         const InlinedVector<core::LocalVariable, 2> &args, InlinedVector<core::Loc, 2> argLocs,
-         bool isPrivateOk = false, const std::shared_ptr<core::SendAndBlockLink> &link = nullptr);
+    Send(LocalRef recv, core::LocOffsets receiverLoc, core::NameRef fun, core::LocOffsets funLoc, uint16_t numPosArgs,
+         const InlinedVector<LocalRef, 2> &args, InlinedVector<core::LocOffsets, 2> &&argLocs, bool isPrivateOk = false,
+         std::shared_ptr<core::SendAndBlockLink> link = nullptr);
 
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    core::LocOffsets locWithoutBlock(core::LocOffsets bindLoc);
+
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(Send, 160, 8);
+CheckSize(Send, 120, 8);
 
-class Return final : public Instruction {
+INSN(Return) : public Instruction {
 public:
     VariableUseSite what;
+    core::LocOffsets whatLoc;
 
-    Return(core::LocalVariable what);
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    Return(LocalRef what, core::LocOffsets whatLoc);
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(Return, 40, 8);
+CheckSize(Return, 24, 8);
 
-class BlockReturn final : public Instruction {
+INSN(BlockReturn) : public Instruction {
 public:
     std::shared_ptr<core::SendAndBlockLink> link;
     VariableUseSite what;
 
-    BlockReturn(std::shared_ptr<core::SendAndBlockLink> link, core::LocalVariable what);
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    BlockReturn(std::shared_ptr<core::SendAndBlockLink> link, LocalRef what);
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(BlockReturn, 56, 8);
+CheckSize(BlockReturn, 32, 8);
 
-class LoadSelf final : public Instruction {
+INSN(LoadSelf) : public Instruction {
 public:
+    LocalRef fallback;
     std::shared_ptr<core::SendAndBlockLink> link;
-    core::LocalVariable fallback;
-    LoadSelf(std::shared_ptr<core::SendAndBlockLink> link, core::LocalVariable fallback);
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    LoadSelf(std::shared_ptr<core::SendAndBlockLink> link, LocalRef fallback);
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(LoadSelf, 40, 8);
+CheckSize(LoadSelf, 24, 8);
 
-class Literal final : public Instruction {
+INSN(Literal) : public Instruction {
 public:
     core::TypePtr value;
 
     Literal(const core::TypePtr &value);
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(Literal, 32, 8);
+CheckSize(Literal, 8, 8);
 
-class Unanalyzable : public Instruction {
+INSN(GetCurrentException) : public Instruction {
 public:
-    Unanalyzable() {
-        categoryCounterInc("cfg", "unanalyzable");
+    GetCurrentException() {
+        categoryCounterInc("cfg", "GetCurrentException");
     };
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(Unanalyzable, 16, 8);
+CheckSize(GetCurrentException, 8, 8);
 
-class NotSupported final : public Unanalyzable {
+INSN(LoadArg) : public Instruction {
 public:
-    std::string why;
+    uint16_t argId;
+    core::MethodRef method;
 
-    NotSupported(std::string_view why) : why(why) {
-        categoryCounterInc("cfg", "notsupported");
-    };
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
-};
-CheckSize(NotSupported, 40, 8);
-
-class LoadArg final : public Instruction {
-public:
-    core::SymbolRef method;
-    u2 argId;
-
-    LoadArg(core::SymbolRef method, int argId) : method(method), argId(argId) {
+    LoadArg(core::MethodRef method, uint16_t argId) : argId(argId), method(method) {
         categoryCounterInc("cfg", "loadarg");
     };
 
-    const core::ArgInfo &argument(const core::GlobalState &gs) const;
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    const core::ParamInfo &argument(const core::GlobalState &gs) const;
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(LoadArg, 24, 8);
+CheckSize(LoadArg, 8, 8);
 
-class LoadYieldParams final : public Instruction {
+INSN(ArgPresent) : public Instruction {
+public:
+    uint16_t argId;
+    core::MethodRef method;
+
+    ArgPresent(core::MethodRef method, uint16_t argId) : argId(argId), method(method) {
+        categoryCounterInc("cfg", "argpresent");
+    }
+
+    const core::ParamInfo &argument(const core::GlobalState &gs) const;
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
+};
+CheckSize(ArgPresent, 8, 8);
+
+INSN(LoadYieldParams) : public Instruction {
 public:
     std::shared_ptr<core::SendAndBlockLink> link;
 
-    LoadYieldParams(const std::shared_ptr<core::SendAndBlockLink> &link) : link(link) {
-        categoryCounterInc("cfg", "loadarg");
+    LoadYieldParams(std::shared_ptr<core::SendAndBlockLink> link) : link(std::move(link)) {
+        categoryCounterInc("cfg", "loadyieldparams");
     };
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(LoadYieldParams, 32, 8);
+CheckSize(LoadYieldParams, 16, 8);
 
-class Cast final : public Instruction {
+INSN(YieldParamPresent) : public Instruction {
 public:
-    VariableUseSite value;
-    core::TypePtr type;
-    core::NameRef cast;
+    uint16_t argId;
 
-    Cast(core::LocalVariable value, const core::TypePtr &type, core::NameRef cast)
-        : value(value), type(type), cast(cast) {}
-
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    YieldParamPresent(uint16_t argId) : argId{argId} {
+        categoryCounterInc("cfg", "yieldparampresent");
+    };
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(Cast, 64, 8);
+CheckSize(YieldParamPresent, 8, 8);
 
-class TAbsurd final : public Instruction {
+INSN(YieldLoadArg) : public Instruction {
+public:
+    core::ParamInfo::Flags flags;
+    uint16_t argId;
+    VariableUseSite yieldParam;
+
+    YieldLoadArg(uint16_t argId, core::ParamInfo::Flags flags, LocalRef yieldParam)
+        : flags(flags), argId(argId), yieldParam(yieldParam) {
+        categoryCounterInc("cfg", "yieldloadarg");
+    }
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
+};
+CheckSize(YieldLoadArg, 24, 8);
+
+INSN(Cast) : public Instruction {
+public:
+    core::NameRef cast;
+    VariableUseSite value;
+    core::LocOffsets valueLoc;
+    core::TypePtr type;
+
+    Cast(LocalRef value, core::LocOffsets valueLoc, const core::TypePtr &type, core::NameRef cast)
+        : cast(cast), value(value), valueLoc(valueLoc), type(type) {
+        categoryCounterInc("cfg", "cast");
+    }
+
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
+};
+CheckSize(Cast, 40, 8);
+
+INSN(TAbsurd) : public Instruction {
 public:
     VariableUseSite what;
 
-    TAbsurd(core::LocalVariable what) : what(what) {
+    TAbsurd(LocalRef what) : what(what) {
         categoryCounterInc("cfg", "tabsurd");
     }
 
-    virtual std::string toString(const core::GlobalState &gs) const;
-    virtual std::string showRaw(const core::GlobalState &gs, int tabs = 0) const;
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
 };
-CheckSize(TAbsurd, 40, 8);
+CheckSize(TAbsurd, 16, 8);
+
+INSN(KeepAlive) : public Instruction {
+public:
+    LocalRef what;
+
+    KeepAlive(LocalRef what) : what(what) {
+        categoryCounterInc("cfg", "volatileread");
+    }
+
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
+};
+CheckSize(KeepAlive, 8, 8);
+
+class InstructionPtr final {
+    using tagged_storage = uint64_t;
+
+    static constexpr tagged_storage TAG_MASK = 0xff;
+    static constexpr tagged_storage FLAG_MASK = 0xff00;
+    static constexpr tagged_storage SYNTHETIC_FLAG = 0x0100;
+    static_assert((TAG_MASK & FLAG_MASK) == 0, "no bits should be shared between tags and flags");
+    static constexpr tagged_storage PTR_MASK = ~(FLAG_MASK | TAG_MASK);
+
+    tagged_storage ptr;
+
+    template <typename T, typename... Args> friend InstructionPtr make_insn(Args &&...);
+
+    static tagged_storage tagPtr(Tag tag, void *i) {
+        auto val = static_cast<tagged_storage>(tag);
+        auto maskedPtr = reinterpret_cast<tagged_storage>(i) << 16;
+
+        return maskedPtr | val;
+    }
+
+    static void deleteTagged(Tag tag, void *ptr) noexcept;
+
+    InstructionPtr(Tag tag, Instruction *i) : ptr(tagPtr(tag, i)) {}
+
+    void resetTagged(tagged_storage i) noexcept {
+        Tag tagVal;
+        void *saved = nullptr;
+
+        if (ptr != 0) {
+            tagVal = tag();
+            saved = get();
+        }
+
+        ptr = i;
+
+        if (saved != nullptr) {
+            deleteTagged(tagVal, saved);
+        }
+    }
+    tagged_storage releaseTagged() noexcept {
+        auto i = ptr;
+        ptr = 0;
+        return i;
+    }
+
+    uint16_t tagMaybeZero() const noexcept {
+        return ptr & TAG_MASK;
+    }
+
+public:
+    // Required for typecase
+    template <class To> static bool isa(const InstructionPtr &insn);
+    template <class To> static const To &cast(const InstructionPtr &insn);
+    template <class To> static To &cast(InstructionPtr &insn) {
+        return const_cast<To &>(cast<To>(static_cast<const InstructionPtr &>(insn)));
+    }
+
+    constexpr InstructionPtr() noexcept : ptr(0) {}
+    constexpr InstructionPtr(std::nullptr_t) : ptr(0) {}
+    ~InstructionPtr() {
+        if (ptr != 0) {
+            deleteTagged(tag(), get());
+        }
+    }
+
+    InstructionPtr(const InstructionPtr &) = delete;
+    InstructionPtr &operator=(const InstructionPtr &) = delete;
+
+    InstructionPtr(InstructionPtr &&other) noexcept {
+        ptr = other.releaseTagged();
+    }
+    InstructionPtr &operator=(InstructionPtr &&other) noexcept {
+        if (*this == other) {
+            return *this;
+        }
+
+        resetTagged(other.releaseTagged());
+        return *this;
+    }
+
+    Instruction *operator->() const noexcept {
+        return get();
+    }
+    Instruction *get() const noexcept {
+        auto val = ptr & PTR_MASK;
+        return reinterpret_cast<Instruction *>(val >> 16);
+    }
+
+    explicit operator bool() const noexcept {
+        return ptr != 0;
+    }
+
+    bool operator==(const InstructionPtr &other) const noexcept {
+        return ptr == other.ptr;
+    }
+    bool operator==(std::nullptr_t) const noexcept {
+        return ptr == 0;
+    }
+    bool operator!=(const InstructionPtr &other) const noexcept {
+        return ptr != other.ptr;
+    }
+    bool operator!=(std::nullptr_t) const noexcept {
+        return ptr != 0;
+    }
+
+    Tag tag() const noexcept {
+        ENFORCE(ptr != 0);
+
+        return static_cast<Tag>(ptr & TAG_MASK);
+    }
+
+    bool isSynthetic() const noexcept {
+        return (this->ptr & SYNTHETIC_FLAG) != 0;
+    }
+
+    template <class To> core::UntaggedPtr<To> as_instruction() {
+        bool isValid = tagMaybeZero() == uint16_t(InsnToTag<To>::value);
+        auto *ptr = isValid ? reinterpret_cast<To *>(get()) : nullptr;
+        return core::UntaggedPtr<To>(ptr, isValid);
+    }
+
+    template <class To> core::UntaggedPtr<const To> as_instruction() const {
+        bool isValid = tagMaybeZero() == uint16_t(InsnToTag<To>::value);
+        auto *ptr = isValid ? reinterpret_cast<const To *>(get()) : nullptr;
+        return core::UntaggedPtr<const To>(ptr, isValid);
+    }
+
+    void setSynthetic() noexcept {
+        this->ptr |= SYNTHETIC_FLAG;
+    }
+
+    std::string toString(const core::GlobalState &gs, const CFG &cfg) const;
+    std::string showRaw(const core::GlobalState &gs, const CFG &cfg, int tabs = 0) const;
+};
+
+template <class To> bool isa_instruction(const InstructionPtr &what) {
+    return bool(what.as_instruction<To>());
+}
+
+template <class To> core::UntaggedPtr<To> cast_instruction(InstructionPtr &what) {
+    static_assert(!std::is_pointer_v<To>, "To has to be a pointer");
+    static_assert(std::is_assignable_v<Instruction *&, To *>, "Ill Formed To, has to be a subclass of Instruction");
+    return what.as_instruction<To>();
+}
+
+template <class To> core::UntaggedPtr<const To> cast_instruction(const InstructionPtr &what) {
+    static_assert(!std::is_pointer_v<To>, "To has to be a pointer");
+    static_assert(std::is_assignable_v<Instruction *&, To *>, "Ill Formed To, has to be a subclass of Instruction");
+    return what.as_instruction<To>();
+}
+
+template <class To> inline bool InstructionPtr::isa(const InstructionPtr &what) {
+    return bool(what.as_instruction<To>());
+}
+template <> inline bool InstructionPtr::isa<InstructionPtr>(const InstructionPtr &what) {
+    return true;
+}
+
+template <class To> inline const To &InstructionPtr::cast(const InstructionPtr &what) {
+    return *cast_instruction<To>(what);
+}
+template <> inline const InstructionPtr &InstructionPtr::cast(const InstructionPtr &what) {
+    return what;
+}
+
+template <typename T, class... Args> InstructionPtr make_insn(Args &&...arg) {
+    return InstructionPtr(InsnToTag<T>::value, new T(std::forward<Args>(arg)...));
+}
 
 } // namespace sorbet::cfg
 

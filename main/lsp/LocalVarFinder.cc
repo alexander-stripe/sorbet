@@ -1,72 +1,74 @@
 #include "LocalVarFinder.h"
-#include "ast/ArgParsing.h"
+#include "ast/ParamParsing.h"
 #include "core/GlobalState.h"
 
 using namespace std;
 
 namespace sorbet::realmain::lsp {
 
-unique_ptr<ast::Assign> LocalVarFinder::postTransformAssign(core::Context ctx, unique_ptr<ast::Assign> assign) {
+void LocalVarFinder::preTransformBlock(core::Context ctx, const ast::Block &block) {
+    ENFORCE(!methodStack.empty());
+    auto loc = ctx.locAt(block.loc);
+
+    if (methodStack.back() != this->targetMethod) {
+        return;
+    }
+
+    if (!loc.contains(this->queryLoc)) {
+        return;
+    }
+
+    auto parsedParams = ast::ParamParsing::parseParams(block.params);
+    for (const auto &parsedParam : parsedParams) {
+        this->result_.emplace_back(parsedParam.local._name);
+    }
+}
+
+void LocalVarFinder::postTransformAssign(core::Context ctx, const ast::Assign &assign) {
     ENFORCE(!methodStack.empty());
 
-    auto *local = ast::cast_tree<ast::Local>(assign->lhs.get());
+    auto local = ast::cast_tree<ast::Local>(assign.lhs);
     if (local == nullptr) {
-        return assign;
+        return;
     }
 
     if (methodStack.back() == this->targetMethod) {
-        this->result_.emplace_back(local->localVariable);
+        this->result_.emplace_back(local->localVariable._name);
     }
-
-    return assign;
 }
 
-unique_ptr<ast::MethodDef> LocalVarFinder::preTransformMethodDef(core::Context ctx,
-                                                                 unique_ptr<ast::MethodDef> methodDef) {
-    ENFORCE(methodDef->symbol.exists());
-    ENFORCE(methodDef->symbol != core::Symbols::todo());
+void LocalVarFinder::preTransformMethodDef(core::Context ctx, const ast::MethodDef &methodDef) {
+    ENFORCE(methodDef.symbol.exists());
+    ENFORCE(methodDef.symbol != core::Symbols::todoMethod());
 
-    auto currentMethod = methodDef->symbol;
+    auto currentMethod = methodDef.symbol;
 
     if (currentMethod == this->targetMethod) {
-        auto parsedArgs = ast::ArgParsing::parseArgs(ctx, methodDef->args);
-        for (const auto &parsedArg : parsedArgs) {
-            this->result_.emplace_back(parsedArg.local);
+        auto parsedParams = ast::ParamParsing::parseParams(methodDef.params);
+        for (const auto &parsedParam : parsedParams) {
+            this->result_.emplace_back(parsedParam.local._name);
         }
     }
 
     this->methodStack.emplace_back(currentMethod);
-
-    return methodDef;
 }
 
-unique_ptr<ast::MethodDef> LocalVarFinder::postTransformMethodDef(core::Context ctx,
-                                                                  unique_ptr<ast::MethodDef> methodDef) {
+void LocalVarFinder::postTransformMethodDef(core::Context ctx, const ast::MethodDef &tree) {
     this->methodStack.pop_back();
-    return methodDef;
 }
 
-unique_ptr<ast::ClassDef> LocalVarFinder::preTransformClassDef(core::Context ctx, unique_ptr<ast::ClassDef> classDef) {
-    ENFORCE(classDef->symbol.exists());
-    ENFORCE(classDef->symbol != core::Symbols::todo());
+void LocalVarFinder::preTransformClassDef(core::Context ctx, const ast::ClassDef &classDef) {
+    ENFORCE(classDef.symbol.exists());
+    ENFORCE(classDef.symbol != core::Symbols::todo());
 
-    auto currentMethod = classDef->symbol == core::Symbols::root()
-                             ? ctx.state.lookupStaticInitForFile(classDef->loc)
-                             : ctx.state.lookupStaticInitForClass(classDef->symbol);
+    auto currentMethod = classDef.symbol == core::Symbols::root() ? ctx.state.lookupStaticInitForFile(ctx.file)
+                                                                  : ctx.state.lookupStaticInitForClass(classDef.symbol);
 
     this->methodStack.emplace_back(currentMethod);
-
-    return classDef;
 }
 
-unique_ptr<ast::ClassDef> LocalVarFinder::postTransformClassDef(core::Context ctx, unique_ptr<ast::ClassDef> classDef) {
+void LocalVarFinder::postTransformClassDef(core::Context ctx, const ast::ClassDef &tree) {
     this->methodStack.pop_back();
-    return classDef;
-}
-
-const vector<core::LocalVariable> &LocalVarFinder::result() const {
-    ENFORCE(this->methodStack.empty());
-    return this->result_;
 }
 
 }; // namespace sorbet::realmain::lsp

@@ -1,73 +1,137 @@
-#include "gtest/gtest.h"
-// has to go first as it violates are requirements
+#include "doctest/doctest.h"
+// has to go first as it violates our requirements
 #include "core/Error.h"
+#include "core/ErrorCollector.h"
 #include "core/ErrorQueue.h"
-#include "core/GlobalSubstitution.h"
+#include "core/NameSubstitution.h"
+#include "core/TrailingObjects.h"
+#include "core/TypePtr.h"
 #include "core/Unfreeze.h"
 #include "core/core.h"
 #include "core/errors/internal.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/spdlog.h"
 
-namespace spd = spdlog;
 using namespace std;
 
 namespace sorbet::core {
-auto logger = spd::stderr_color_mt("parse");
-auto errorQueue = make_shared<ErrorQueue>(*logger, *logger);
+auto logger = spdlog::stderr_color_mt("parse");
+auto errorCollector = make_shared<core::ErrorCollector>();
+auto errorQueue = make_shared<ErrorQueue>(*logger, *logger, errorCollector);
 
 struct Offset2PosTest {
     string src;
-    u4 off;
-    u4 line;
-    u4 col;
+    optional<uint32_t> off;
+    uint32_t line;
+    uint32_t col;
 };
 
-TEST(ASTTest, TestOffset2Pos) { // NOLINT
+string showOffset(const optional<uint32_t> &off) {
+    if (off.has_value()) {
+        return to_string(off.value());
+    } else {
+        return "nullopt";
+    }
+}
+
+TEST_CASE("TestOffset2Pos2Offset") {
     GlobalState gs(errorQueue);
     gs.initEmpty();
     UnfreezeFileTable fileTableAccess(gs);
 
-    vector<Offset2PosTest> cases = {{"hello", 0, 1, 1},
-                                    {"line 1\nline 2", 1, 1, 2},
-                                    {"line 1\nline 2", 7, 2, 1},
-                                    {"line 1\nline 2", 11, 2, 5},
-                                    {"a long line with no newlines\n", 20, 1, 21},
-                                    {"line 1\nline 2\nline3\n", 7, 2, 1},
-                                    {"line 1\nline 2\nline3", 6, 1, 7},
-                                    {"line 1\nline 2\nline3", 7, 2, 1}};
+    vector<Offset2PosTest> cases = {
+        {"hello", 0, 1, 1},
+        {"line 1\nline 2", 1, 1, 2},
+        {"line 1\nline 2", 7, 2, 1},
+        {"line 1\nline 2", 11, 2, 5},
+        {"a long line with no newlines\n", 20, 1, 21},
+        {"line 1\nline 2\nline3\n", 7, 2, 1},
+        {"line 1\nline 2\nline3", 6, 1, 7},
+        {"line 1\nline 2\nline3", 7, 2, 1},
+    };
+
     int i = 0;
     for (auto &tc : cases) {
         auto name = string("case: ") + to_string(i);
-        SCOPED_TRACE(name);
-        FileRef f = gs.enterFile(move(name), tc.src);
+        INFO(name);
+        FileRef f = gs.enterFile(name, tc.src);
 
-        auto detail = Loc::offset2Pos(f.data(gs), tc.off);
+        auto detail = Loc::pos2Detail(f.data(gs), tc.off.value());
 
-        EXPECT_EQ(tc.col, detail.column);
-        EXPECT_EQ(tc.line, detail.line);
+        CHECK_EQ(tc.col, detail.column);
+        CHECK_EQ(tc.line, detail.line);
+
+        // Test that it's reversible
+        auto offset = Loc::detail2Pos(f.data(gs), detail);
+        CHECK_EQ(tc.off, offset);
+
         i++;
     }
 }
 
-TEST(ASTTest, Errors) { // NOLINT
+TEST_CASE("TestPos2OffsetNull") {
     GlobalState gs(errorQueue);
     gs.initEmpty();
     UnfreezeFileTable fileTableAccess(gs);
-    FileRef f = gs.enterFile(string("a/foo.rb"), string("def foo\n  hi\nend\n"));
+
+    vector<Offset2PosTest> cases = {
+        {"hello", nullopt, 0, 1},
+        {"hello", UINT32_MAX, 1, 0},
+        {"hello", 0, 1, 1},
+
+        {"hello", 4, 1, 5},
+        {"hello", 5, 1, 6},
+        {"hello", nullopt, 1, 7},
+
+        {"hello", 5, 2, 0}, // kind of strange?
+        {"hello", nullopt, 2, 1},
+
+        {"hello\n", 5, 2, 0},
+        {"hello\n", 6, 2, 1},
+        {"hello\n", nullopt, 2, 2},
+
+        {"line 1\nline 2", 5, 1, 6},
+        {"line 1\nline 2", 6, 1, 7},
+        {"line 1\nline 2", nullopt, 1, 8},
+
+        {"line 1\nline 2", 6, 2, 0},
+        {"line 1\nline 2", 7, 2, 1},
+
+        {"line 1\n\nline 2", 7, 2, 1},
+        {"line 1\n\nline 2", nullopt, 2, 2},
+    };
+
+    int i = 0;
+    for (auto &tc : cases) {
+        auto name = string("case: ") + to_string(i);
+        FileRef f = gs.enterFile(name, tc.src);
+
+        auto actualOffset = Loc::detail2Pos(f.data(gs), Loc::Detail{tc.line, tc.col});
+
+        INFO(fmt::format("i={}, CHECK_EQ({}, {})", i, showOffset(tc.off), showOffset(actualOffset)));
+        CHECK_EQ(tc.off, actualOffset);
+        i++;
+    }
+}
+
+TEST_CASE("Errors") {
+    GlobalState gs(errorQueue);
+    gs.initEmpty();
+    UnfreezeFileTable fileTableAccess(gs);
+    FileRef f = gs.enterFile("a/foo.rb", string("def foo\n  hi\nend\n"));
     if (auto e = gs.beginError(Loc{f, 0, 3}, errors::Internal::InternalError)) {
         e.setHeader("Use of metavariable: `{}`", "foo");
     }
-    ASSERT_TRUE(gs.hadCriticalError());
-    auto errors = errorQueue->drainAllErrors();
-    ASSERT_EQ(1, errors.size());
+    gs.errorQueue->flushAllErrors(gs);
+    REQUIRE(gs.hadCriticalError());
+    REQUIRE_EQ(1, errorCollector->drainErrors().size());
 }
 
-TEST(ASTTest, SymbolRef) { // NOLINT
+TEST_CASE("SymbolRef") {
     GlobalState gs(errorQueue);
     gs.initEmpty();
-    SymbolRef ref = Symbols::Object();
-    EXPECT_EQ(ref, ref.data(gs)->ref(gs));
+    auto ref = Symbols::Object();
+    CHECK_EQ(SymbolRef(ref), ref.data(gs)->ref(gs));
 }
 
 struct FileIsTypedCase {
@@ -75,7 +139,7 @@ struct FileIsTypedCase {
     StrictLevel strict;
 };
 
-TEST(CoreTest, FileIsTyped) { // NOLINT
+TEST_CASE("FileIsTyped") { // NOLINT
     vector<FileIsTypedCase> cases = {
         {"", StrictLevel::None},
         {"# typed: true", StrictLevel::True},
@@ -96,19 +160,19 @@ TEST(CoreTest, FileIsTyped) { // NOLINT
         {"\n# @typed\n", StrictLevel::None},
     };
     for (auto &tc : cases) {
-        EXPECT_EQ(tc.strict, File::fileSigil(tc.src));
+        CHECK_EQ(tc.strict, File::fileStrictSigil(tc.src));
     }
 }
 
-TEST(CoreTest, Substitute) { // NOLINT
+TEST_CASE("Substitute") { // NOLINT
     GlobalState gs1(errorQueue);
     gs1.initEmpty();
 
     GlobalState gs2(errorQueue);
     gs2.initEmpty();
 
-    NameRef foo1, bar1, other1;
-    NameRef foo2, bar2;
+    NameRef foo1, bar1, other1, cnstBaz1, uniqueBaz1, otherCnstBart1;
+    NameRef foo2, bar2, cnstBaz2, uniqueBaz2;
     {
         UnfreezeNameTable thaw1(gs1);
         UnfreezeNameTable thaw2(gs2);
@@ -116,48 +180,155 @@ TEST(CoreTest, Substitute) { // NOLINT
         foo1 = gs1.enterNameUTF8("foo");
         bar1 = gs1.enterNameUTF8("bar");
         other1 = gs1.enterNameUTF8("other");
+        cnstBaz1 = gs1.enterNameConstant("Baz");
+        uniqueBaz1 = gs1.freshNameUnique(UniqueNameKind::Namer, cnstBaz1, 1);
+        otherCnstBart1 = gs1.enterNameConstant("Bart");
 
         foo2 = gs2.enterNameUTF8("foo");
+        bar2 = gs2.enterNameUTF8("bar");
+        cnstBaz2 = gs2.enterNameConstant("Baz");
+        uniqueBaz2 = gs2.freshNameUnique(UniqueNameKind::Namer, cnstBaz1, 1);
         gs1.enterNameUTF8("name");
-        bar2 = gs1.enterNameUTF8("bar");
     }
 
-    GlobalSubstitution subst(gs1, gs2);
+    NameSubstitution subst(gs1, gs2);
 
-    EXPECT_EQ(subst.substitute(foo1), foo2);
-    EXPECT_EQ(subst.substitute(bar1), bar2);
+    CHECK_EQ(subst.substitute(foo1), foo2);
+    CHECK_EQ(subst.substitute(bar1), bar2);
+    CHECK_EQ(subst.substitute(uniqueBaz1), uniqueBaz2);
+    CHECK_EQ(subst.substitute(cnstBaz1), cnstBaz2);
 
     auto other2 = subst.substitute(other1);
-    ASSERT_TRUE(other2.exists());
-    ASSERT_TRUE(other2.data(gs2)->kind == NameKind::UTF8);
-    ASSERT_EQ("<U other>", other2.showRaw(gs2));
+    REQUIRE(other2.exists());
+    REQUIRE(other2.kind() == NameKind::UTF8);
+    REQUIRE_EQ("<U other>", other2.showRaw(gs2));
 }
 
-TEST(CoreTest, LocTest) { // NOLINT
-    constexpr auto maxFileId = 0xffff - 1;
-    constexpr auto maxOffset = 0xffffff - 1;
-    for (auto fileRef = 0; fileRef < maxFileId; fileRef = fileRef * 2 + 1) {
-        for (auto beginPos = 0; beginPos < maxOffset; beginPos = beginPos * 2 + 1) {
-            for (auto endPos = beginPos; endPos < maxOffset; endPos = endPos * 2 + 1) {
-                Loc loc(core::FileRef(fileRef), beginPos, endPos);
-                EXPECT_EQ(loc.file().id(), fileRef);
-                EXPECT_EQ(loc.beginPos(), beginPos);
-                EXPECT_EQ(loc.endPos(), endPos);
+// Privileged class that is friends with TypePtr
+class TypePtrTestHelper {
+public:
+    static std::atomic<uint32_t> *counter(const TypePtr &ptr) {
+        CHECK(ptr.containsPtr());
+        return &ptr.get()->counter;
+    }
+
+    static uint64_t inlinedValue(const TypePtr &ptr) {
+        CHECK(!ptr.containsPtr());
+        return ptr.inlinedValue();
+    }
+
+    static TypePtr::tagged_storage store(const TypePtr &ptr) {
+        return ptr.store;
+    }
+
+    static Refcounted *get(const TypePtr &ptr) {
+        CHECK(ptr.containsPtr());
+        return ptr.get();
+    }
+
+    static TypePtr create(TypePtr::Tag tag, Refcounted *type) {
+        return TypePtr(tag, type);
+    }
+
+    static TypePtr createInlined(TypePtr::Tag tag, uint64_t inlinedValue) {
+        return TypePtr(tag, inlinedValue);
+    }
+};
+
+TEST_SUITE("TypePtr") {
+    TEST_CASE("Does not allocate a counter for null type") {
+        TypePtr ptr;
+        CHECK_EQ(0, TypePtrTestHelper::store(ptr));
+    }
+
+    TEST_CASE("Properly manages counter") {
+        auto ptr = make_type<UnresolvedClassType>(Symbols::untyped(), vector<NameRef>{});
+        auto counter = TypePtrTestHelper::counter(ptr);
+        REQUIRE_NE(nullptr, counter);
+        CHECK_EQ(1, counter->load());
+
+        {
+            // Copy should increment counter
+            TypePtr ptrCopy(ptr);
+            REQUIRE_EQ(counter, TypePtrTestHelper::counter(ptrCopy));
+            CHECK_EQ(2, counter->load());
+        }
+
+        // Destruction of copy should decrement counter
+        CHECK_EQ(1, counter->load());
+
+        {
+            TypePtr ptrCopy(ptr);
+            // Assigning/overwriting should decrement counter
+            ptr = TypePtr();
+            CHECK_EQ(1, counter->load());
+
+            // Moving should keep counter the same
+            ptr = move(ptrCopy);
+            CHECK_EQ(1, counter->load());
+
+            // Moving should clear counter from ptrCopy and make it an empty TypePtr
+            CHECK_EQ(0, TypePtrTestHelper::store(ptrCopy));
+            CHECK_EQ(TypePtr(), ptrCopy);
+
+            // Assigning to nullptr should increment counter (and not try to increment the null counter field in
+            // ptrCopy)
+            ptrCopy = ptr;
+            CHECK_EQ(2, counter->load());
+        }
+        CHECK_EQ(1, counter->load());
+    }
+
+    TEST_CASE("Tagging works as expected") {
+        {
+            auto rawPtr = new UnresolvedClassType(Symbols::untyped(), {});
+            auto ptr = TypePtrTestHelper::create(TypePtr::Tag::UnresolvedClassType, rawPtr);
+            CHECK_EQ(TypePtr::Tag::UnresolvedClassType, ptr.tag());
+            CHECK_EQ(rawPtr, TypePtrTestHelper::get(ptr));
+        }
+    }
+
+    TEST_CASE("Supports inlined values") {
+        // Let's try edge cases.
+        std::list<pair<uint32_t, uint64_t>> valuesArray = {
+            {0, 0},
+            {1, 1},
+            {0xFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
+        };
+
+        for (auto values : valuesArray) {
+            SUBCASE(fmt::format("{}, {}", values.first, values.second).c_str()) {
+                auto type = TypePtrTestHelper::createInlined(TypePtr::Tag::SelfType, values.first);
+                CHECK_EQ(TypePtr::Tag::SelfType, type.tag());
+                CHECK_EQ(values.first, TypePtrTestHelper::inlinedValue(type));
             }
         }
     }
-    for (auto fileRef = 0; fileRef < maxFileId; fileRef = fileRef * 2 + 1) {
-        for (auto beginPos = 0; beginPos < maxOffset; beginPos = beginPos * 2 + 1) {
-            for (auto endPos = beginPos; endPos < maxOffset; endPos = endPos * 2 + 1) {
-                Loc loc(core::FileRef(fileRef), beginPos, endPos);
-                auto [low, high] = loc.getAs2u4();
-                Loc loc2;
-                loc2.setFrom2u4(low, high);
-                EXPECT_EQ(loc.file().id(), loc2.file().id());
-                EXPECT_EQ(loc.beginPos(), loc2.beginPos());
-                EXPECT_EQ(loc.endPos(), loc2.endPos());
-            }
-        }
+}
+
+class TOTestNeedsAlignment final : public TrailingObjects<TOTestNeedsAlignment, int> {
+public:
+    uint16_t member;
+};
+
+class TOTestSufficientlyAligned final : public TrailingObjects<TOTestSufficientlyAligned, int> {
+public:
+    uint64_t member;
+};
+
+TEST_SUITE("TrailingObjects") {
+    TEST_CASE("trailing objects need alignment") {
+        CHECK_EQ(alignof(TOTestNeedsAlignment), 4);
+        CHECK_EQ(4, TOTestNeedsAlignment::totalSizeToAlloc<int>(0));
+        CHECK_EQ(8, TOTestNeedsAlignment::totalSizeToAlloc<int>(1));
+        CHECK_EQ(12, TOTestNeedsAlignment::totalSizeToAlloc<int>(2));
+    }
+
+    TEST_CASE("base object over-aligned for trailing objects") {
+        CHECK_EQ(alignof(TOTestSufficientlyAligned), 8);
+        CHECK_EQ(8, TOTestSufficientlyAligned::totalSizeToAlloc<int>(0));
+        CHECK_EQ(12, TOTestSufficientlyAligned::totalSizeToAlloc<int>(1));
+        CHECK_EQ(16, TOTestSufficientlyAligned::totalSizeToAlloc<int>(2));
     }
 }
 

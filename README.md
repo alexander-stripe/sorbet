@@ -4,10 +4,9 @@
 
 # Sorbet
 
-This repository contains Sorbet, a static typechecker for a subset of Ruby. It
-is still in early stages, but is mature enough to run on the majority of Ruby
-code at Stripe. You are welcome to try it, though, but your experience might
-still be rough.
+This repository contains Sorbet, a fast, powerful type checker designed for Ruby.
+It aims to be easy to add to existing codebases with gradual types, and fast to
+respond with errors and suggestions.
 
 This README contains documentation specifically for contributing to Sorbet. You
 might also want to:
@@ -41,26 +40,28 @@ docs about Stripe-specific development workflows and historical Stripe context.
     - [Testing "Go to Type Definition"](#testing-go-to-type-definition)
     - [Testing hover](#testing-hover)
     - [Testing completion](#testing-completion)
-    - [Testing incremental typechecking](#testing-incremental-typechecking)
+    - [Testing workspace symbols (symbol search)](#testing-workspace-symbols-symbol-search)
+    - [Testing "Go to Implementation"](#testing-go-to-implementation)
+    - [Testing rename constant](#testing-rename-constant)
+    - [Testing incremental type checking](#testing-incremental-type-checking)
   - [LSP recorded tests](#lsp-recorded-tests)
   - [Updating tests](#updating-tests)
-- [C++ conventions](#c-conventions)
-- [Debugging and profiling](#debugging-and-profiling)
-  - [Debugging](#debugging)
-  - [Profiling](#profiling)
+- [Debugging](#debugging)
 - [Writing docs](#writing-docs)
 - [Editor and environment](#editor-and-environment)
   - [Bazel](#bazel)
-  - [Multiple git worktrees](#multiple-git-worktrees)
   - [Shell](#shell)
   - [Formatting files](#formatting-files)
   - [Editor setup for C++](#editor-setup-for-c)
+  - [Editor setup for test/testdata](#editor-setup-for-testtestdata)
+    - [@jez setup](#jez-setup)
+    - [others](#others)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Sorbet user-facing design principles
 
-Early in our project we've defined some guidelines for how working with sorbet should feel like.
+Early in our project, we've defined some guidelines for how working with Sorbet should feel like.
 
 1. **Explicit**
 
@@ -86,7 +87,7 @@ Early in our project we've defined some guidelines for how working with sorbet s
 
 4. **Compatible with Ruby**
 
-    In particular, we don't want new syntax. Existing Ruby syntax means
+    In particular, we don't want a new syntax. Existing Ruby syntax means
     we can leverage most of our existing tooling (editors, etc). Also,
     the point of Sorbet is to gradually improve an existing Ruby codebase. No
     new syntax makes it easier to be compatible with existing tools.
@@ -94,7 +95,7 @@ Early in our project we've defined some guidelines for how working with sorbet s
 5. **Scales**
 
     On all axes: execution speed, number of collaborators, lines of code,
-    codebase age. We work in large Ruby code bases, and they will only get
+    codebase age. We work in large Ruby codebases, and they will only get
     larger.
 
 6. **Can be adopted gradually**
@@ -179,39 +180,45 @@ debugging is
 --config=dbg --config=sanitize
 ```
 
-In tools/bazel.rc you can find out what all these options (and others) mean.
+In `.bazelrc` you can find out what all these options (and others) mean.
 
 ### Common Compilation Errors
 
 **(Mac) `Xcode version must be specified to use an Apple CROSSTOOL`**
 
-This error typically occurs after an XCode upgrade.
+This error typically occurs after an Xcode upgrade.
 
-Developer tools must be installed, the XCode license must be accepted, and
-your active XCode command line tools directory must point to an installed
-version of XCode.
+Developer tools must be installed, the Xcode license must be accepted, and
+your active Xcode command line tools directory must point to an installed
+version of Xcode.
 
 The following commands should do the trick:
 
 ```shell
 # Install command line tools
 xcode-select --install
-# Ensure that the system finds command line tools in an active XCode directory
+# Ensure that the system finds command line tools in an active Xcode directory
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-# Accept the XCode license.
+# Accept the Xcode license.
 sudo xcodebuild -license
 # Clear bazel's cache, which may contain files generated from a previous
-# version of XCode command line tools.
+# version of Xcode command line tools.
 bazel clean --expunge
 ```
 
-**(Mac) `fatal error: 'stdio.h' file not found`** (or some other system header)
+**(Mac) `fatal error: 'math.h' file not found`** (or some other system header)
 
 This error can happen on Macs when the `/usr/include` folder is missing. The
 solution is to install macOS headers via the following package:
 
+macOS Mojave:
 ```shell
 open /Library/Developer/CommandLineTools/Packages/macOS_SDK_headers_for_macOS_10.14.pkg
+```
+
+macOS Catalina:
+```shell
+sudo ln -s /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/* /usr/local/include/
 ```
 
 ## Running Sorbet
@@ -310,7 +317,7 @@ We aspire to have our tests be fully reproducible.
 
 There are many ways to test Sorbet, some "better" than others. We've ordered
 them below in order from most preferable to least preferable. And we always
-prefer some test to no tests!
+prefer some tests to no tests!
 
 ### test_corpus tests
 
@@ -318,13 +325,13 @@ The first kind of test can be called either [test_corpus] tests or [testdata]
 tests, based on the name of the test harness or the folder containing these tests, respectively.
 
 
-[test_corpus]: test/test_corpus.cc
+[test_corpus]: test/pipeline_test_runner.cc
 [testdata]: test/testdata/
 
 To create a test_corpus test, add any file `<name>.rb` to `test/testdata`, in
 any folder depth. The file must either:
 
-- typecheck entirely, or
+- type check entirely, or
 - throw errors **only** on lines marked with a comment (see below).
 
 To mark that a line should have errors, append `# error: <message>` (the
@@ -363,13 +370,20 @@ bazel test //test:test_PosTests/testdata/path/to/<name>
 ```
 
 Files that begin with a prefix and `__` will be run together. For example,
-`foo__1.rb` and `foo__2.rb` will be run together as test `foo`.
+`foo__1.rb` and `foo__2.rb` will be run together as test `foo`. If such sets of
+files have `*.exp` files associated with them, the `*.exp` files must instead
+follow the pattern `<name>.<phase>.exp`, where `<name>` does not include the
+`__*.rb` suffix. So `foo__1.rb` and `foo__2.rb` would have an exp file like
+`foo.<pass>.exp`.
+
+Another exception: for `package-tree` exp tests, the filename is always
+`pass.package-tree.exp`, no matter the name of the test.
 
 ### CLI tests
 
 Any folder `<name>` that is added to `test/cli/` becomes a test.
-This folder should have a file `<name>.sh` that is executable.
-When run, its output will be compared against `<name>.out` in that folder.
+This folder should have a file `test.sh` that is executable.
+When run, its output will be compared against `test.out` in that folder.
 
 Our bazel setup will produce two targets:
 
@@ -378,7 +392,7 @@ Our bazel setup will produce two targets:
   the `.out` file.
 
 The scripts are run inside Bazel, so they will be executed from the top of the
-workspace and have access to sources files and built targets using their path
+workspace and have access to source files and built targets using their path
 from the root. In particular, the compiled sorbet binary is available under
 `main/sorbet`.
 
@@ -418,12 +432,108 @@ If a variable is re-defined, it can be annotated with a version number:
     # ^ usage: a 2
 ```
 
+`usage` annotations can accept multiple version numbers, separated by a `,`. This is useful if you have variables that
+get re-defined through multiple-paths:
+
+```ruby
+  if some_condition
+    a = 10
+  # ^ def a 1
+  else
+    a = 'hello'
+  # ^ def: a 2
+  end
+
+  p a
+  # ^ usage: a 1,2
+```
+
 If a location should not report any definition or usage, then use the magic label `(nothing)`:
 
 ```ruby
     a = 10
 # ^ def: (nothing)
 ```
+
+If a location should report multiple definitions (e.g., a class or module opened
+in multiple files), then you can add a second `def` with the same name:
+
+```ruby
+class Foo
+  #   ^^^ def: foo
+end
+
+class Foo
+  #   ^^^ def: foo
+end
+```
+
+When marking definitions that correspond to method arguments that have defaults, multiple definitions will need to be
+marked: one for the argument definition itself and one for its default value. The default value needs to be given a
+different version number, and also marked `default-arg-value`:
+
+```ruby
+  def foo(a: 1)
+        # ^ def: a 1
+           # ^ def: a 2 default-arg-value
+    p a
+    # ^ usage: a 1,2
+  end
+```
+
+This is due to the translation of defaults into the CFG: there is a synthetic conditional that chooses either to
+initialize the variable from the argument passed at the send, or to the default value when no value is present.
+
+Finding all references works differently in package specification (`__package.rb`) files. Consider the following:
+
+```ruby
+class Foo < PackageSpec
+  import Bar
+```
+
+Calling "find all references" on `Bar` in this file will return only references to `Bar` in the `Foo` package. LSP tests
+have access to `import` and `importusage` assertions that you can use to test this functionality.
+
+```ruby
+class Foo < PackageSpec
+  import Bar
+  #      ^^^ import: bar
+```
+
+```ruby
+  class Foo::Baz
+    Bar.new
+ #  ^^^ importusage: bar
+  end
+```
+
+With these annotations, the LSP test will check if "find all references" on `Bar` in `import Bar` statement returns the `Bar.new` usage.
+
+Note that an `import` assertion is dissimilar to a `def` assertion, in that it is in fact a subclass of a `usage` assertion.
+In this case, the `def` corresponding to an `import` is the PackageSpec declaration of the imported package. Calling "find all references"
+on a PackageSpec declaration will return all imports of the package.
+
+
+```ruby
+class Bar < PackageSpec
+  #   ^^^ def: bar
+  import Bar
+```
+
+```ruby
+class Foo < PackageSpec
+  import Bar
+  #      ^^^ import: bar
+```
+
+```ruby
+class Baz < PackageSpec
+  import Bar
+  #      ^^^ import: bar
+```
+
+With these annotations, the LSP test will check if "find all references" on `Bar` from the `class Bar < PackageSpec`
+declaration returns the declaration itself plus the imports.
 
 #### Testing "Go to Type Definition"
 
@@ -481,11 +591,14 @@ If a location should report the empty string, use the special label `(nothing)`:
 # ^ hover: (nothing)
 ```
 
+Assert the contents of a specific line of the hover response with `hover-line` assertions:
+
+```ruby
+  a = 10
+# ^ hover-line: 1 Integer(10)
+```
+
 #### Testing completion
-
-<!-- TODO(jez) Un-declare this under construction -->
-
-🚧 This section is under construction! 🚧
 
 LSP tests can also assert the contents of completion responses with `completion`
 assertions.
@@ -503,7 +616,8 @@ end
 The `^` corresponds to the position of the cursor. So in the above example, it's
 as if the cursor is like this: `foo│`. If the `^` had been directly under the
 last `o`, it would have been like this: `fo|o`. Only the first `^` is used. If
-you use `^^^` in the assertion, the test harness will use only the first caret.
+you use `^^^` in the assertion, the test harness will send a completion
+assertion at the position of the first caret.
 
 You can also write a test for a partial prefix of the completion results:
 
@@ -564,12 +678,156 @@ A.foo_1${0}
 As you can see, the fancy `${...}` (tabstop placeholders) show up verbatim in
 the output if they were sent in the completion response.
 
+It's not currently possible to test these parts of a completion response:
 
-#### Testing incremental typechecking
+- completion kind
+- documentation
+- detail
+
+For these, your best bet is to test manually in VS Code / your preferred editor
+and verify that you're seeing your changes. For documentation specifically,
+nearly all the code paths are shared with hover, so you can alternatively write
+a hover test.
+
+#### Testing workspace symbols (symbol search)
+
+LSP tests can assert that a specific item appears in a symbol search (the
+`textDocument/workspaceSymbols` request) using the `symbol-search` assertion:
+
+```ruby
+class Project::Foo
+#     ^^^ symbol-search: "Foo"
+end
+```
+
+The `symbol-search` can optionally specify _how_ that item should appear in
+search results:
+
+```ruby
+class Project::Foo
+#     ^^^ symbol-search: "Foo", name = "Foo", container = "Project"
+end
+```
+
+In the above, `container` can also be the special string `"(nothing)"` to
+indicate that the item has no container.
+
+`symbol-search` can also specify the item's relative rank in the ordered
+search results:
+
+```ruby
+class Project::Foo
+#     ^^^ symbol-search: "Foo", rank = 1
+end
+```
+
+#### Testing "Go to Implementation"
+
+Testing the "Go to Implementation" feature is really similar to the testing techniques of the "Go to Type Definition".
+
+```ruby
+module A
+#      ^ find-implementation: A
+  extend T::Sig
+  extend T::Helpers
+  interface!
+end
+
+ class B
+#^^^^^^^ implementation: A
+  extend T::Sig
+  include A
+#         ^ find-implementation: A
+end
+```
+
+There are two types of assertions:
+
+1. `find-implementation: <symbol>` means make a "Go to Implementation" request here. `<symbol>` marks the symbol name we are looking for.
+2. `implementation: <symbol>` marks the location which should be returned for the "Go to Implementation" call for a given `<symbol>`
+
+If the request returns multiple locations, you should mark all of them with `implementation: <symbol>`
+
+#### Testing rename constant
+
+To write a test for renaming constants, you need to make at least two files:
+
+```ruby
+# -- test/testdata/lsp/refactor/mytest.rb --
+
+# typed: true
+# frozen_string_literal: true
+
+class Foo
+  class Foo
+  end
+end
+
+foo = Foo.new
+#     ^ apply-rename: [A] newName: Bar
+```
+
+The `apply-rename` assertion here says "simulate a user starting a rename from
+the position of this caret." You'll need to add an `.rbedited` file that reflects
+what the result of the changes should look like. In this case, the file would look
+like this:
+
+```ruby
+# -- test/testdata/lsp/refactor/mytest.A.rbedited --
+
+# typed: true
+# frozen_string_literal: true
+
+class Bar
+  class Foo
+  end
+end
+
+foo = Bar.new
+#     ^ apply-rename: [A] newName: Bar
+```
+
+You can test that invalid renames aren't applied by adding `invalid: true` to your
+test, like so:
+```ruby
+# -- test/testdata/lsp/refactor/mytest.rb --
+
+# typed: true
+# frozen_string_literal: true
+
+class Foo
+  class Foo
+  end
+end
+
+foo = Foo.new
+#     ^ apply-rename: [A] newName: foo invalid:true
+```
+
+To test for a specific error message, add an `expectedErrorMessage` argument to the test:
+```ruby
+# typed: true
+# frozen_string_literal: true
+
+require_relative './constant__class_definition.rb'
+
+sig { params(foo: Foo::Foo).returns(Foo::Foo) }
+def foo(foo); end
+
+class Baz
+#     ^ apply-rename: [D] newName: Bar invalid: true expectedErrorMessage: Renaming constants defined in .rbi files is not supported; symbol Baz is defined at test/testdata/lsp/rename/constant__rbi_class_reference.rbi
+
+end
+```
+
+You can add more files that reference the constant you're renaming, just make sure
+to add a matching `.rbedited` file with the same version.
+
+#### Testing incremental type checking
 
 In LSP mode, Sorbet runs file updates on a *fast path* or a *slow path*. It checks the structure of the
 file before and after the update to determine if the change is covered under the fast path. If it is,
-it performs further processing to determine the set of files that need to be typechecked.
+it performs further processing to determine the set of files that need to be type checked.
 
 LSP tests can define file updates in `<name>.<version>.rbupdate` files which contain the contents of `<name>.rb`
 after the update occurs. For example, the file `foo.1.rbupdate` contains the updated contents of `foo.rb`.
@@ -581,6 +839,51 @@ simultaneously to update `foo__bar.rb` and `foo__baz.rb`.
 Inside `*.rbupdate` files, you can assert that the slow path ran by adding a line with `# assert-slow-path: true`.
 You can assert that the fast path ran on `foo__bar.rb` and `foo__baz.rb` with
 `#assert-fast-path: foo__bar.rb,foo__baz.rb`.
+
+Note that the default behavior when testing multi-file updates (e.g.,
+`*__1.1.rbupdate` + `*__2.1.rbupdate`) is to include all the files in the file
+update that is created and sent to the LSP server. When testing changes that
+assert whether the right files were typechecked on the fast path with
+`assert-fast-path`, you also likely want to declare which files **should not**
+be included in the file edit, leaving Sorbet to figure out the subset of files
+to be typechecked. **But** regardless of whether a file was included in the
+update set, you likely want to assert that error occur at certain points inside
+the file. For this, you can use `# exclude-from-file-update: true` inside an
+`rbupdate` file. Note that when using this, the act of adding the
+`exclude-from-file-update` assertion in the `rbupdate` will have the effect of
+shifting all the `error` assertions off by one line compared to where the LSP
+server will be reporting those errors. To work around this, you should leave a
+spacer line in the previous file, so that the `exclude-from-file-update`
+assertion replaces the spacer line, instead of being inserted into the file as a
+completely new line. Search for `spacer` in some of the `fast_path` tests to see
+an example.
+
+To craft an update to an RBI file, use `.rbiupdate` instead of `.rbupdate`,
+unless you mean to simulate the effect of converting an RBI file to an RB file.
+
+#### Testing `sorbet/hierarchyReferences`
+
+There are two modes of testing `sorbet/hierarchyReferences`:
+
+- `^ hierarchy-ref-set: <symbol>`
+
+  Making a `sorbet/hierarchyReferences` request from each location in the set
+  specified by `<symbol>` should include a list of Locations for all other
+  entries in the set.
+
+- `^ find-hierarchy-refs: <symbol>` + `^ hierarchy-ref: <symbol>`
+
+  Making a `sorbet/hierarchyReferences` request at each of the location
+  specified by the `find-hierarchy-refs` locations only should return a list of
+  Locations that includes both the original `find-hierarchy-refs` position and
+  any others specified by `hierarchy-ref`.
+
+Prefer the "set" version, because it is more concise and tests more things.
+
+Use the `find-hierarchy-refs` version when there is intentional asymmetry. For
+example, given multiple inheritance, the hierarchy of two parent modules might
+be unrelated, but the hierarchy of their shared child will include both of them.
+In such cases, only `find-hierarchy-refs` can be used.
 
 ### LSP recorded tests
 
@@ -628,17 +931,7 @@ bazel test //test/cli:update
 ```
 
 
-## C++ conventions
-
-- [ ] TODO(jez) Write and link to "Notes on C++ Development"
-
-- Use smart pointers for storage, references for arguments.
-- No C-style allocators; use vectors instead.
-
-
-## Debugging and profiling
-
-### Debugging
+## Debugging
 
 In general,
 
@@ -655,11 +948,6 @@ Also, it’s good to get in the practice of fixing bugs by first adding an
 `ENFORCE` (assertion) that would have caught the bug before actually fixing the
 bug. It’s far easier to fix bugs when there’s a nice error message stating what
 invariant you’ve violated. `ENFORCE`s are free in the release build.
-
-### Profiling
-
-- [ ] TODO(jez) Write about how to profile Sorbet
-
 
 ## Writing docs
 
@@ -678,25 +966,11 @@ using [Docusaurus](https://docusaurus.io/).
 ### Bazel
 
 Bazel supports having a persistent cache of previous build results so that
-rebuilds for the same input files are fast. To enable this feature, run these
-commands to create a `./.bazelrc.local` and cache folder:
+rebuilds for the same input files are fast. To enable this feature, run this
+script to create a `./.bazelrc.local` and cache folder:
 
 ```shell
-# The .bazelrc.local will live in the sorbet repo so it doesn't interfere with
-# other bazel-based repos you have.
-echo "build  --disk_cache=$HOME/.cache/sorbet/bazel-cache" >> ./.bazelrc.local
-echo "test   --disk_cache=$HOME/.cache/sorbet/bazel-cache" >> ./.bazelrc.local
-mkdir -p "$HOME/.cache/sorbet/bazel-cache"
-```
-
-### Multiple git worktrees
-
-Sometimes it can be nice to have [multiple working trees] in Git. This allows
-you to have multiple active checkouts Sorbet, sharing the same `.git/` folder.
-To set up a new worktree with Sorbet:
-
-```shell
-tools/scripts/make_worktree.sh <worktree_name>
+tools/create_local_bazelrc.sh
 ```
 
 ### Shell
@@ -743,6 +1017,14 @@ To build a `compile_commands.json` file for Sorbet with bazel:
 tools/scripts/build_compilation_db.sh
 ```
 
+This builds a `./compile_commands.json` file (that is gitignored). This file
+hard-codes some paths into the Bazel sandbox. These files can get stale,
+especially when they're generated by Bazel `genrule`'s. In particular, the
+`./compile_commands.json` references files in Bazel's `opt` configuration (e.g.,
+whatever was last built with `-c opt` / `--compilation_mode=opt`). If you're
+seeing stale errors, consider running a command like `./bazel build
+//main:sorbet -c opt`.
+
 You are encouraged to play around with various clang-based tools which use the
 `compile_commands.json` database. Some suggestions:
 
@@ -765,16 +1047,13 @@ You are encouraged to play around with various clang-based tools which use the
 
 -   [clangd] -- Clang-based language server implementation
 
-    ```shell
-    brew install llvm@8
-
-    # => /usr/local/opt/llvm/bin/clangd
-    # You might need to put this on your PATH to tell your editor about it.
-    ```
-
     `clangd` supports more features than `rtags` (specifically, reporting
     Diagnostics), but can be somewhat slower at times because it does not
     pre-index all your code like rtags does.
+
+    After successfully compiling Sorbet, point your editor to use the
+    `clangd` executable located in
+    `bazel-sorbet/external/llvm_toolchain_15_0_7/bin/clangd`.
 
 -   [clang-format] -- Clang-based source code formatter
 
@@ -815,8 +1094,9 @@ You are encouraged to play around with various clang-based tools which use the
     run `clang-format` whenever you save. **Note: Microsoft's C/C++ extension
     does *not* work properly with Sorbet's `compile_commands.json`.**
 
-    clangd will need to be on your path, or you will need to change the
-    "clangd.path" setting.
+    The settings for this repository automatically configure vscode-clangd to
+    run the clangd executable in the `bazel-sorbet` directory. Note that you
+    will need to compile Sorbet once before it will work.
 
     clangd operates on `compile_commands.json`, so make sure you run the
     `./tools/scripts/build_compilation_db.sh` script.
@@ -834,3 +1114,40 @@ Here are some sample config setups:
   - [rtags (vim-rtags)](https://github.com/jez/dotfiles/blob/dafe23c95fd908719bf477f189335bd1451bd8a7/vim/plug-settings.vim#L649-L676)
   - [clangd + clang-format (ALE)](https://github.com/jez/dotfiles/blob/dafe23c95fd908719bf477f189335bd1451bd8a7/vim/plug-settings.vim#L288-L303)
   - [clangd + clang-format (coc.nvim)](https://github.com/elliottt/vim-config/blob/35f328765528f6b322fb7d5a03fb3edd81067805/coc-settings.json#L3-L15)
+
+### Editor setup for test/testdata
+
+Sorbet developers will want to set up their editor to run Sorbet slightly
+differently from normal Sorbet users. The two main goals of a Sorbet developer's
+setup:
+
+1.  Use `bazel-bin/main/sorbet` to see Sorbet changes in your editor as you
+    rebuild
+1.  Get `test/testdata/` and other files to typecheck
+
+Since there are so few Sorbet developers, every setup is custom.
+
+#### @jez setup
+
+1.  Create a `sorbet` symlink in `$PATH` somewhere, and have it point at
+    `/path/to/sorbet/bazel-bin/main/sorbet`.
+
+1.  Configure LSP to invoke the Sorbet LSP server like this:
+
+    - If there is a `Gemfile` in the current folder, use `srb tc`. Otherwise,
+      use `sorbet` (from the `$PATH` setup, see above).
+    - If there is a `sorbet/config` file in the repo, invoke with no extra args.
+      Otherwise, invoke with these args:
+
+      ```
+      -e 0 /Users/jez/.local/share/sorbet/.empty --debug-log-file=/tmp/sorbet-nvim.log
+      ```
+
+      This should mean that opening any Ruby file in `test/testdata/` should
+      have Sorbet start automatically and only typecheck that file in isolation,
+      instead of attempting to typecheck all of `test/testdata/` as if it were
+      one project.
+
+#### others
+
+_Feel free to add yours if you think it would be useful!_

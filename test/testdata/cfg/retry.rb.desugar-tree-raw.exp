@@ -1,12 +1,16 @@
 ClassDef{
   kind = class
-  name = EmptyTree<<C <U <root>>>>
-  ancestors = []
+  name = EmptyTree
+  symbol = <C <U <root>>>
+  ancestors = [ConstantLit{
+      symbol = (class ::<todo sym>)
+      orig = nullptr
+    }]
   rhs = [
     MethodDef{
-      flags = 0
-      name = <U main><<C <U <todo sym>>>>
-      args = [BlockArg{ expr = UnresolvedIdent{
+      flags = {}
+      name = <U main><<U <todo method>>>
+      params = [BlockParam{ expr = UnresolvedIdent{
           kind = Local
           name = <U <blk>>
         } }]
@@ -23,12 +27,14 @@ ClassDef{
         expr = Rescue{
           body = If{
             cond = Send{
+              flags = {}
               recv = UnresolvedIdent{
                 kind = Local
                 name = <U try>
               }
               fun = <U <>
               block = nullptr
+              pos_args = 1
               args = [
                 Literal{ value = 3 }
               ]
@@ -41,12 +47,14 @@ ClassDef{
                     name = <U try>
                   }
                   rhs = Send{
+                    flags = {}
                     recv = UnresolvedIdent{
                       kind = Local
                       name = <U try>
                     }
                     fun = <U +>
                     block = nullptr
+                    pos_args = 1
                     args = [
                       Literal{ value = 1 }
                     ]
@@ -54,11 +62,11 @@ ClassDef{
                 }
               ],
               expr = Send{
-                recv = Local{
-                  localVariable = <U <self>>
-                }
+                flags = {privateOk}
+                recv = Self
                 fun = <U raise>
                 block = nullptr
+                pos_args = 1
                 args = [
                   Literal{ value = "e" }
                 ]
@@ -77,11 +85,11 @@ ClassDef{
               body = InsSeq{
                 stats = [
                   Send{
-                    recv = Local{
-                      localVariable = <U <self>>
-                    }
+                    flags = {privateOk}
+                    recv = Self
                     fun = <U puts>
                     block = nullptr
+                    pos_args = 1
                     args = [
                       Literal{ value = "rescue" }
                     ]
@@ -99,11 +107,11 @@ ClassDef{
     }
 
     Send{
-      recv = Local{
-        localVariable = <U <self>>
-      }
+      flags = {privateOk}
+      recv = Self
       fun = <U main>
       block = nullptr
+      pos_args = 0
       args = [
       ]
     }

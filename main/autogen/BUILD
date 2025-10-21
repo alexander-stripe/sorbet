@@ -2,12 +2,12 @@ cc_library(
     name = "autogen",
     srcs = [
         "autogen.cc",
-        "autoloader.cc",
+        "crc_builder.cc",
         "subclasses.cc",
     ],
     hdrs = [
         "autogen.h",
-        "autoloader.h",
+        "crc_builder.h",
         "subclasses.h",
     ],
     linkstatic = select({
@@ -17,10 +17,11 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//ast",
+        "//ast/desugar",
         "//ast/treemap",
         "//core",
+        "//main/autogen/data",
         "//main/options",
         "@com_github_d_bahr_crcpp",
-        "@com_github_msgpack_msgpack",
     ],
 )

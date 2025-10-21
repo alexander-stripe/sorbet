@@ -99,14 +99,18 @@ class Opus::Types::Test::Props::DecoratorTest < Critic::Unit::UnitTest
 
   describe 'When validating prop definitions' do
     it 'Validates prop options are symbols' do
-      assert_prop_error(error: TypeError) do
+      assert_prop_error(error: ArgumentError) do
         prop :foo, String, 'name' => 'mongoprop'
       end
     end
 
     it 'Validates prop options are recognize' do
-      assert_prop_error(/At least one invalid prop arg/) do
+      assert_prop_error(/Invalid prop arg /) do
         prop :foo, String, nosucharg: :llamas
+      end
+
+      assert_prop_error(/Invalid prop args /) do
+        prop :foo, String, nosucharg: :llamas, alsoinvalid: :morellamas
       end
     end
 
@@ -173,7 +177,7 @@ class Opus::Types::Test::Props::DecoratorTest < Critic::Unit::UnitTest
   end
 
   describe 'validating prop values' do
-    it 'validates subdoc hashes have the correct values' do
+    it 'validates that subdoc hashes have the correct values' do
 
       assert_raises(TypeError) do
         StructHash.new(the_hash: {'foo' => {}})
@@ -195,12 +199,6 @@ class Opus::Types::Test::Props::DecoratorTest < Critic::Unit::UnitTest
       assert_equal(T::Types::TypedArray, foo.fetch(:type).class, T::Types::TypedArray)
       assert_equal(Integer, foo.fetch(:array), Integer)
       assert(T::Props::Utils.optional_prop?(foo))
-    end
-
-    it "validates setting 'optional' argument when defining with 'optional' keyword" do
-      assert_prop_error(/:optional must be one of/, mixin: T::Props::Serializable) do
-        prop :foo, String, optional: :arglebargle
-      end
     end
   end
 
@@ -232,6 +230,28 @@ class Opus::Types::Test::Props::DecoratorTest < Critic::Unit::UnitTest
       end
       assert_match(/Opus::Types::Test::Props::DecoratorTest::OptionalMigrate.foo not set/, e.message)
     end
+
+    it "will try to alert the owner if possible" do
+
+      found_team = nil
+      T::Configuration.class_owner_finder = ->(_klass) { :some_team }
+      # because `raise_nil_deserialize_error` has a final `ensure`
+      # block, we're going to end up calling this twice, and only
+      # once with the `project:` key set. Expressing that via
+      # `.expect` here is a bit messy, so we're going to set a
+      # variable if we get the assert handler called once with the
+      # right project
+      T::Configuration.hard_assert_handler = lambda do |_msg, kwargs|
+        found_team = kwargs[:project] if kwargs.include?(:project)
+      end
+      OptionalMigrate.from_hash({})
+      assert_equal(:some_team, found_team)
+    ensure
+      T::Configuration.hard_assert_handler = nil
+      T::Configuration.class_owner_finder = nil
+
+    end
+
   end
 
   class OptionalMigrate2
@@ -286,7 +306,7 @@ class Opus::Types::Test::Props::DecoratorTest < Critic::Unit::UnitTest
       e = assert_raises(NoMethodError) do
         m.immutable = 'world'
       end
-      assert_match(/undefined method `immutable='/, e.message)
+      assert_match(/undefined method [`']immutable='/, e.message)
     end
 
     it 'const creates an immutable prop' do
@@ -300,11 +320,38 @@ class Opus::Types::Test::Props::DecoratorTest < Critic::Unit::UnitTest
       assert(foo.fetch(:immutable))
     end
 
-    it "validates setting 'optional' argument when defining with 'optional' keyword" do
+    it "validates setting 'immutable' argument when defining with 'immutable' keyword" do
       assert_prop_error(/Cannot pass 'immutable' argument/) do
-        const :foo, String, immutable: :false
+        const :foo, String, immutable: false
       end
     end
+  end
+
+  # Testing that overrides work correctly.
+  class PropDefinitionOverrides
+    include T::Props
+
+    def self.prop(name, cls, kind: nil, **rules)
+      super(name, cls, **rules)
+    end
+
+    # We are relying here on T::Props::ClassMethods.const to coalesce `kind:` into `rules`,
+    # which will then be passed to the `self.prop` override above, which will then break
+    # out the `kind:` argument.  The `kind:` argument should not make its way down into
+    # T::Props::Decorator#prop_defined.
+    def self.const(name, cls, kind: nil, **rules)
+      super(name, cls, kind: kind, **rules)
+    end
+  end
+
+  it 'calls overrides properly' do
+    Class.new(PropDefinitionOverrides) do
+      # This is essentially ensuring that `const` goes through `prop` and doesn't do any
+      # short-circuiting.  See the above comment.
+      const :theprop, String, kind: :something
+    end
+    # This is effectively "the above should not have raised".
+    assert(true)
   end
 
   # Testing the matrix in chalk/odm/doc/chalk-odm.md
@@ -330,7 +377,7 @@ class Opus::Types::Test::Props::DecoratorTest < Critic::Unit::UnitTest
     e = assert_raises do
       MatrixStruct.new.c = nil
     end
-    assert_match(/undefined method `c='/, e.message)
+    assert_match(/undefined method [`']c='/, e.message)
     e = assert_raises do
       MatrixStruct.new.d = nil
     end
@@ -360,35 +407,43 @@ class Opus::Types::Test::Props::DecoratorTest < Critic::Unit::UnitTest
     assert_nil(MatrixStruct.new.e)
   end
 
-  it 'hard asserts if `optional` is ever specified' do
-    e = assert_raises do
-      Class.new(T::Struct) do
-        prop :optional_true, T::Boolean, optional: true
-      end
-    end
-    assert_match(/Use of `optional: true` is deprecated/, e.message)
+  it 'applies the supplied sensitivity and PII handler' do
 
-    e = assert_raises do
-      Class.new(T::Struct) do
-        prop :optional_on_load, T::Boolean, optional: :on_load
-      end
+    T::Configuration.normalize_sensitivity_and_pii_handler = lambda do |meta|
+      meta[:pii] = :set
+      meta[:sensitivity] += 1
+      meta
     end
-    assert_match(/Use of `optional: :on_load` is deprecated/, e.message)
+    e = Class.new(T::Struct) do
+      # needs this annotation for the `:pii` field
+      def self.contains_pii?
+        true
+      end
 
-    e = assert_raises do
-      Class.new(T::Struct) do
-        prop :optional_existing, T::Boolean, optional: :existing
-      end
+      prop :foo, Integer, sensitivity: 5
     end
-    assert_match(/Use of `optional: :existing` is not allowed/, e.message)
+    assert_equal(6, e.props[:foo][:sensitivity])
+    assert_equal(:set, e.props[:foo][:pii])
+  ensure
+    T::Configuration.normalize_sensitivity_and_pii_handler = nil
+
   end
 
-  it 'raises if the word secret appears in a prop without a sensitivity annotation' do
+  it 'tells the name of pii prop if bad pii' do
     e = assert_raises do
-      Class.new(T::Struct) do
-        prop :secret, String
+      T::Configuration.normalize_sensitivity_and_pii_handler = lambda do |meta|
+        meta[:pii] = :set
+        meta
+      end
+      class NoPII < T::Struct
+        def self.contains_pii?
+          false
+        end
+
+        prop :foo, Integer, sensitivity: true
       end
     end
-    assert_match(/has the word 'secret' in its name/, e.message)
+    assert_match(/NoPII#foo/, e.message)
+    assert_match(/because `.*::NoPII` is `contains_no_pii`/, e.message)
   end
 end

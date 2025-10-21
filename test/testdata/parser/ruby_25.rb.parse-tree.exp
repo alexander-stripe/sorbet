@@ -8,7 +8,7 @@ Begin {
       superclass = NULL
       body = DefMethod {
         name = <U toto>
-        args = NULL
+        params = NULL
         body = Block {
           send = Send {
             receiver = Array {
@@ -22,9 +22,9 @@ Begin {
             args = [
             ]
           }
-          args = Args {
-            args = [
-              Arg {
+          params = Params {
+            params = [
+              Param {
                 name = <U n>
               }
             ]
@@ -48,7 +48,7 @@ Begin {
     }
     DefMethod {
       name = <U main>
-      args = NULL
+      params = NULL
       body = Send {
         receiver = Send {
           receiver = Const {

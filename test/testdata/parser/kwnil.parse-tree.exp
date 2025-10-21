@@ -1,0 +1,122 @@
+Begin {
+  stmts = [
+    DefMethod {
+      name = <U f1>
+      params = Params {
+        params = [
+          Kwnilarg {
+          }
+        ]
+      }
+      body = NULL
+    }
+    DefMethod {
+      name = <U f2>
+      params = Params {
+        params = [
+          RestParam {
+            name = <U args>
+          }
+          Kwnilarg {
+          }
+        ]
+      }
+      body = NULL
+    }
+    DefMethod {
+      name = <U f3>
+      params = Params {
+        params = [
+          Param {
+            name = <U a>
+          }
+          Param {
+            name = <U b>
+          }
+          Param {
+            name = <U c>
+          }
+          Kwnilarg {
+          }
+        ]
+      }
+      body = NULL
+    }
+    DefMethod {
+      name = <U f4>
+      params = Params {
+        params = [
+          Param {
+            name = <U a>
+          }
+          Param {
+            name = <U b>
+          }
+          RestParam {
+            name = <U c>
+          }
+          Kwnilarg {
+          }
+        ]
+      }
+      body = NULL
+    }
+    DefMethod {
+      name = <U f5>
+      params = Params {
+        params = [
+          Kwnilarg {
+          }
+          BlockParam {
+            name = <U blk>
+          }
+        ]
+      }
+      body = NULL
+    }
+    DefMethod {
+      name = <U f6>
+      params = Params {
+        params = [
+          Param {
+            name = <U a>
+          }
+          Param {
+            name = <U b>
+          }
+          Param {
+            name = <U c>
+          }
+          Kwnilarg {
+          }
+          BlockParam {
+            name = <U blk>
+          }
+        ]
+      }
+      body = NULL
+    }
+    DefMethod {
+      name = <U f7>
+      params = Params {
+        params = [
+          Param {
+            name = <U a>
+          }
+          Param {
+            name = <U b>
+          }
+          RestParam {
+            name = <U c>
+          }
+          Kwnilarg {
+          }
+          BlockParam {
+            name = <U blk>
+          }
+        ]
+      }
+      body = NULL
+    }
+  ]
+}

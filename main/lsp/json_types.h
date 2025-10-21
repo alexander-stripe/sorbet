@@ -1,36 +1,17 @@
 #ifndef RUBY_TYPER_LSP_JSON_TYPES_H
 #define RUBY_TYPER_LSP_JSON_TYPES_H
 
-#include "ast/ast.h"
 #include "common/common.h"
-#include "core/NameHash.h"
+#include "common/timers/Timer.h"
 #include "core/core.h"
+#include "main/lsp/json_enums.h"
 #include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
 
 #include <optional>
 #include <variant>
 
 namespace sorbet::realmain::lsp {
-
-/**
- * Encapsulates an update to LSP's file state in a compact form.
- * Placed into json_types.h because it is referenced from InitializedParams.
- */
-struct LSPFileUpdates {
-    // This specific update contains versions [versionStart, versionEnd].
-    u4 versionEnd = 0;
-    u4 versionStart = 0;
-    std::vector<std::shared_ptr<core::File>> updatedFiles;
-    bool canTakeFastPath = false;
-    // Indicates that this update contains a new file. Is a hack for TimeTravelingGlobalState.
-    bool hasNewFiles = false;
-    std::vector<core::FileHash> updatedFileHashes;
-    std::vector<ast::ParsedFile> updatedFileIndexes;
-    // Updated on typechecking thread. Contains indexes processed with typechecking global state.
-    std::vector<ast::ParsedFile> updatedFinalGSFileIndexes;
-    // (Optional) Updated global state object to use to typecheck this update.
-    std::optional<std::unique_ptr<core::GlobalState>> updatedGS;
-};
 
 class DeserializationError : public std::runtime_error {
 public:
@@ -107,8 +88,6 @@ public:
                      const std::unique_ptr<rapidjson::Value> &found);
 };
 
-class JSONNullObject final {};
-
 class JSONBaseType {
 public:
     virtual ~JSONBaseType() = default;
@@ -119,6 +98,8 @@ public:
      * Converts C++ object into a string containing a stringified JSON object.
      */
     std::string toJSON(bool prettyPrint = false) const;
+
+    rapidjson::StringBuffer toJSONBuffer(bool prettyPrint = false) const;
 
     /**
      * Converts C++ object into a RapidJSON JSON value owned by the given rapidjson allocator.

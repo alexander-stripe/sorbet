@@ -10,17 +10,21 @@ module T::Types
 
     def initialize(); end
 
-    # @override Base
-    def name
-      "AttachedClass"
+    def build_type
+      nil
     end
 
-    # @override Base
+    # overrides Base
+    def name
+      "T.attached_class"
+    end
+
+    # overrides Base
     def valid?(obj)
       true
     end
 
-    # @override Base
+    # overrides Base
     private def subtype_of_single?(other)
       case other
       when AttachedClassType
@@ -28,6 +32,10 @@ module T::Types
       else
         false
       end
+    end
+
+    module Private
+      INSTANCE = AttachedClassType.new.freeze
     end
   end
 end

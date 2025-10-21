@@ -1,6 +1,5 @@
 #ifndef SORBET_REPORTER_H
 #define SORBET_REPORTER_H
-#include "common/ConstExprStr.h"
 #include "core/AutocorrectSuggestion.h"
 #include "core/Loc.h"
 #include "core/StrictLevel.h"
@@ -12,10 +11,10 @@ namespace sorbet::core {
 
 class ErrorClass {
 public:
-    const u2 code;
+    const uint16_t code;
     const StrictLevel minLevel;
 
-    constexpr ErrorClass(u2 code, StrictLevel minLevel) : code(code), minLevel(minLevel){};
+    constexpr ErrorClass(uint16_t code, StrictLevel minLevel) : code(code), minLevel(minLevel){};
     ErrorClass(const ErrorClass &rhs) = default;
 
     bool operator==(const ErrorClass &rhs) const {
@@ -34,8 +33,11 @@ class ErrorColors {
 
 public:
     ErrorColors() = delete;
-    template <typename... Args> static std::string format(std::string_view msg, const Args &... args) {
-        return fmt::format(replaceAll(msg, coloredPatternSigil, coloredPatternReplace), args...);
+    template <typename... Args> static std::string format(fmt::format_string<Args...> msg, Args &&...args) {
+        fmt::string_view msgFmtStrView = msg;
+        std::string_view inWhat(msgFmtStrView.data(), msgFmtStrView.size());
+        return fmt::vformat(replaceAll(inWhat, coloredPatternSigil, coloredPatternReplace),
+                            fmt::make_format_args(args...));
     }
     static void enableColors();
     static void disableColors();
@@ -44,11 +46,27 @@ public:
 struct ErrorLine {
     const Loc loc;
     const std::string formattedMessage;
-    ErrorLine(Loc loc, std::string formattedMessage) : loc(loc), formattedMessage(move(formattedMessage)){};
+    enum class LocDisplay {
+        Shown,
+        Hidden,
+    };
+    LocDisplay displayLoc;
 
-    template <typename... Args> static ErrorLine from(Loc loc, std::string_view msg, const Args &... args) {
-        std::string formatted = ErrorColors::format(msg, args...);
-        return ErrorLine(loc, move(formatted));
+    ErrorLine(Loc loc, std::string formattedMessage, LocDisplay displayLoc = LocDisplay::Shown)
+        : loc(loc), formattedMessage(std::move(formattedMessage)), displayLoc(displayLoc){};
+
+    // Use this (instead of the constructor) if you want `{}` to mean "turn this cyan if should use
+    // colors, or just backticks otherwise".
+    template <typename... Args> static ErrorLine from(Loc loc, fmt::format_string<Args...> msg, Args &&...args) {
+        std::string formatted = ErrorColors::format(msg, std::forward<Args>(args)...);
+        return ErrorLine(loc, std::move(formatted));
+    }
+
+    // You should ALMOST ALWAYS prefer the variant above that takes a Loc.
+    // The best error messages show context associated with locations.
+    template <typename... Args> static ErrorLine fromWithoutLoc(fmt::format_string<Args...> msg, Args &&...args) {
+        std::string formatted = ErrorColors::format(msg, std::forward<Args>(args)...);
+        return ErrorLine(core::Loc::none(), std::move(formatted), LocDisplay::Hidden);
     }
     std::string toString(const GlobalState &gs, bool color = true) const;
 };
@@ -56,6 +74,8 @@ struct ErrorLine {
 struct ErrorSection {
     std::string header;
     std::vector<ErrorLine> messages;
+    bool isAutocorrectDescription = false;
+    bool isDidYouMean = false;
     ErrorSection(std::string_view header) : header(header) {}
     ErrorSection(std::string_view header, const std::initializer_list<ErrorLine> &messages)
         : header(header), messages(messages) {}
@@ -64,6 +84,33 @@ struct ErrorSection {
     ErrorSection(const std::initializer_list<ErrorLine> &messages) : ErrorSection("", messages) {}
     ErrorSection(const std::vector<ErrorLine> &messages) : ErrorSection("", messages) {}
     std::string toString(const GlobalState &gs) const;
+
+    class NoOpCollector {
+    public:
+        void addErrorDetails(NoOpCollector e) {}
+        NoOpCollector newCollector() const {
+            return *this;
+        }
+    };
+
+    class Collector {
+    public:
+        std::string message;
+        std::vector<Collector> children;
+
+        Collector() = default;
+        Collector(const Collector &) = delete;
+        Collector &operator=(const Collector &) = delete;
+        Collector(Collector &&other) = default;
+
+        void addErrorDetails(Collector &&e);
+        Collector newCollector() const {
+            return Collector();
+        }
+        std::optional<ErrorSection> toErrorSection() const;
+
+        constexpr static NoOpCollector NO_OP = NoOpCollector();
+    };
 };
 
 class Error {
@@ -72,36 +119,18 @@ public:
     const ErrorClass what;
     const std::string header;
     const bool isSilenced;
-    std::vector<AutocorrectSuggestion> autocorrects;
+    const std::vector<AutocorrectSuggestion> autocorrects;
     const std::vector<ErrorSection> sections;
 
     bool isCritical() const;
     std::string toString(const GlobalState &gs) const;
     Error(Loc loc, ErrorClass what, std::string header, std::vector<ErrorSection> sections,
           std::vector<AutocorrectSuggestion> autocorrects, bool isSilenced)
-        : loc(loc), what(what), header(move(header)), isSilenced(isSilenced), autocorrects(move(autocorrects)),
-          sections(sections) {
-        ENFORCE(this->header.empty() || this->header.back() != '.');
+        : loc(loc), what(what), header(std::move(header)), isSilenced(isSilenced),
+          autocorrects(std::move(autocorrects)), sections(sections) {
+        ENFORCE(this->header.empty() || this->header.back() != '.', "Error headers should not end with a period");
         ENFORCE(this->header.find('\n') == std::string::npos, "{} has a newline in it", this->header);
     }
-};
-
-/*
- * Used to batch errors in an RAII fashion:
- *
- * {
- *   ErrorRegion errs(gs);
- *   runNamer();
- * }
- */
-class ErrorRegion {
-public:
-    ErrorRegion(const GlobalState &gs, FileRef f) : gs(gs), f(f){};
-    ~ErrorRegion();
-
-private:
-    const GlobalState &gs;
-    FileRef f;
 };
 
 class ErrorBuilder {
@@ -137,7 +166,9 @@ class ErrorBuilder {
 
 public:
     ErrorBuilder(const ErrorBuilder &) = delete;
-    ErrorBuilder(ErrorBuilder &&) = default;
+    // If you undelete this, you will need to make sure the moved ErrorBuilder is marked as 'DidBuild' so Sorbet does
+    // not report an empty error.
+    ErrorBuilder(ErrorBuilder &&) = delete;
     ErrorBuilder(const GlobalState &gs, bool willBuild, Loc loc, ErrorClass what);
     ~ErrorBuilder();
 
@@ -145,23 +176,29 @@ public:
         ENFORCE(state != State::DidBuild);
         return state == State::WillBuild;
     }
-    void addErrorSection(ErrorSection &&section);
-    template <typename... Args> void addErrorLine(Loc loc, ConstExprStr msg, const Args &... args) {
-        std::string formatted = ErrorColors::format(msg.str, args...);
+    void addErrorSection(std::optional<ErrorSection> &&section);
+    template <typename... Args> void addErrorLine(Loc loc, fmt::format_string<Args...> msg, Args &&...args) {
+        std::string formatted = ErrorColors::format(msg, std::forward<Args>(args)...);
         addErrorSection(ErrorSection({ErrorLine(loc, formatted)}));
     }
-
-    template <typename... Args> void setHeader(ConstExprStr msg, const Args &... args) {
-        std::string formatted = ErrorColors::format(msg.str, args...);
-        _setHeader(move(formatted));
+    template <typename... Args> void addErrorNote(fmt::format_string<Args...> msg, Args &&...args) {
+        addErrorSection(ErrorSection("Note:", {ErrorLine::fromWithoutLoc(msg, std::forward<Args>(args)...)}));
     }
+
+    template <typename... Args> void setHeader(fmt::format_string<Args...> msg, Args &&...args) {
+        std::string formatted = ErrorColors::format(msg, std::forward<Args>(args)...);
+        _setHeader(std::move(formatted));
+    }
+    void addErrorSections(const ErrorSection::Collector &&errorDetailsCollector);
 
     void addAutocorrect(AutocorrectSuggestion &&autocorrect);
+    void maybeAddAutocorrect(std::optional<AutocorrectSuggestion> &&autocorrect);
     template <typename... Args>
-    void replaceWith(const std::string &title, Loc loc, ConstExprStr replacement, const Args &... args) {
-        std::string formatted = fmt::format(replacement.str, args...);
-        addAutocorrect(AutocorrectSuggestion{title, {AutocorrectSuggestion::Edit{loc, move(formatted)}}});
+    void replaceWith(const std::string &title, Loc loc, fmt::format_string<Args...> replacement, Args &&...args) {
+        std::string formatted = fmt::format(replacement, std::forward<Args>(args)...);
+        addAutocorrect(AutocorrectSuggestion{title, {AutocorrectSuggestion::Edit{loc, std::move(formatted)}}});
     }
+    void didYouMean(const std::string &replacement, Loc loc);
 
     // build() builds and returns the reported Error. Only valid if state ==
     // WillBuild. This passes ownership of the error to the caller; ErrorBuilder

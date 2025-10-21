@@ -1,5 +1,5 @@
-class <emptyTree><<C <root>>> < ()
-  <self>.alias_method(:"afoo", :"bar")
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  <self>.alias_method(:afoo, :bar)
 
   @iv = 1
 
@@ -25,7 +25,7 @@ class <emptyTree><<C <root>>> < ()
 
   xaaaaz = [<self>.yayayaya(), <self>.tutututu()]
 
-  <emptyTree>
+  nil
 
   nil
 
@@ -34,7 +34,7 @@ class <emptyTree><<C <root>>> < ()
     <self>.b()
   end
 
-  def bfoo<<C <todo sym>>>(&x)
+  def bfoo<<todo method>>(&x)
     <emptyTree>
   end
 
@@ -59,7 +59,7 @@ class <emptyTree><<C <root>>> < ()
 
   ::Kernel.Complex(0, "1.5")
 
-  def self.classmeth<<C <todo sym>>>(&<blk>)
+  def self.classmeth<<todo method>>(&<blk>)
     <emptyTree>
   end
 
@@ -100,13 +100,16 @@ class <emptyTree><<C <root>>> < ()
 
   ::<Magic>.defined?("X")
 
-  <self>.super(ZSuperArgs)
+  <self>.<super>(ZSuperArgs)
 
-  def kwfoo<<C <todo sym>>>(x:, y: = 1, *z:, &<blk>)
+  def kwfoo<<todo method>>(x:, y: = 1, *z:, &<blk>)
     <emptyTree>
   end
 
-  x.to_hash()
+  begin
+    <hashTemp>$8 = ::<Magic>.<to-hash-dup>(x)
+    <hashTemp>$8
+  end
 
   87
 
@@ -149,25 +152,25 @@ class <emptyTree><<C <root>>> < ()
   end
 
   begin
-    <assignTemp>$8 = 1
-    <assignTemp>$9 = ::<Magic>.<expand-splat>(<assignTemp>$8, 2, 0)
-    a = <assignTemp>$9.[](0)
+    <assignTemp>$9 = 1
+    <assignTemp>$10 = ::<Magic>.<expand-splat>(<assignTemp>$9, 2, 0)
+    a = <assignTemp>$10.[](0)
     begin
-      <assignTemp>$10 = <assignTemp>$9.[](1)
-      <assignTemp>$11 = ::<Magic>.<expand-splat>(<assignTemp>$10, 1, 0)
-      x = <assignTemp>$11.[](0)
-      <assignTemp>$10
+      <assignTemp>$11 = <assignTemp>$10.[](1)
+      <assignTemp>$12 = ::<Magic>.<expand-splat>(<assignTemp>$11, 1, 0)
+      x = <assignTemp>$12.[](0)
+      <assignTemp>$11
     end
-    <assignTemp>$8
+    <assignTemp>$9
   end
 
   4
 
-  def optfoo<<C <todo sym>>>(x = 1, *y, &<blk>)
+  def optfoo<<todo method>>(x = 1, *y, &<blk>)
     <emptyTree>
   end
 
-  {x => y, :"foo" => 1}
+  {x => y, :foo => 1}
 
   <emptyTree>
 
@@ -182,15 +185,15 @@ rescue <emptyTree>::<C E> => x
   nil
 
   begin
-    <assignTemp>$12 = y.to_a()
-    <assignTemp>$13 = ::<Magic>.<expand-splat>(<assignTemp>$12, 0, 0)
-    x = <assignTemp>$13.slice(::Range.new(0, -1, false))
-    <assignTemp>$12
+    <assignTemp>$14 = ::<Magic>.<splat>(y)
+    <assignTemp>$15 = ::<Magic>.<expand-splat>(<assignTemp>$14, 0, 0)
+    x = <assignTemp>$15.to_ary()
+    <assignTemp>$14
   end
 
-  "foo".concat(<self>.bar().to_s()).intern()
+  ::<Magic>.<string-interpolate>("foo", <self>.bar()).intern()
 
-  [:"sym"]
+  [:sym]
 
   if x
     1
@@ -198,7 +201,7 @@ rescue <emptyTree>::<C E> => x
     7
   end
 
-  ::Kernel.undef(:"x", :"y")
+  ::Kernel.undef(:x, :y)
 
   ["a", "b"]
 
@@ -214,11 +217,19 @@ rescue <emptyTree>::<C E> => x
       <emptyTree>
     end)
 
-  def sfoo<<C <todo sym>>>(**$2, &<blk>)
+  def sfoo<<todo method>>(**, &<blk>)
     <emptyTree>
   end
 
-  def ssfoo<<C <todo sym>>>(***$3:, &<blk>)
+  def ssfoo<<todo method>>(***$2:, &<blk>)
     <emptyTree>
+  end
+
+  module <emptyTree>::<C Foo><<C <todo sym>>> < ()
+    def foo<<todo method>>(&<blk>)
+      <emptyTree>::<C Kernel>.lambda() do |a, b|
+        a.+(b)
+      end
+    end
   end
 end

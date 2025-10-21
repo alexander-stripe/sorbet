@@ -10,21 +10,32 @@ module T::Types
       @val = val
     end
 
-    # @override Base
-    def name
-      @val.inspect
+    def build_type
+      nil
     end
 
-    # @override Base
+    # overrides Base
+    def name
+      # Strips the #<...> off, just leaving the ...
+      # Reasoning: the user will have written something like
+      #   T.any(MyEnum::A, MyEnum::B)
+      # in the type, so we should print what they wrote in errors, not:
+      #   T.any(#<MyEnum::A>, #<MyEnum::B>)
+      @val.inspect[2..-2]
+    end
+
+    # overrides Base
     def valid?(obj)
       @val == obj
     end
 
-    # @override Base
+    # overrides Base
     private def subtype_of_single?(other)
       case other
       when TEnum
         @val == other.val
+      when Simple
+        other.raw_type.===(@val)
       else
         false
       end

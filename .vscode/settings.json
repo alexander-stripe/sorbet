@@ -1,6 +1,6 @@
 {
-  // Runs clang-format when you save (provided by vscode-clangd).
-  "editor.formatOnSave": true,
+  "files.insertFinalNewline": true,
+  "editor.renderFinalNewline": "off",
   "editor.insertSpaces": true,
   "editor.rulers": [120],
   // Clangd 9.0 has a new semantic highlighting feature, but it's buggy and causes
@@ -9,13 +9,23 @@
   "clangd.semanticHighlighting": false,
   // Disable feature where Clangd auto-imports headers for missing references.
   // It inserts relative paths that we don't want.
-  "clangd.arguments": ["-header-insertion=never"],
+  "clangd.arguments": ["--header-insertion=never"],
+  // TODO(jez) Something changed and now clangd doesn't work when we invoke the
+  // one out of the bazel sandbox. The one installed to /usr/bin from XCode mostly
+  // works, modulo some extra warnings, so let's just use that until we figure out
+  // a better way forward.
+  // TODO(jez) Revisit when we next upgrade llvm_toolchain
+  //"clangd.path": "bazel-sorbet/external/llvm_toolchain_15_0_7/bin/clangd",
+  "clangd.path": "clangd",
   "files.associations": {
     "*.rbi": "ruby",
     "*.rbupdated": "ruby",
     "*.rbedited": "ruby"
   },
   "[cpp]": {
+    // Runs clang-format when you save (provided by vscode-clangd).
+    // We do not enable this globally as our RBIs and Markdown don't conform to a specific style.
+    "editor.formatOnSave": true,
     "editor.tabSize": 4,
     "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
   },
@@ -24,5 +34,8 @@
   },
   "[ruby]": {
     "editor.tabSize": 2
+  },
+  "files.exclude": {
+    "bazel-*": true
   }
 }

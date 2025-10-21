@@ -1,52 +1,175 @@
 #include "main/lsp/LSPTypecheckerCoordinator.h"
-
 #include "absl/synchronization/notification.h"
+#include "common/concurrency/WorkerPool.h"
+#include "core/lsp/PreemptionTaskManager.h"
+#include "core/lsp/Task.h"
+#include "core/lsp/TypecheckEpochManager.h"
+#include "main/lsp/LSPTask.h"
+#include "main/lsp/notifications/initialized.h"
+#include "main/lsp/notifications/sorbet_workspace_edit.h"
 
 namespace sorbet::realmain::lsp {
 using namespace std;
 
-LSPTypecheckerCoordinator::LSPTypecheckerCoordinator(const shared_ptr<const LSPConfiguration> &config)
-    : shouldTerminate(false), typechecker(config), config(config), hasDedicatedThread(false) {}
+namespace {
+/**
+ * Adapter class from LSPTask to Task. Handles passing a `LSPTypecheckerDelegate` to the `LSPTask`.
+ * Why use `Task` internally instead of `LSPTask`? There are four different contexts involved in scheduling a unit of
+ * work on the typechecking thread:
+ * - request_dispatch.cc: Creates the LSPTask, but has no access to a `LSPTypecheckerDelegate` (intentionally).
+ * - Method on LSPTypecheckerCoordinator: Has enough context to create the `LSPTypecheckerDelegate`.
+ * - Typechecker thread: Does not have enough context to create the `LSPTypecheckerDelegate`. Also, I'd like to reserve
+ * the right to run other types of tasks on this thread when appropriate.
+ * - core/lsp/PreemptionTaskManager: Knows nothing about any of this and just wants to run a method with no args.
+ */
+class TypecheckerTask final : public core::lsp::Task {
+    const LSPConfiguration &config;
+    const unique_ptr<LSPTask> task;
+    const unique_ptr<LSPTypecheckerDelegate> delegate;
+    const bool collectCounters;
+    absl::Notification started;
+    absl::Notification complete;
+    CounterState counters;
+    unique_ptr<Timer> timeUntilRun;
 
-void LSPTypecheckerCoordinator::asyncRunInternal(function<void()> &&lambda) {
-    if (hasDedicatedThread) {
-        lambdas.push(move(lambda), 1);
-    } else {
-        lambda();
+public:
+    TypecheckerTask(const LSPConfiguration &config, unique_ptr<LSPTask> task,
+                    unique_ptr<LSPTypecheckerDelegate> delegate, bool collectCounters)
+        : config(config), task(move(task)), delegate(move(delegate)), collectCounters(collectCounters) {}
+
+    void timeLatencyUntilRun(unique_ptr<Timer> timer) {
+        timeUntilRun = move(timer);
     }
-}
 
-void LSPTypecheckerCoordinator::asyncRun(function<void(LSPTypechecker &)> &&lambda) {
-    asyncRunInternal([&typechecker = this->typechecker, lambda]() -> void { lambda(typechecker); });
-}
-
-void LSPTypecheckerCoordinator::syncRun(function<void(LSPTypechecker &)> &&lambda) {
-    absl::Notification notification;
-    CounterState typecheckerCounters;
-    // If typechecker is running on a dedicated thread, then we need to merge its metrics w/ coordinator thread's so we
-    // report them.
-    // Note: Capturing notification by reference is safe here, we we wait for the notification to happen prior to
-    // returning.
-    asyncRunInternal([&typechecker = this->typechecker, lambda, &notification, &typecheckerCounters,
-                      hasDedicatedThread = this->hasDedicatedThread]() -> void {
-        lambda(typechecker);
-        if (hasDedicatedThread) {
-            typecheckerCounters = getAndClearThreadCounters();
+    void cancelTimeLatencyUntilRun() {
+        if (timeUntilRun != nullptr) {
+            timeUntilRun->cancel();
+            timeUntilRun = nullptr;
         }
-        notification.Notify();
-    });
-    notification.WaitForNotification();
-    if (hasDedicatedThread) {
-        counterConsume(move(typecheckerCounters));
     }
+
+    void run() override {
+        // Destruct timer, if specified. Causes metric to be reported.
+        timeUntilRun = nullptr;
+        started.Notify();
+        {
+            Timer timeit(config.logger, "LSPTask::run");
+            timeit.setTag("method", task->methodString());
+            task->run(*delegate);
+        }
+        if (collectCounters) {
+            counters = getAndClearThreadCounters();
+        }
+        complete.Notify();
+    }
+
+    void blockUntilComplete() {
+        complete.WaitForNotification();
+        if (collectCounters) {
+            counterConsume(move(counters));
+        }
+    }
+};
+
+class DangerousTypecheckerTask : public core::lsp::Task {
+    const LSPConfiguration &config;
+    unique_ptr<LSPDangerousTypecheckerTask> task;
+    LSPTypechecker &typechecker;
+    WorkerPool &workers;
+
+public:
+    DangerousTypecheckerTask(const LSPConfiguration &config, unique_ptr<LSPDangerousTypecheckerTask> task,
+                             LSPTypechecker &typechecker, WorkerPool &workers)
+        : config(config), task(move(task)), typechecker(typechecker), workers(workers){};
+
+    void run() override {
+        Timer timeit(config.logger, "LSPDangerousTypecheckerTask::runSpecial");
+        timeit.setTag("method", task->methodString());
+        task->runSpecial(typechecker, workers);
+    }
+
+    void blockUntilReady() {
+        task->schedulerWaitUntilReady();
+    }
+};
+
+class ShutdownTask : public LSPTask {
+    LSPTypechecker &typechecker;
+    bool &shouldTerminate;
+    unique_ptr<core::GlobalState> &gs;
+
+public:
+    ShutdownTask(const LSPConfiguration &config, LSPTypechecker &typechecker, bool &shouldTerminate,
+                 unique_ptr<core::GlobalState> &gs)
+        : LSPTask(config, LSPMethod::Exit), typechecker(typechecker), shouldTerminate(shouldTerminate), gs(gs) {}
+
+    bool canPreempt(const LSPIndexer &indexer) const override {
+        return false;
+    }
+
+    void run(LSPTypecheckerDelegate &_) override {
+        shouldTerminate = true;
+        gs = typechecker.destroy();
+    }
+};
+
+}; // namespace
+
+LSPTypecheckerCoordinator::LSPTypecheckerCoordinator(const shared_ptr<const LSPConfiguration> &config,
+                                                     shared_ptr<core::lsp::PreemptionTaskManager> preemptionTaskManager,
+                                                     WorkerPool &workers, shared_ptr<TaskQueue> taskQueue)
+    : preemptionTaskManager(preemptionTaskManager), shouldTerminate(false),
+      typechecker(config, move(preemptionTaskManager)), config(config), hasDedicatedThread(false),
+      workers(workers), taskQueue{std::move(taskQueue)},
+      preemptionWorkers(WorkerPool::create(config->opts.threads, *config->logger)) {}
+
+void LSPTypecheckerCoordinator::asyncRunInternal(shared_ptr<core::lsp::Task> task) {
+    if (hasDedicatedThread) {
+        tasks.push(move(task), 1);
+    } else {
+        task->run();
+    }
+}
+
+void LSPTypecheckerCoordinator::syncRun(unique_ptr<LSPTask> task) {
+    auto wrappedTask = make_shared<TypecheckerTask>(
+        *config, move(task), make_unique<LSPTypecheckerDelegate>(*taskQueue, workers, typechecker), hasDedicatedThread);
+
+    asyncRunInternal(wrappedTask);
+    wrappedTask->blockUntilComplete();
+}
+
+shared_ptr<core::lsp::Task>
+LSPTypecheckerCoordinator::trySchedulePreemption(unique_ptr<LSPQueuePreemptionTask> preemptTask) {
+    auto wrappedTask = make_shared<TypecheckerTask>(
+        *config, move(preemptTask), make_unique<LSPTypecheckerDelegate>(*taskQueue, *preemptionWorkers, typechecker),
+        /* collectCounters */ false);
+    // Plant this timer before scheduling task to preempt, as task could run before we plant the timer!
+    wrappedTask->timeLatencyUntilRun(make_unique<Timer>(*config->logger, "latency.preempt_slow_path"));
+    if (hasDedicatedThread && preemptionTaskManager->trySchedulePreemptionTask(wrappedTask)) {
+        // Preempted; task is guaranteed to run by interrupting the slow path.
+        return wrappedTask;
+    } else {
+        // Did not preempt, so don't collect a latency metric.
+        wrappedTask->cancelTimeLatencyUntilRun();
+        return nullptr;
+    }
+}
+
+bool LSPTypecheckerCoordinator::tryCancelPreemption(shared_ptr<core::lsp::Task> &preemptTask) {
+    return preemptionTaskManager->tryCancelScheduledPreemptionTask(preemptTask);
+}
+
+void LSPTypecheckerCoordinator::typecheckOnSlowPath(unique_ptr<SorbetWorkspaceEditTask> editTask) {
+    auto dangerousTask = make_shared<DangerousTypecheckerTask>(*config, move(editTask), typechecker, workers);
+    asyncRunInternal(dangerousTask);
+    dangerousTask->blockUntilReady();
 }
 
 unique_ptr<core::GlobalState> LSPTypecheckerCoordinator::shutdown() {
     unique_ptr<core::GlobalState> gs;
-    syncRun([&](auto &typechecker) -> void {
-        shouldTerminate = true;
-        gs = typechecker.destroy();
-    });
+    // shouldTerminate and gs are captured by reference.
+    syncRun(make_unique<ShutdownTask>(*config, typechecker, shouldTerminate, gs));
     return gs;
 }
 
@@ -60,11 +183,11 @@ unique_ptr<Joinable> LSPTypecheckerCoordinator::startTypecheckerThread() {
         typechecker.changeThread();
 
         while (!shouldTerminate) {
-            function<void()> lambda;
+            shared_ptr<core::lsp::Task> task;
             // Note: Pass in 'true' for silent to avoid spamming log with wait_pop_timed entries.
-            auto result = lambdas.wait_pop_timed(lambda, WorkerPool::BLOCK_INTERVAL(), *config->logger, true);
+            auto result = tasks.wait_pop_timed(task, WorkerPool::BLOCK_INTERVAL(), *config->logger, true);
             if (result.gotItem()) {
-                lambda();
+                task->run();
             }
         }
     });

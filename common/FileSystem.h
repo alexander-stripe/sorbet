@@ -2,6 +2,8 @@
 #define COMMON_FILESYSTEM_H
 
 #include "common/common.h"
+#include "common/concurrency/WorkerPool.h"
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -16,10 +18,10 @@ public:
     virtual ~FileSystem() = default;
 
     /** Read the file at the given path. Throws a `FileNotFoundException` if not found. */
-    virtual std::string readFile(std::string_view path) const = 0;
+    virtual std::string readFile(const std::string &path) const = 0;
 
     /** Writes the specified data to the given file. */
-    virtual void writeFile(std::string_view filename, std::string_view text) = 0;
+    virtual void writeFile(const std::string &filename, std::string_view text) = 0;
 
     /**
      * Returns a list of all files in the given directory. Returns paths that include the path to directory.
@@ -31,9 +33,14 @@ public:
      * Throws FileNotFoundException if path does not exist, and FileNotDirException if path is not a directory.
      */
     virtual std::vector<std::string> listFilesInDir(std::string_view path, const UnorderedSet<std::string> &extensions,
-                                                    bool recursive,
+                                                    WorkerPool &workerPool, bool recursive,
                                                     const std::vector<std::string> &absoluteIgnorePatterns,
                                                     const std::vector<std::string> &relativeIgnorePatterns) const = 0;
+
+    virtual std::vector<std::string> listFilesInDir(std::string_view path, const UnorderedSet<std::string> &extensions,
+                                                    bool recursive,
+                                                    const std::vector<std::string> &absoluteIgnorePatterns,
+                                                    const std::vector<std::string> &relativeIgnorePatterns) const;
 };
 
 /**
@@ -43,10 +50,11 @@ class OSFileSystem final : public FileSystem {
 public:
     OSFileSystem() = default;
 
-    std::string readFile(std::string_view path) const override;
-    void writeFile(std::string_view filename, std::string_view text) override;
+    std::string readFile(const std::string &path) const override;
+    void writeFile(const std::string &filename, std::string_view text) override;
     std::vector<std::string> listFilesInDir(std::string_view path, const UnorderedSet<std::string> &extensions,
-                                            bool recursive, const std::vector<std::string> &absoluteIgnorePatterns,
+                                            WorkerPool &workerPool, bool recursive,
+                                            const std::vector<std::string> &absoluteIgnorePatterns,
                                             const std::vector<std::string> &relativeIgnorePatterns) const override;
 };
 

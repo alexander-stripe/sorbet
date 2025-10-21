@@ -3,24 +3,27 @@
 
 module T::Types
   class TypedRange < TypedEnumerable
-    attr_reader :type
-
     def underlying_class
-      Hash
+      Range
     end
 
-    # @override Base
+    # overrides Base
     def name
-      "T::Range[#{@type.name}]"
+      "T::Range[#{type.name}]"
     end
 
-    # @override Base
-    def valid?(obj)
+    # overrides Base
+    def recursively_valid?(obj)
       obj.is_a?(Range) && super
     end
 
-    def new(*args) # rubocop:disable PrisonGuard/BanBuiltinMethodOverride
-      T.unsafe(Range).new(*args)
+    # overrides Base
+    def valid?(obj)
+      obj.is_a?(Range)
+    end
+
+    def new(...)
+      Range.new(...)
     end
   end
 end

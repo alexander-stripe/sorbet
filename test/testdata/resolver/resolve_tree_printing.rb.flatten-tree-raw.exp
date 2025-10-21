@@ -1,89 +1,55 @@
 InsSeq{
   stats = [
-    EmptyTree
     ClassDef{
       kind = class
-      name = EmptyTree<<C <U <root>>>>
-      ancestors = []
+      name = EmptyTree
+      symbol = <C <U <root>>>
+      ancestors = [ConstantLit{
+          symbol = (class ::<todo sym>)
+          orig = nullptr
+        }]
       rhs = [
+        EmptyTree
+
         MethodDef{
-          flags = self
+          flags = {self}
           name = <U <static-init>><<N <U <static-init>> $CENSORED>>
-          args = [Local{
+          params = [Local{
               localVariable = <U <blk>>
             }]
-          rhs = InsSeq{
-            stats = [
-              EmptyTree
-              Send{
-                recv = ConstantLit{
-                  orig = nullptr
-                  symbol = ::Sorbet::Private::Static
-                }
-                fun = <U keep_for_ide>
-                block = nullptr
-                args = [
-                  ConstantLit{
-                    orig = UnresolvedConstantLit{
-                      scope = EmptyTree
-                      cnst = <C <U A>>
-                    }
-                    symbol = ::A
-                  }
-                ]
-              }
-            ],
-            expr = EmptyTree
-          }
+          rhs = EmptyTree
         }
       ]
     }
     ClassDef{
       kind = class
       name = ConstantLit{
+        symbol = (class ::A)
         orig = UnresolvedConstantLit{
-          scope = EmptyTree
           cnst = <C <U A>>
+          scope = EmptyTree
         }
-        symbol = ::A
-      }<<C <U A>>>
+      }
+      symbol = <C <U A>>
       ancestors = [ConstantLit{
+          symbol = (class ::<todo sym>)
           orig = nullptr
-          symbol = ::<todo sym>
         }]
       rhs = [
-        EmptyTree
-
-        EmptyTree
-
-        EmptyTree
-
-        EmptyTree
-
-        EmptyTree
-
-        EmptyTree
-
-        EmptyTree
-
-        EmptyTree
-
-        EmptyTree
-
         MethodDef{
-          flags = 0
+          flags = {}
           name = <U has_while><<U has_while>>
-          args = [Local{
+          params = [Local{
               localVariable = <U <blk>>
             }]
           rhs = While{
             cond = Literal{ value = 1 }
             body = Send{
-              recv = Local{
-                localVariable = <U <self>>
-              }
+              flags = {privateOk}
+              recv = Self
               fun = <U has_while>
               block = nullptr
+              pos_args = 0
               args = [
               ]
             }
@@ -91,25 +57,25 @@ InsSeq{
         }
 
         MethodDef{
-          flags = 0
+          flags = {}
           name = <U has_constant_with_resolution_scope><<U has_constant_with_resolution_scope>>
-          args = [Local{
+          params = [Local{
               localVariable = <U <blk>>
             }]
           rhs = ConstantLit{
+            symbol = (module ::Sorbet::Private::Static::<StubModule>)
             orig = UnresolvedConstantLit{
-              scope = EmptyTree
               cnst = <C <U DOES_NOT_EXIST>>
+              scope = EmptyTree
             }
-            symbol = ::Sorbet::Private::Static::StubModule
-            resolutionScope = ::A
+            resolutionScopes = [::A, ::<root>]
           }
         }
 
         MethodDef{
-          flags = 0
+          flags = {}
           name = <U has_global_field><<U has_global_field>>
-          args = [Local{
+          params = [Local{
               localVariable = <U <blk>>
             }]
           rhs = UnresolvedIdent{
@@ -119,9 +85,9 @@ InsSeq{
         }
 
         MethodDef{
-          flags = 0
+          flags = {}
           name = <U has_class_field><<U has_class_field>>
-          args = [Local{
+          params = [Local{
               localVariable = <U <blk>>
             }]
           rhs = UnresolvedIdent{
@@ -131,111 +97,111 @@ InsSeq{
         }
 
         MethodDef{
-          flags = 0
+          flags = {}
           name = <U has_next><<U has_next>>
-          args = [Local{
+          params = [Local{
               localVariable = <U <blk>>
             }]
           rhs = Send{
-            recv = Local{
-              localVariable = <U <self>>
-            }
+            flags = {privateOk}
+            recv = Self
             fun = <U loop>
             block = Block {
-              args = [
+              params = [
               ]
               body = Next{ expr = EmptyTree }
             }
+            pos_args = 0
             args = [
             ]
           }
         }
 
         MethodDef{
-          flags = 0
+          flags = {}
           name = <U has_break><<U has_break>>
-          args = [Local{
+          params = [Local{
               localVariable = <U <blk>>
             }]
           rhs = Send{
-            recv = Local{
-              localVariable = <U <self>>
-            }
+            flags = {privateOk}
+            recv = Self
             fun = <U loop>
             block = Block {
-              args = [
+              params = [
               ]
               body = Break{ expr = EmptyTree }
             }
+            pos_args = 0
             args = [
             ]
           }
         }
 
         MethodDef{
-          flags = 0
+          flags = {}
           name = <U has_return><<U has_return>>
-          args = [Local{
+          params = [Local{
               localVariable = <U <blk>>
             }]
           rhs = Return{ expr = Literal{ value = 1 } }
         }
 
         MethodDef{
-          flags = 0
+          flags = {}
           name = <U has_cast><<U has_cast>>
-          args = [Local{
+          params = [Local{
+              localVariable = <U <blk>>
+            }]
+          rhs = Cast{
+              cast = <U cast>,
+              arg = Literal{ value = nil }
+              type = T.nilable(Integer),
+              typeExpr = Send{
+                flags = {}
+                recv = ConstantLit{
+                  symbol = (module ::T)
+                  orig = UnresolvedConstantLit{
+                    cnst = <C <U T>>
+                    scope = EmptyTree
+                  }
+                }
+                fun = <U nilable>
+                block = nullptr
+                pos_args = 1
+                args = [
+                  ConstantLit{
+                    symbol = (class ::Integer)
+                    orig = UnresolvedConstantLit{
+                      cnst = <C <U Integer>>
+                      scope = EmptyTree
+                    }
+                  }
+                ]
+              },
+          }
+
+        }
+
+        MethodDef{
+          flags = {self}
+          name = <U <static-init>><<U <static-init>>>
+          params = [Local{
               localVariable = <U <blk>>
             }]
           rhs = InsSeq{
             stats = [
-              Send{
-                recv = ConstantLit{
-                  orig = nullptr
-                  symbol = ::Sorbet::Private::Static
-                }
-                fun = <U keep_for_typechecking>
-                block = nullptr
-                args = [
-                  Send{
-                    recv = ConstantLit{
-                      orig = UnresolvedConstantLit{
-                        scope = EmptyTree
-                        cnst = <C <U T>>
-                      }
-                      symbol = ::T
-                    }
-                    fun = <U nilable>
-                    block = nullptr
-                    args = [
-                      ConstantLit{
-                        orig = UnresolvedConstantLit{
-                          scope = EmptyTree
-                          cnst = <C <U Integer>>
-                        }
-                        symbol = ::Integer
-                      }
-                    ]
-                  }
-                ]
-              }
+              <runtime method definition of has_while>
+              <runtime method definition of has_constant_with_resolution_scope>
+              <runtime method definition of has_global_field>
+              <runtime method definition of has_class_field>
+              <runtime method definition of has_next>
+              <runtime method definition of has_break>
+              <runtime method definition of has_return>
+              <runtime method definition of has_cast>
             ],
-            expr = Cast{
-                cast = <U cast>,
-                arg = Literal{ value = nil }
-                type = Integer | NilClass,
-            }
-
+            expr = EmptyTree
           }
-        }
-
-        MethodDef{
-          flags = self
-          name = <U <static-init>><<U <static-init>>>
-          args = [Local{
-              localVariable = <U <blk>>
-            }]
-          rhs = EmptyTree
         }
       ]
     }

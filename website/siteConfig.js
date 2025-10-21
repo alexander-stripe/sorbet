@@ -15,10 +15,16 @@ const users = [
     image: 'img/coinbase-logo.png',
     infoLink: 'https://www.coinbase.com/',
   },
+  // End Sorbet early adopters. Please alphabetize below this comment.
   {
-    caption: 'Atrium',
-    image: 'img/atrium-logo.jpg',
-    infoLink: 'https://www.atrium.co/',
+    caption: 'Apollo',
+    image: 'img/apollo-logo.png',
+    infoLink: 'https://www.apollo.io/',
+  },
+  {
+    caption: 'Census',
+    image: 'img/census-logo.png',
+    infoLink: 'https://getcensus.com/',
   },
   {
     caption: 'Chan Zuckerberg Initiative',
@@ -26,14 +32,84 @@ const users = [
     infoLink: 'https://chanzuckerberg.com/',
   },
   {
+    caption: 'Chime',
+    image: 'img/chime-logo.svg',
+    infoLink: 'https://www.chime.com/',
+  },
+  {
+    caption: 'Factorial',
+    image: 'img/factorial-logo.png',
+    infoLink: 'https://factorialhr.com/',
+  },
+  {
+    caption: 'Flexport',
+    image: 'img/flexport-logo.jpg',
+    infoLink: 'https://flexport.com/',
+  },
+  {
+    caption: 'GitHub',
+    image: 'img/github-logo.svg',
+    infoLink: 'https://github.com/',
+  },
+  {
+    caption: 'Grailed',
+    image: 'img/grailed-logo.png',
+    infoLink: 'https://www.grailed.com/',
+  },
+  {
     caption: 'Gusto',
     image: 'img/gusto-logo.jpg',
     infoLink: 'https://gusto.com/',
   },
   {
+    caption: 'HealthSherpa',
+    image: 'img/healthsherpa-logo.png',
+    infoLink: 'https://www.healthsherpa.com/',
+  },
+  {
+    caption: 'Hummingbird',
+    image: 'img/hummingbird-logo.png',
+    infoLink: 'https://hummingbird.co/',
+  },
+  {
+    caption: 'Instacart',
+    image: 'img/instacart-logo.svg',
+    infoLink: 'https://instacart.com/',
+  },
+  {
     caption: 'Kickstarter',
     image: 'img/kickstarter-logo.png',
     infoLink: 'https://www.kickstarter.com/',
+  },
+  {
+    caption: 'Marketplacer',
+    image: 'img/marketplacer-logo.png',
+    infoLink: 'https://marketplacer.com/',
+  },
+  {
+    caption: 'TaskRabbit',
+    image: 'img/taskrabbit-logo.svg',
+    infoLink: 'https://www.taskrabbit.com/',
+  },
+  {
+    caption: 'Tines',
+    image: 'img/tines-logo.svg',
+    infoLink: 'https://www.tines.com',
+  },
+  {
+    caption: 'TriumphPay',
+    image: 'img/triumphpay-logo.svg',
+    infoLink: 'https://triumphpay.com',
+  },
+  {
+    caption: 'Vonage',
+    image: 'img/vonage-logo.png',
+    infoLink: 'https://www.vonage.com/',
+  },
+  {
+    caption: 'Workforce.com',
+    image: 'img/workforce-logo.png',
+    infoLink: 'https://www.workforce.com/',
   },
 ];
 
@@ -95,7 +171,7 @@ const siteConfig = {
   //   ]
   // },
 
-  // This copyright info is used in /core/Footer.js and blog RSS/Atom feeds.
+  // This copyright info is used in blog RSS/Atom feeds.
   copyright: `© ${new Date().getFullYear()} Stripe`,
 
   highlight: {
@@ -114,8 +190,8 @@ const siteConfig = {
 
   // Open Graph and Twitter card images.
   // (these images can't be SVGs)
-  ogImage: 'img/sorbet-logo-card@2x.png',
-  twitterImage: 'img/sorbet-logo-card@2x.png',
+  // ogImage: 'img/sorbet-logo-card@2x.png',
+  // twitterImage: 'img/sorbet-logo-card@2x.png',
 
   // Show documentation's last contributor's name.
   // enableUpdateBy: true,
@@ -124,14 +200,16 @@ const siteConfig = {
   // enableUpdateTime: true,
 
   algolia: {
-    apiKey: 'fa1ec885ab70787d636759b88e509b92',
+    appId: 'ZYWC6Z01G8',
+    apiKey: 'b05a65e9f8d9f50dc4ec3241db8836c4',
     // This name must match the index name here:
     // https://github.com/algolia/docsearch-configs/blob/master/configs/stripe_sorbet.json
     indexName: 'stripe_sorbet',
     algoliaOptions: {}, // Optional, if provided by Algolia
   },
 
-  gaTrackingId: 'UA-119877071-2',
+  gaTrackingId: 'G-5H7PQ9Z8KF',
+  gaGtag: true,
 };
 
 module.exports = siteConfig;

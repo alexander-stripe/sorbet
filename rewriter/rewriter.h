@@ -7,7 +7,7 @@ namespace sorbet::rewriter {
 
 class Rewriter final {
 public:
-    static std::unique_ptr<ast::Expression> run(core::MutableContext ctx, std::unique_ptr<ast::Expression> tree);
+    static ast::ExpressionPtr run(core::MutableContext ctx, ast::ExpressionPtr tree);
 
     Rewriter() = delete;
 };

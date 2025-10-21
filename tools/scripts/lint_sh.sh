@@ -8,16 +8,34 @@ list_sh_src() {
     git ls-files -z -c -m -o --exclude-standard -- '*.sh' '*.bash'
 }
 
+
+unameOut="$(uname -s)"
+case "${unameOut}" in
+    Linux*)     platform="linux";;
+    Darwin*)    platform="mac";;
+    *)          exit 1
+esac
+
+# Fetches shellcheck binary
+if ! bazel build "@shellcheck_$platform//:shellcheck_exe"; then
+  echo "warning: Could not fetch shellcheck with Bazel. Falling back to system"
+  shellcheck="shellcheck"
+else
+  shellcheck="bazel-sorbet/external/shellcheck_$platform/shellcheck"
+fi
+
 if [ "$1" = "-t" ]; then
-  OUTPUT=$(list_sh_src | xargs -0 shellcheck -s bash || :)
+  OUTPUT=$(list_sh_src | xargs -0 "$shellcheck" -s bash || :)
   if [ -n "$OUTPUT" ]; then
-    printf "\\e[1;31m\\n" >&2
-    echo "Some shell files have lint errors!" >&2
-    echo "$OUTPUT" >&2
-    printf "\\e[0m\\n" >&2
-    printf "Run \\e[97;1;42m ./tools/scripts/lint_sh.sh\\e[0m to see the errors.\\n"
+    echo "Some shell files have lint errors!"
+    echo ""
+    echo -n "\`\`\`"
+    echo "$OUTPUT"
+    echo "\`\`\`"
+    echo ''
+    echo "Run \`./tools/scripts/lint_sh.sh\` to see the errors."
     exit 1
   fi
 else
-    list_sh_src | xargs -0 shellcheck -s bash
+    list_sh_src | xargs -0 "$shellcheck" -s bash
 fi

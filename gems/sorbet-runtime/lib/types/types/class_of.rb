@@ -10,29 +10,46 @@ module T::Types
       @type = type
     end
 
-    # @override Base
+    def build_type
+      nil
+    end
+
+    # overrides Base
     def name
       "T.class_of(#{@type})"
     end
 
-    # @override Base
+    # overrides Base
     def valid?(obj)
-      obj.is_a?(Module) && obj <= @type
+      obj.is_a?(@type.singleton_class)
     end
 
-    # @override Base
+    # overrides Base
     def subtype_of_single?(other)
       case other
       when ClassOf
-        @type <= other.type
+        @type.is_a?(other.type.singleton_class)
+      when Simple
+        @type.is_a?(other.raw_type)
+      when TypedClass
+        @type.is_a?(other.underlying_class)
       else
         false
       end
     end
 
-    # @override Base
+    # overrides Base
     def describe_obj(obj)
       obj.inspect
+    end
+
+    # So that `T.class_of(...)[...]` syntax is valid.
+    # Mirrors the definition of T::Generic#[] (generics are erased).
+    #
+    # We avoid simply writing `include T::Generic` because we don't want any of
+    # the other methods to appear (`T.class_of(A).type_member` doesn't make sense)
+    def [](*types)
+      self
     end
   end
 end

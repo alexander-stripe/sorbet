@@ -43,18 +43,17 @@ def before_after
   x_2 = 1
 end
 
-# We don't yet complete locals when the position is already a valid local
 def already_valid_local
   x_1 = nil
   x_1
-  #  ^ completion: (nothing)
+  #  ^ completion: x_1
 end
 
 class A
   def a_method; end
 end
 
-# If there's an explicit reciever, don't suggest similar locals.
+# If there's an explicit receiver, don't suggest similar locals.
 def no_locals_after_dot()
   a_local = nil
   A.new.a_ # error: does not exist
@@ -89,4 +88,11 @@ class Wrapper
   x_inside_class = nil
   x_ # error: does not exist
   # ^ completion: x_inside_class
+end
+
+class B
+  def implicit_block_arg
+    blk # error: does not exist
+    #  ^ completion: (nothing)
+  end
 end

@@ -320,7 +320,7 @@ module Etc
   # Etc.getlogin -> 'guest'
   # ```
   sig do
-    returns(String)
+    returns(T.nilable(String))
   end
   def self.getlogin; end
 
@@ -400,9 +400,10 @@ module Etc
   # }
   # ```
   sig do
-    returns(T.nilable(Etc::Group))
+    params(blk: T.nilable(T.proc.params(arg0: Etc::Group).void))
+    .returns(T.nilable(Etc::Group))
   end
-  def self.group; end
+  def self.group(&blk); end
 
   # Returns the number of online processors.
   #
@@ -533,7 +534,7 @@ module Etc
   # #    :machine=>"i686"}
   # ```
   sig do
-    returns(String)
+    returns(T::Hash[Symbol, String])
   end
   def self.uname; end
 end
@@ -563,11 +564,20 @@ end
 #     containing the short login names of the members of the group.
 class Etc::Group < Struct
   extend T::Generic
-  Elem = type_member(:out, fixed: T.untyped)
+  Elem = type_member(:out) {{fixed: T.untyped}}
   class << self
     extend T::Generic
-    Elem = type_member(fixed: T.untyped)
+    Elem = type_member {{fixed: T.untyped}}
   end
+
+  sig { returns(Integer) }
+  def gid; end
+  sig { returns(T::Array[String]) }
+  def mem; end
+  sig { returns(String) }
+  def name; end
+  sig { returns(String) }
+  def passwd; end
 end
 
 # [`Passwd`](https://docs.ruby-lang.org/en/2.6.0/Etc.html#Passwd)
@@ -621,7 +631,7 @@ end
 #     `HAVE_STRUCT_PASSWD_PW_EXPIRE`
 class Etc::Passwd < Struct
   extend T::Generic
-  Elem = type_member(:out, fixed: T.untyped)
+  Elem = type_member(:out) {{fixed: T.untyped}}
 
   # Contains the short login name of the user as a String.
   sig { returns(String) }
@@ -652,6 +662,6 @@ class Etc::Passwd < Struct
 
   class << self
     extend T::Generic
-    Elem = type_member(fixed: T.untyped)
+    Elem = type_member {{fixed: T.untyped}}
   end
 end

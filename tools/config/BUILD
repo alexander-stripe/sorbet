@@ -1,13 +1,27 @@
 package(default_visibility = ["//visibility:public"])
 
 config_setting(
-    name = "darwin",
-    values = {"host_cpu": "darwin"},
+    name = "darwin_x86_64",
+    constraint_values = [
+        "@platforms//os:osx",
+        "@platforms//cpu:x86_64",
+    ],
 )
 
 config_setting(
-    name = "linux",
-    values = {"host_cpu": "k8"},
+    name = "linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
 )
 
 config_setting(
@@ -33,23 +47,25 @@ config_setting(
 )
 
 config_setting(
-    name = "webasm",
-    values = {
-        "cpu": "webasm",
-    },
-)
-
-config_setting(
     name = "linkshared",
+    constraint_values = [
+        "@platforms//os:linux",
+    ],
     values = {
         "define": "linkshared=true",
     },
 )
 
 config_setting(
-    name = "darwindbg",
+    name = "release",
     values = {
-        "host_cpu": "darwin",
-        "compilation_mode": "dbg",
+        "define": "release=true",
+    },
+)
+
+config_setting(
+    name = "jit_enabled",
+    values = {
+        "define": "jit_enabled=true",
     },
 )

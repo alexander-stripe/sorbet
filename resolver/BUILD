@@ -23,5 +23,6 @@ cc_library(
         "//ast/desugar",
         "//ast/treemap",
         "//core",
+        "//resolver/type_syntax",
     ],
 )

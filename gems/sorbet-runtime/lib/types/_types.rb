@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 # typed: true
 # This is where we define the shortcuts, so we can't use them here
-# rubocop:disable PrisonGuard/UseOpusTypesShortcut
 
 #  _____
 # |_   _|   _ _ __   ___  ___
@@ -26,23 +25,30 @@
 module T
   # T.any(<Type>, <Type>, ...) -- matches any of the types listed
   def self.any(type_a, type_b, *types)
-    T::Types::Union.new([type_a, type_b] + types)
+    type_a = T::Utils.coerce(type_a)
+    type_b = T::Utils.coerce(type_b)
+    types = types.map { |t| T::Utils.coerce(t) } if !types.empty?
+    T::Types::Union::Private::Pool.union_of_types(type_a, type_b, types)
   end
 
   # Shorthand for T.any(type, NilClass)
   def self.nilable(type)
-    T::Types::Union.new([type, NilClass])
+    T::Types::Union::Private::Pool.union_of_types(T::Utils.coerce(type), T::Utils::Nilable::NIL_TYPE)
   end
 
   # Matches any object. In the static checker, T.untyped allows any
   # method calls or operations.
   def self.untyped
-    T::Types::Untyped.new
+    T::Types::Untyped::Private::INSTANCE
   end
 
   # Indicates a function never returns (e.g. "Kernel#raise")
   def self.noreturn
-    T::Types::NoReturn.new
+    T::Types::NoReturn::Private::INSTANCE
+  end
+
+  def self.anything
+    T::Types::Anything::Private::INSTANCE
   end
 
   # T.all(<Type>, <Type>, ...) -- matches an object that has all of the types listed
@@ -51,7 +57,8 @@ module T
   end
 
   # Matches any of the listed values
-  def self.enum(values)
+  # @deprecated Use T::Enum instead.
+  def self.deprecated_enum(values)
     T::Types::Enum.new(values)
   end
 
@@ -62,12 +69,12 @@ module T
 
   # Matches `self`:
   def self.self_type
-    T::Types::SelfType.new
+    T::Types::SelfType::Private::INSTANCE
   end
 
   # Matches the instance type in a singleton-class context
-  def self.experimental_attached_class
-    T::Types::AttachedClassType.new
+  def self.attached_class
+    T::Types::AttachedClassType::Private::INSTANCE
   end
 
   # Matches any class that subclasses or includes the provided class
@@ -76,14 +83,13 @@ module T
     T::Types::ClassOf.new(klass)
   end
 
-
   ## END OF THE METHODS TO PASS TO `sig`.
-
 
   # Constructs a type alias. Used to create a short name for a larger type. In Ruby this returns a
   # wrapper that contains a proc that is evaluated to get the underlying type. This syntax however
-  # is needed for support by the static checker. Example usage:
+  # is needed for support by the static checker.
   #
+  # @example
   #  NilableString = T.type_alias {T.nilable(String)}
   #
   #  sig {params(arg: NilableString, default: String).returns(String)}
@@ -103,11 +109,12 @@ module T
     end
   end
 
-  # References a type paramater which was previously defined with
+  # References a type parameter which was previously defined with
   # `type_parameters`.
   #
-  # This is used for generic methods. Example usage:
+  # This is used for generic methods.
   #
+  # @example
   #  sig
   #  .type_parameters(:U)
   #  .params(
@@ -116,7 +123,7 @@ module T
   #  .returns(T::Array[T.type_parameter(:U)])
   #  def map(&blk); end
   def self.type_parameter(name)
-    T::Types::TypeParameter.new(name)
+    T::Types::TypeParameter.make(name)
   end
 
   # Tells the typechecker that `value` is of type `type`. Use this to get additional checking after
@@ -127,7 +134,7 @@ module T
   def self.cast(value, type, checked: true)
     return value unless checked
 
-    Private::Casts.cast(value, type, cast_method: "T.cast")
+    Private::Casts.cast(value, type, "T.cast")
   end
 
   # Tells the typechecker to declare a variable of type `type`. Use
@@ -142,7 +149,26 @@ module T
   def self.let(value, type, checked: true)
     return value unless checked
 
-    Private::Casts.cast(value, type, cast_method: "T.let")
+    Private::Casts.cast(value, type, "T.let")
+  end
+
+  # Tells the type checker to treat `self` in the current block as `type`.
+  # Useful for blocks that are captured and executed later with instance_exec.
+  # Use like:
+  #
+  #  seconds = lambda do
+  #    T.bind(self, NewBinding)
+  #    ...
+  #  end
+  #
+  # `T.bind` behaves like `T.cast` in that it is assumed to be true statically.
+  #
+  # If `checked` is true, raises an exception at runtime if the value
+  # doesn't match the type (this is the default).
+  def self.bind(value, type, checked: true)
+    return value unless checked
+
+    Private::Casts.cast(value, type, "T.bind")
   end
 
   # Tells the typechecker to ensure that `value` is of type `type` (if not, the typechecker will
@@ -152,7 +178,7 @@ module T
   def self.assert_type!(value, type, checked: true)
     return value unless checked
 
-    Private::Casts.cast(value, type, cast_method: "T.assert_type!")
+    Private::Casts.cast(value, type, "T.assert_type!")
   end
 
   # For the static type checker, strips all type information from a value
@@ -166,7 +192,7 @@ module T
   # cycle. However, we also don't actually need to do so; An untyped
   # identity method works just as well here.
   #
-  # sig {params(value: T.untyped).returns(T.untyped)}
+  # `sig {params(value: T.untyped).returns(T.untyped)}`
   def self.unsafe(value)
     value
   end
@@ -187,7 +213,7 @@ module T
   # Intended to be used to promise sorbet that a given nilable value happens
   # to contain a non-nil value at this point.
   #
-  # sig {params(arg: T.nilable(A)).returns(A)}
+  # `sig {params(arg: T.nilable(A)).returns(A)}`
   def self.must(arg)
     return arg if arg
     return arg if arg == false
@@ -195,7 +221,35 @@ module T
     begin
       raise TypeError.new("Passed `nil` into T.must")
     rescue TypeError => e # raise into rescue to ensure e.backtrace is populated
-      T::Configuration.inline_type_error_handler(e)
+      T::Configuration.inline_type_error_handler(e, {kind: 'T.must', value: arg, type: nil})
+    end
+  end
+
+  # A convenience method to `raise` with a provided error reason when the argument
+  # is `nil` and return it otherwise.
+  #
+  # Intended to be used as:
+  #
+  #   needs_foo(T.must_because(maybe_gives_foo) {"reason_foo_should_not_be_nil"})
+  #
+  # Equivalent to:
+  #
+  #   foo = maybe_gives_foo
+  #   raise "reason_foo_should_not_be_nil" if foo.nil?
+  #   needs_foo(foo)
+  #
+  # Intended to be used to promise sorbet that a given nilable value happens
+  # to contain a non-nil value at this point.
+  #
+  # `sig {params(arg: T.nilable(A), reason_blk: T.proc.returns(String)).returns(A)}`
+  def self.must_because(arg)
+    return arg if arg
+    return arg if arg == false
+
+    begin
+      raise TypeError.new("Unexpected `nil` because #{yield}")
+    rescue TypeError => e # raise into rescue to ensure e.backtrace is populated
+      T::Configuration.inline_type_error_handler(e, {kind: 'T.must_because', value: arg, type: nil})
     end
   end
 
@@ -220,7 +274,7 @@ module T
     begin
       raise TypeError.new(msg)
     rescue TypeError => e # raise into rescue to ensure e.backtrace is populated
-      T::Configuration.inline_type_error_handler(e)
+      T::Configuration.inline_type_error_handler(e, {kind: 'T.absurd', value: value, type: nil})
     end
   end
 
@@ -229,9 +283,9 @@ module T
   module Array
     def self.[](type)
       if type.is_a?(T::Types::Untyped)
-        T::Types::TypedArray::Untyped.new
+        T::Types::TypedArray::Untyped::Private::INSTANCE
       else
-        T::Types::TypedArray.new(type)
+        T::Types::TypedArray::Private::Pool.type_for_module(type)
       end
     end
   end
@@ -264,6 +318,26 @@ module T
         T::Types::TypedEnumerator.new(type)
       end
     end
+
+    module Lazy
+      def self.[](type)
+        if type.is_a?(T::Types::Untyped)
+          T::Types::TypedEnumeratorLazy::Untyped.new
+        else
+          T::Types::TypedEnumeratorLazy.new(type)
+        end
+      end
+    end
+
+    module Chain
+      def self.[](type)
+        if type.is_a?(T::Types::Untyped)
+          T::Types::TypedEnumeratorChain::Untyped.new
+        else
+          T::Types::TypedEnumeratorChain.new(type)
+        end
+      end
+    end
   end
 
   module Range
@@ -282,7 +356,15 @@ module T
     end
   end
 
-  # When mixed into a module, indicates that Sorbet may export the CFG for methods in that module
-  module CFGExport; end
+  module Class
+    def self.[](type)
+      if type.is_a?(T::Types::Untyped)
+        T::Types::TypedClass::Untyped::Private::INSTANCE
+      elsif type.is_a?(T::Types::Anything)
+        T::Types::TypedClass::Anything::Private::INSTANCE
+      else
+        T::Types::TypedClass::Private::Pool.type_for_module(type)
+      end
+    end
+  end
 end
-# rubocop:enable PrisonGuard/UseOpusTypesShortcut

@@ -1,5 +1,7 @@
 #include "common/statsd/statsd.h"
-#include "common/Counters_impl.h"
+#include "common/counters/Counters_impl.h"
+#include "common/strings/formatting.h"
+#include "sorbet_version/sorbet_version.h"
 
 extern "C" {
 #include "statsd-client.h"
@@ -15,6 +17,21 @@ using namespace std;
 
 namespace sorbet {
 
+namespace {
+map<string, string> extraGlobalTags;
+}
+void StatsD::addExtraTags(const map<string, string> &tags) {
+    if (!extraGlobalTags.empty()) {
+        bool isSame =
+            tags.size() == extraGlobalTags.size() && std::equal(tags.begin(), tags.end(), extraGlobalTags.begin(),
+                                                                [](auto a, auto b) { return a.first == b.first; });
+        if (!isSame) {
+            Exception::raise("re setting statsD global tags not supported");
+        }
+    }
+    extraGlobalTags = tags;
+}
+
 class StatsdClientWrapper {
     constexpr static int PKT_LEN = 512; // conservative bound for MTU
     statsd_link *link;
@@ -24,11 +41,27 @@ class StatsdClientWrapper {
         return absl::StrReplaceAll(name, {{":", "_"}, {"|", "_"}, {"@", "_"}});
     }
 
-    void addMetric(string_view name, size_t value, string_view type) {
+    string cleanTagNameOrValue(const char *tag) {
+        // The keys and values must not be empty, and must not contain commas. Keys must not contain colons.
+        // To keep things simple, we put the same restrictions on keys and values.
+        ENFORCE(strnlen(tag, 1) != 0);
+        return absl::StrReplaceAll(tag, {{":", "_"}, {"|", "_"}, {"@", "_"}, {",", "_"}});
+    }
+
+    void addMetric(string_view name, size_t value, string_view type, vector<pair<const char *, const char *>> tags) {
+        ENFORCE(link != nullptr);
+
+        for (const auto &[key, value] : extraGlobalTags) {
+            tags.emplace_back(key.c_str(), value.c_str());
+        }
         // spec: https://github.com/etsy/statsd/blob/master/docs/metric_types.md#multi-metric-packets
-        auto newLine = fmt::format("{}{}:{}|{}", link->ns ? link->ns : "", cleanMetricName(name), value, type);
+        auto newLine = fmt::format("{}{}:{}|{}{}{}", link->ns ? link->ns : "", cleanMetricName(name), value, type,
+                                   tags.empty() ? "" : "|#", fmt::map_join(tags, ",", [&](const auto &tag) -> string {
+                                       return fmt::format("{}:{}", cleanTagNameOrValue(tag.first),
+                                                          cleanTagNameOrValue(tag.second));
+                                   }));
         if (packet.size() + newLine.size() + 1 < PKT_LEN) {
-            packet = packet + '\n' + newLine;
+            packet = absl::StrCat(packet, "\n", newLine);
         } else {
             if (!packet.empty()) {
                 statsd_send(link, packet.c_str());
@@ -42,7 +75,11 @@ class StatsdClientWrapper {
 
 public:
     StatsdClientWrapper(string host, int port, string prefix)
-        : link(statsd_init_with_namespace(host.c_str(), port, cleanMetricName(prefix).c_str())) {}
+        : link(statsd_init_with_namespace(host.c_str(), port, cleanMetricName(prefix).c_str())) {
+        if (link == nullptr) {
+            Exception::raise("statsd initialization failed: host={} port={} prefix={}", host, port, prefix);
+        }
+    }
 
     ~StatsdClientWrapper() {
         if (!packet.empty()) {
@@ -52,12 +89,13 @@ public:
     }
 
     void gauge(string_view name, size_t value) { // type : g
-        addMetric(name, value, "g");
+        addMetric(name, value, "g", {});
     }
     void timing(const CounterImpl::Timing &tim) { // type: ms
-        auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(tim.end - tim.start).count();
-        addMetric(absl::StrCat(tim.measure, ".duration_ns"), nanoseconds,
-                  "ms"); // format suggested by #observability (@sjung and @an)
+        auto nanoseconds = (tim.end.usec - tim.start.usec) * 1'000;
+        // format suggested by #observability (@sjung and @an)
+        addMetric(absl::StrCat(tim.measure, ".duration_ns"), nanoseconds, "ms",
+                  tim.tags == nullptr ? (vector<pair<const char *, const char *>>{}) : *tim.tags);
     }
 };
 
@@ -76,6 +114,9 @@ bool StatsD::submitCounters(const CounterState &counters, string_view host, int 
     }
 
     for (auto &hist : counters.counters->histograms) {
+        if (std::find(ignoredHistograms.begin(), ignoredHistograms.end(), hist.first) != ignoredHistograms.end()) {
+            continue;
+        }
         CounterImpl::CounterType sum = 0;
         for (auto &e : hist.second) {
             sum += e.second;
@@ -89,7 +130,6 @@ bool StatsD::submitCounters(const CounterState &counters, string_view host, int 
         statsd.gauge(e.first, e.second);
     }
 
-    UnorderedMap<int, CounterImpl::Timing> flowStarts;
     for (const auto &e : counters.counters->timings) {
         statsd.timing(e);
     }
@@ -97,7 +137,7 @@ bool StatsD::submitCounters(const CounterState &counters, string_view host, int 
     return true;
 }
 
-void StatsD::addRusageStats() {
+void StatsD::addStandardMetrics() {
     struct rusage usage;
     if (getrusage(RUSAGE_SELF, &usage) == 0) {
         prodCounterAdd("run.utilization.user_time.us", usage.ru_utime.tv_sec * 1000'000 + usage.ru_utime.tv_usec);
@@ -110,6 +150,8 @@ void StatsD::addRusageStats() {
         prodCounterAdd("run.utilization.context_switch.voluntary", usage.ru_nvcsw);
         prodCounterAdd("run.utilization.context_switch.involuntary", usage.ru_nivcsw);
     }
+    prodCounterAdd("release.build_scm_commit_count", sorbet_build_scm_commit_count);
+    prodCounterAdd("release.build_timestamp", sorbet_build_timestamp);
 }
 
 } // namespace sorbet

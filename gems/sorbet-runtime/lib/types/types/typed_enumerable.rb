@@ -6,57 +6,78 @@ module T::Types
   # `case` statement below in `describe_obj` in order to get better
   # error messages.
   class TypedEnumerable < Base
-    attr_reader :type
-
     def initialize(type)
-      @type = T::Utils.coerce(type)
+      @inner_type = type
+    end
+
+    def type
+      @type ||= T::Utils.coerce(@inner_type)
+    end
+
+    def build_type
+      type
+      nil
     end
 
     def underlying_class
       Enumerable
     end
 
-    # @override Base
+    # overrides Base
     def name
-      "T::Enumerable[#{@type.name}]"
+      "T::Enumerable[#{type.name}]"
     end
 
-    # @override Base
+    # overrides Base
     def valid?(obj)
+      obj.is_a?(Enumerable)
+    end
+
+    # overrides Base
+    def recursively_valid?(obj)
       return false unless obj.is_a?(Enumerable)
       case obj
       when Array
         begin
           it = 0
           while it < obj.count
-            return false unless @type.valid?(obj[it])
+            return false unless type.recursively_valid?(obj[it])
             it += 1
           end
-          return true
+          true
         end
       when Hash
-        return false unless @type.is_a?(FixedArray)
-        types = @type.types
-        return false if types.count != 2
-        key_type = types[0]
-        value_type = types[1]
+        type_ = self.type
+        return false unless type_.is_a?(FixedArray)
+        key_type, value_type = type_.types
+        return false if key_type.nil? || value_type.nil? || type_.types.size > 2
         obj.each_pair do |key, val|
           # Some objects (I'm looking at you Rack::Utils::HeaderHash) don't
-          # iterate over a [key, value] array, so we can't juse use the @type.valid?(v)
-          return false if !key_type.valid?(key) || !value_type.valid?(val)
+          # iterate over a [key, value] array, so we can't just use the type.recursively_valid?(v)
+          return false if !key_type.recursively_valid?(key) || !value_type.recursively_valid?(val)
         end
-        return true
+        true
+      when Enumerator::Lazy
+        # Enumerators can be unbounded: see `[:foo, :bar].cycle`
+        true
+      when Enumerator::Chain
+        # Enumerators can be unbounded: see `[:foo, :bar].cycle`
+        true
       when Enumerator
         # Enumerators can be unbounded: see `[:foo, :bar].cycle`
-        return true
+        true
       when Range
-        @type.valid?(obj.first) && @type.valid?(obj.last)
+        # A nil beginning or a nil end does not provide any type information. That is, nil in a range represents
+        # boundlessness, it does not express a type. For example `(nil...nil)` is not a T::Range[NilClass], its a range
+        # of unknown types (T::Range[T.untyped]).
+        # Similarly, `(nil...1)` is not a `T::Range[T.nilable(Integer)]`, it's a boundless range of Integer.
+        (obj.begin.nil? || type.recursively_valid?(obj.begin)) && (obj.end.nil? || type.recursively_valid?(obj.end))
       when Set
         obj.each do |item|
-          return false unless @type.valid?(item)
+          return false unless type.recursively_valid?(item)
         end
 
-        return true
+        true
       else
         # We don't check the enumerable since it isn't guaranteed to be
         # rewindable (e.g. STDIN) and it may be expensive to enumerate
@@ -65,7 +86,7 @@ module T::Types
       end
     end
 
-    # @override Base
+    # overrides Base
     private def subtype_of_single?(other)
       if other.class <= TypedEnumerable &&
          underlying_class <= other.underlying_class
@@ -75,13 +96,15 @@ module T::Types
         # should be invariant because they are mutable and support
         # both reading and writing. However, Sorbet treats *all*
         # Enumerable subclasses as covariant for ease of adoption.
-        @type.subtype_of?(other.type)
+        type.subtype_of?(other.type)
+      elsif other.class <= Simple
+        underlying_class <= other.raw_type
       else
         false
       end
     end
 
-    # @override Base
+    # overrides Base
     def describe_obj(obj)
       return super unless obj.is_a?(Enumerable)
       type_from_instance(obj).name
@@ -124,7 +147,17 @@ module T::Types
         inferred_val = type_from_instances(obj.values)
         T::Hash[inferred_key, inferred_val]
       when Range
-        T::Range[type_from_instances([obj.first, obj.last])]
+        # We can't get any information from `NilClass` in ranges (since nil is used to represent boundlessness).
+        typeable_objects = [obj.begin, obj.end].compact
+        if typeable_objects.empty?
+          T::Range[T.untyped]
+        else
+          T::Range[type_from_instances(typeable_objects)]
+        end
+      when Enumerator::Lazy
+        T::Enumerator::Lazy[type_from_instances(obj)]
+      when Enumerator::Chain
+        T::Enumerator::Chain[type_from_instances(obj)]
       when Enumerator
         T::Enumerator[type_from_instances(obj)]
       when Set
@@ -134,13 +167,18 @@ module T::Types
         # enumerating the object is a destructive operation and might hang.
         obj.class
       else
-        self.class.new(type_from_instances(obj))
+        # This is a specialized enumerable type, just return the class.
+        if T::Configuration::AT_LEAST_RUBY_2_7
+          Object.instance_method(:class).bind_call(obj)
+        else
+          Object.instance_method(:class).bind(obj).call # rubocop:disable Performance/BindCall
+        end
       end
     end
 
     class Untyped < TypedEnumerable
       def initialize
-        super(T.untyped)
+        super(T::Types::Untyped::Private::INSTANCE)
       end
 
       def valid?(obj)

@@ -1,31 +1,12 @@
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
+  class <emptyTree><<C <root>>> < (::<todo sym>)
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
-      begin
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::Main)
-          <emptyTree>
-        end
-        ::Main.new().main()
-        <emptyTree>
-      end
+      ::Main.new().main()
     end
   end
   class ::Main<<C Main>> < (::<todo sym>)
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
     def yielder(<blk>)
       begin
         a = <blk>.call(1)
@@ -61,15 +42,22 @@ begin
             3
           end
         end
-        ::<Magic>.<call-with-block>(<self>, :"yielder", l)
-        ::<Magic>.<call-with-block>(<self>, :"blockpass", l)
-        ::<Magic>.<call-with-block>(<self>, :"mixed", l)
-        ::<Magic>.<call-with-block>(<self>, :"blockyield", l)
+        ::<Magic>.<call-with-block-pass>(<self>, :yielder, l)
+        ::<Magic>.<call-with-block-pass>(<self>, :blockpass, l)
+        ::<Magic>.<call-with-block-pass>(<self>, :mixed, l)
+        ::<Magic>.<call-with-block-pass>(<self>, :blockyield, l)
       end
     end
 
     def self.<static-init>(<blk>)
-      <emptyTree>
+      begin
+        <runtime method definition of yielder>
+        <runtime method definition of blockpass>
+        <runtime method definition of mixed>
+        <runtime method definition of blockyield>
+        <runtime method definition of main>
+        <emptyTree>
+      end
     end
   end
   <emptyTree>

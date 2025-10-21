@@ -9,16 +9,25 @@ module T::Private::Types
       @callable = callable
     end
 
+    def build_type
+      nil
+    end
+
     def aliased_type
       @aliased_type ||= T::Utils.coerce(@callable.call)
     end
 
-    # @override Base
+    # overrides Base
     def name
       aliased_type.name
     end
 
-    # @override Base
+    # overrides Base
+    def recursively_valid?(obj)
+      aliased_type.recursively_valid?(obj)
+    end
+
+    # overrides Base
     def valid?(obj)
       aliased_type.valid?(obj)
     end

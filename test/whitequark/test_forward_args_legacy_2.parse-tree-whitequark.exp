@@ -1,0 +1,3 @@
+s(:def, :foo,
+  s(:params,
+    s(:forward_arg)), nil)

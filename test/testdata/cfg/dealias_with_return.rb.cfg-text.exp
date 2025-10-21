@@ -1,0 +1,70 @@
+method ::Object#a {
+
+bb0[firstDead=-1]():
+    <self>: Object = cast(<self>: NilClass, Object);
+    <exceptionValue>$4: T.nilable(Exception) = <get-current-exception>
+    <exceptionValue>$4 -> (T.nilable(Exception) ? bb3 : bb4)
+
+# backedges
+# - bb4
+# - bb7
+# - bb8
+# - bb9
+bb1[firstDead=-1]():
+    <exceptionValue>$4 = <get-current-exception>
+    <unconditional> -> bb1
+
+# backedges
+# - bb0
+bb3[firstDead=-1](<exceptionValue>$4: Exception):
+    <cfgAlias>$8: T.class_of(StandardError) = alias <C StandardError>
+    <isaCheckTemp>$9: T::Boolean = <cfgAlias>$8: T.class_of(StandardError).===(<exceptionValue>$4: Exception)
+    <isaCheckTemp>$9 -> (T::Boolean ? bb7 : bb8)
+
+# backedges
+# - bb0
+bb4[firstDead=2]():
+    <returnTemp>$5: Integer(1) = 1
+    <statTemp>$3: T.noreturn = return <returnTemp>$5: Integer(1)
+    <unconditional> -> bb1
+
+# backedges
+# - bb3
+bb7[firstDead=-1](<exceptionValue>$4: StandardError):
+    <exceptionValue>$4: NilClass = nil
+    <keepForCfgTemp>$6: T.untyped = <keep-alive> <exceptionValue>$4
+    a: Integer(2) = 2
+    <gotoDeadTemp>$10 -> (NilClass ? bb1 : bb9)
+
+# backedges
+# - bb3
+bb8[firstDead=-1]():
+    <gotoDeadTemp>$10: TrueClass = true
+    <gotoDeadTemp>$10 -> (TrueClass ? bb1 : bb9)
+
+# backedges
+# - bb7
+# - bb8
+bb9[firstDead=3](a: Integer(2)):
+    <statTemp>$13: Integer(3) = 3
+    <returnMethodTemp>$2: Integer = a: Integer(2).+(<statTemp>$13: Integer(3))
+    <finalReturn>: T.noreturn = return <returnMethodTemp>$2: Integer
+    <unconditional> -> bb1
+
+}
+
+method ::<Class:<root>>#<static-init> {
+
+bb0[firstDead=3]():
+    <self>: T.class_of(<root>) = cast(<self>: NilClass, T.class_of(<root>));
+    <returnMethodTemp>$2: Symbol(:a) = :a
+    <finalReturn>: T.noreturn = return <returnMethodTemp>$2: Symbol(:a)
+    <unconditional> -> bb1
+
+# backedges
+# - bb0
+bb1[firstDead=-1]():
+    <unconditional> -> bb1
+
+}
+

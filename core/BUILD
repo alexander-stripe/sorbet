@@ -4,8 +4,10 @@ cc_library(
         [
             "*.cc",
             "*.h",
+            "errors/*.cc",
             "types/*.cc",
             "lsp/*.cc",
+            "packages/*.cc",
         ],
         exclude = [
             # workaround https://github.com/flycheck/flycheck/issues/248 in emacs
@@ -16,9 +18,15 @@ cc_library(
         "Names_gen.cc",
     ],
     hdrs = [
-        "GlobalSubstitution.h",
+        "KwPair.h",
+        "NameSubstitution.h",
+        "UntaggedPtr.h",
         "core.h",
-    ] + glob(["errors/*.h"]) + glob(["lsp/*.h"]),
+    ] + glob([
+        "errors/*.h",
+        "lsp/*.h",
+        "packages/*.h",
+    ]),
     linkstatic = select({
         "//tools/config:linkshared": 0,
         "//conditions:default": 1,
@@ -27,9 +35,10 @@ cc_library(
     deps = [
         "//common",
         "//common/concurrency",
+        "//core/hashing",
         "//main/pipeline/semantic_extension:interface",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
         "@rang",
     ],
 )
@@ -44,7 +53,6 @@ cc_test(
             "**/flycheck_*",
         ],
     ),
-    copts = ["-Iexternal/gtest/include"],
     linkstatic = select({
         "//tools/config:linkshared": 0,
         "//conditions:default": 1,
@@ -52,8 +60,8 @@ cc_test(
     visibility = ["//tools:__pkg__"],
     deps = [
         ":core",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@doctest//doctest",
+        "@doctest//doctest:main",
     ],
 )
 

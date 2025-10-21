@@ -23,9 +23,9 @@ class A
   def badnext
     yields do
       if _
-        4 # error: Returning value that does not conform to block result type
+        4 # error: Expected `String` but found `Integer(4)` for block result type
       else
-        next 5 # error: Returning value that does not conform to block result type
+        next 5 # error: Expected `String` but found `Integer(5)` for block result type
       end
     end
 
@@ -49,7 +49,7 @@ class A
   class ConstructorBlock
     extend T::Sig
 
-    sig {params(blk: T.proc.params(s: Symbol).returns(String)).returns(NilClass)}
+    sig {params(blk: T.proc.params(s: Symbol).returns(String)).void}
     def initialize(&blk)
     end
   end
@@ -57,7 +57,7 @@ class A
   # Constructors are dispatched via a different code path; ensure that
   # it knows how to enter blocks.
   def test_constructors
-    NoConstructor.new do |x|
+    NoConstructor.new do |x| # error: `BasicObject#initialize` does not take a block
       x + 1
     end
 
@@ -78,11 +78,11 @@ class A
 
   sig {returns(Integer)}
   def return_from_block
-    yields do # error: Returning value that does not conform to method result type
+    yields do # error: Expected `Integer` but found `String` for method result type
       if _
         return 7
       else
-        return :hi # error: Returning value that does not conform to method result type
+        return :hi # error: Expected `Integer` but found `Symbol(:hi)` for method result type
       end
     end
   end

@@ -3,31 +3,46 @@
 
 module T::Types
   class TypedHash < TypedEnumerable
-    # Technically we don't need these, but they are a nice api
-    attr_reader :keys, :values
-
     def underlying_class
       Hash
     end
 
     def initialize(keys:, values:)
-      @keys = T::Utils.coerce(keys)
-      @values = T::Utils.coerce(values)
-      @type = T::Utils.coerce([keys, values])
+      @inner_keys = keys
+      @inner_values = values
     end
 
-    # @override Base
+    # Technically we don't need this, but it is a nice api
+    def keys
+      @keys ||= T::Utils.coerce(@inner_keys)
+    end
+
+    # Technically we don't need this, but it is a nice api
+    def values
+      @values ||= T::Utils.coerce(@inner_values)
+    end
+
+    def type
+      @type ||= T::Utils.coerce([keys, values])
+    end
+
+    # overrides Base
     def name
-      "T::Hash[#{@keys.name}, #{@values.name}]"
+      "T::Hash[#{keys.name}, #{values.name}]"
     end
 
-    # @override Base
-    def valid?(obj)
+    # overrides Base
+    def recursively_valid?(obj)
       obj.is_a?(Hash) && super
     end
 
-    def new(*args, &blk) # rubocop:disable PrisonGuard/BanBuiltinMethodOverride
-      Hash.new(*T.unsafe(args), &blk) # rubocop:disable PrisonGuard/RestrictHashDefaults
+    # overrides Base
+    def valid?(obj)
+      obj.is_a?(Hash)
+    end
+
+    def new(...)
+      Hash.new(...)
     end
 
     class Untyped < TypedHash

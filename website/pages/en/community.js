@@ -93,6 +93,11 @@ class Index extends React.Component {
                   venue: 'Strange Loop 2018',
                 },
                 {
+                  title: 'Sorbet: A Typechecker for Ruby',
+                  link: '/docs/talks/ruby-conf-2018',
+                  venue: 'RubyConf 2018',
+                },
+                {
                   title: 'State of Sorbet: A type checker for Ruby',
                   link: '/docs/talks/ruby-kaigi-2019',
                   venue: 'RubyKaigi 2019',
@@ -106,6 +111,31 @@ class Index extends React.Component {
                   title: 'Fast typechecking for Ruby',
                   link: '/docs/talks/jvm-ls-2019',
                   venue: 'JVM Language Summit 2019',
+                },
+                {
+                  title: 'Sorbet: A type checker for Ruby 3 you can use today!',
+                  link: '/docs/talks/ruby-conf-2019',
+                  venue: 'RubyConf 2019',
+                },
+                {
+                  title: 'Sorbet: Why and How We Built a Typechecker for Ruby',
+                  link: '/docs/talks/qcon-2019',
+                  venue: 'QCon 2019',
+                },
+                {
+                  title: 'Sorbet: A type checker for Ruby 3 you can use today!',
+                  link: '/docs/talks/parisrb-2020',
+                  venue: 'ParisRB 2020',
+                },
+                {
+                  title: 'Sorbet: A type checker for Ruby 3 you can use today!',
+                  link: '/docs/talks/pdxrb-2020',
+                  venue: 'PDX.rb 2020',
+                },
+                {
+                  title: 'Compiling Ruby to Native Code with Sorbet and LLVM',
+                  link: '/docs/talks/ruby-conf-2021',
+                  venue: 'RubyConf 2021',
                 },
               ]}
             />
@@ -125,22 +155,40 @@ class Index extends React.Component {
                     'A central repository for sharing type definitions for Ruby gems',
                 },
                 {
-                  title: 'sorbet-rails',
-                  link: 'https://github.com/chanzuckerberg/sorbet-rails',
-                  description:
-                    'A set of tools to make Sorbet work with Rails seamlessly',
-                },
-                {
                   title: 'Sord',
                   link: 'https://github.com/AaronC81/sord',
                   description:
                     'A tool to generate RBIs from YARD documentation',
                 },
                 {
+                  title: 'yard-sorbet',
+                  link: 'https://github.com/dduugg/yard-sorbet',
+                  description:
+                    'A YARD plugin to parse Sorbet signatures when generating docs',
+                },
+                {
                   title: 'sorbet-progress',
                   link: 'https://github.com/jaredbeck/sorbet-progress',
                   description:
                     'Measure your progress as you adopt Sorbet, stay motivated!',
+                },
+                {
+                  title: 'activerecord-ejection_seat',
+                  link: 'https://github.com/maxveldink/activerecord-ejection_seat',
+                  description:
+                    'Eject from an ActiveRecord model to a Sorbet T::Struct, or buckle back in',
+                },
+                {
+                  title: 'sorbet-result',
+                  link: 'https://github.com/maxveldink/sorbet-result',
+                  description:
+                    'Introduces T::Result, T::Success and T::Failure types to facilitate Railway Oriented Programming',
+                },
+                {
+                  title: 'sorbet-struct-comparable',
+                  link: 'https://github.com/samuelgiles/sorbet-struct-comparable',
+                  description:
+                    "Comparable T::Struct's for the equality focused typed Ruby developer",
                 },
                 {
                   title: 'Parlour',
@@ -150,7 +198,23 @@ class Index extends React.Component {
                 {
                   title: 'rubocop-sorbet',
                   link: 'https://github.com/Shopify/rubocop-sorbet',
-                  description: 'A collection of Rubocop rules for Sorbet.',
+                  description: 'A collection of Rubocop rules for Sorbet',
+                },
+                {
+                  title: 'pronto-sorbet',
+                  link: 'https://github.com/teamsimplepay/pronto-sorbet',
+                  description: 'Run Sorbet as a Pronto runner',
+                },
+                {
+                  title: 'spoom',
+                  link: 'https://github.com/Shopify/spoom',
+                  description: 'Useful tools for Sorbet enthusiasts',
+                },
+                {
+                  title: 'rubymine-sorbet-lsp',
+                  link: 'https://github.com/simoleone/rubymine-sorbet-lsp',
+                  description:
+                    'RubyMine plugin for error highlights and fixes powered by Sorbet language server',
                 },
               ]}
             />

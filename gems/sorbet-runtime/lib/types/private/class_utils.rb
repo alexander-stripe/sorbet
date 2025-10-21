@@ -33,16 +33,16 @@ module T::Private::ClassUtils
       if @overwritten
         # The original method was overwritten. Overwrite again to restore it.
         T::Configuration.without_ruby_warnings do
-          @mod.send(:define_method, @old_method.name, @old_method) # rubocop:disable PrisonGuard/UsePublicSend
+          @mod.send(:define_method, @old_method.name, @old_method)
         end
       else
         # The original method was in an ancestor. Restore it by removing the overriding method.
-        @mod.send(:remove_method, @old_method.name) # rubocop:disable PrisonGuard/UsePublicSend
+        @mod.send(:remove_method, @old_method.name)
       end
 
       # Restore the visibility. Note that we need to do this even when we call remove_method
       # above, because the module may have set custom visibility for a method it inherited.
-      @mod.send(@visibility, @old_method.name) # rubocop:disable PrisonGuard/UsePublicSend
+      @mod.send(@visibility, @old_method.name)
 
       nil
     end
@@ -65,15 +65,39 @@ module T::Private::ClassUtils
     elsif mod.private_method_defined?(name)
       :private
     else
-      raise NameError.new("undefined method `#{name}` for `#{mod}`")
+      mod.method(name) # Raises
+    end
+  end
+
+  def self.def_with_visibility(mod, name, visibility, method=nil, &block)
+    mod.module_exec do
+      # Start a visibility (public/protected/private) region, so that
+      # all of the method redefinitions happen with the right visibility
+      # from the beginning. This ensures that any other code that is
+      # triggered by `method_added`, sees the redefined method with the
+      # right visibility.
+      send(visibility)
+
+      if method
+        define_method(name, method)
+      else
+        define_method(name, &block)
+      end
+
+      if block && block.arity < 0 && respond_to?(:ruby2_keywords, true)
+        ruby2_keywords(name)
+      end
     end
   end
 
   # Replaces a method, either by overwriting it (if it is defined directly on `mod`) or by
-  # overriding it (if it is defined by one of mod's ancestors). Returns a ReplacedMethod instance
-  # on which you can call `bind(...).call(...)` to call the original method, or `restore` to
-  # restore the original method (by overwriting or removing the override).
-  def self.replace_method(mod, name, &blk)
+  # overriding it (if it is defined by one of mod's ancestors).  If `original_only` is
+  # false, returns a ReplacedMethod instance on which you can call `bind(...).call(...)`
+  # to call the original method, or `restore` to restore the original method (by
+  # overwriting or removing the override).
+  #
+  # If `original_only` is true, return the `UnboundMethod` representing the original method.
+  def self.replace_method(mod, name, original_only=false, &blk)
     original_method = mod.instance_method(name)
     original_visibility = visibility_method_name(mod, name)
     original_owner = original_method.owner
@@ -89,20 +113,22 @@ module T::Private::ClassUtils
         #
         # That's not necessarily a deal breaker, but for now, we're keeping it as unsupported.
         raise "You're trying to replace `#{name}` on `#{mod}`, but that method exists in a " \
-              "prepended module (#{ancestor}), which we don't currently support. Talk to " \
-              "#dev-productivity for help."
+              "prepended module (#{ancestor}), which we don't currently support."
       end
     end
 
     overwritten = original_owner == mod
     T::Configuration.without_ruby_warnings do
       T::Private::DeclState.current.without_on_method_added do
-        mod.send(:define_method, name, &blk) # rubocop:disable PrisonGuard/UsePublicSend
+        def_with_visibility(mod, name, original_visibility, &blk)
       end
     end
-    mod.send(original_visibility, name) # rubocop:disable PrisonGuard/UsePublicSend
-    new_method = mod.instance_method(name)
 
-    ReplacedMethod.new(mod, original_method, new_method, overwritten, original_visibility)
+    if original_only
+      original_method
+    else
+      new_method = mod.instance_method(name)
+      ReplacedMethod.new(mod, original_method, new_method, overwritten, original_visibility)
+    end
   end
 end

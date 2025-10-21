@@ -1,27 +1,65 @@
-# NOTE: this build file was taken from:
-# https://github.com/bazelbuild/bazel/blob/707fbb67e92a5067107a71bf2d4e8baeeade33b2/third_party/BUILD
+# Originally from https://github.com/protocolbuffers/protobuf/blob/2514f0bd7da7e2af1bed4c5d1b84f031c4d12c10/third_party/zlib.BUILD
 
-filegroup(
-    name = "srcs",
-    srcs = glob(["**"]),
-    visibility = ["//third_party:__pkg__"],
-)
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
-filegroup(
-    name = "embedded_tools",
-    srcs = glob(["*.c"]) + glob(["*.h"]) + ["BUILD"] + ["LICENSE.txt"],
-    visibility = ["//visibility:public"],
+licenses(["notice"])  # BSD/MIT-like license (for zlib)
+
+_ZLIB_HEADERS = [
+    "crc32.h",
+    "deflate.h",
+    "gzguts.h",
+    "inffast.h",
+    "inffixed.h",
+    "inflate.h",
+    "inftrees.h",
+    "trees.h",
+    "zconf.h",
+    "zlib.h",
+    "zutil.h",
+]
+
+_ZLIB_PREFIXED_HEADERS = ["zlib/include/" + hdr for hdr in _ZLIB_HEADERS]
+
+# In order to limit the damage from the `includes` propagation
+# via `:zlib`, copy the public headers to a subdirectory and
+# expose those.
+genrule(
+    name = "copy_public_headers",
+    srcs = _ZLIB_HEADERS,
+    outs = _ZLIB_PREFIXED_HEADERS,
+    cmd = "cp $(SRCS) $(@D)/zlib/include/",
 )
 
 cc_library(
     name = "zlib",
-    srcs = glob(["*.c"]),
-    hdrs = glob(["*.h"]),
-    # Use -Dverbose=-1 to turn off zlib's trace logging. (#3280)
-    copts = [
-        "-w",
-        "-Dverbose=-1",
-    ],
-    includes = ["."],
+    srcs = [
+        "adler32.c",
+        "compress.c",
+        "crc32.c",
+        "deflate.c",
+        "gzclose.c",
+        "gzlib.c",
+        "gzread.c",
+        "gzwrite.c",
+        "infback.c",
+        "inffast.c",
+        "inflate.c",
+        "inftrees.c",
+        "trees.c",
+        "uncompr.c",
+        "zutil.c",
+        # Include the un-prefixed headers in srcs to work
+        # around the fact that zlib isn't consistent in its
+        # choice of <> or "" delimiter when including itself.
+    ] + _ZLIB_HEADERS,
+    hdrs = _ZLIB_PREFIXED_HEADERS,
+    copts = select({
+        "@bazel_tools//src/conditions:windows": [],
+        "//conditions:default": [
+            "-Wno-unused-variable",
+            "-Wno-implicit-function-declaration",
+        ],
+    }) + ["-Wno-implicit-fallthrough"],
+    includes = ["zlib/include/"],
     visibility = ["//visibility:public"],
 )

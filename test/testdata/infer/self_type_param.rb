@@ -1,6 +1,6 @@
 # typed: true
 
-class GenricClass
+class GenericClass
   extend(T::Sig)
   extend(T::Generic)
 
@@ -19,7 +19,8 @@ class GenricClass
   end
 
   def as_optional_hash
-    kwargs(return_type_member) # error: Too many positional arguments provided
+    kwargs(return_type_member)
+    #      ^^^^^^^^^^^^^^^^^^ error: Too many positional arguments provided
   end
 
   def splat_expand

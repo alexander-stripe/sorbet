@@ -1,12 +1,12 @@
 # typed: true
 
 class R; end
-R = 5 # error: Redefining constant `R`
+R = 5 # error: Cannot initialize the class `R` by constant assignment
 class R; end
 # even though we've reopened the class here, the constant R still
 # "wins", because the first definition of the class is what counts
 
-# this should not resolve as a class, so this will be an error
-x = R.new # error: Method `new` does not exist on `Integer` component of `Integer(5)`
-# this should resolve as the constant, so this would be fine
-puts R + 1
+# The static field never mangles the class definition, so this is allowed
+x = R.new
+# this resolves as the class, so this will be an error
+puts R + 1 # error: Method `+` does not exist on `T.class_of(R)`

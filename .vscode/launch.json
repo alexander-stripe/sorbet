@@ -1,0 +1,76 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "LSP Test - Debug active test",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bazel-bin/test/lsp_test_runner",
+            "args": ["--single_test=${fileDirname}/${fileBasenameNoExtension}", "--dt-no-colors"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+            "sourceFileMap": {
+                "${workspaceFolder}/bazel-sorbet": "${workspaceFolder}"
+            },
+            "setupCommands": [
+                {
+                    "description": "Load .lldb init",
+                    "text": "command source .lldbinit",
+                    "ignoreFailures": false
+                }
+            ]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Sorbet with test.rb (RBS enabled)",
+            "program": "${workspaceFolder}/bazel-bin/main/sorbet",
+            "args": ["--enable-experimental-rbs-comments", "test.rb"],
+            "preLaunchTask": "Build",
+            "stopOnEntry": false,
+            "sourceMap": {
+                "": "${workspaceFolder}",
+            },
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Prism test in LLDB",
+            "program": "${workspaceFolder}/bazel-bin/test/test_PrismPosTests/prism_regression/${input:prism_regression_test_name}.runfiles/com_stripe_ruby_typer/test/pipeline_test_runner",
+            "args": ["--single_test=${workspaceFolder}/test/prism_regression/${input:prism_regression_test_name}.rb", "--parser=prism"],
+            // We need to run all tests to generate the pipeline_test_runner files, which are needed by the LLDB debugger to execute the tests.
+            "preLaunchTask": "Run all Prism regression tests",
+            "stopOnEntry": false,
+            "sourceMap": {
+                "": "${workspaceFolder}",
+            },
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Sorbet pipeline in LLDB",
+            "program": "${workspaceFolder}/bazel-bin/main/sorbet",
+            "args": ["--parser=prism", "${input:file_path}"],
+            "preLaunchTask": "Build with Prism",
+            "stopOnEntry": false,
+            "sourceMap": {
+                "": "${workspaceFolder}",
+            },
+        },
+    ],
+    "inputs": [
+        {
+            "id": "prism_regression_test_name",
+            "type": "promptString",
+            "description": "Enter the test name, e.g. case for running test/prism_regression/case.rb",
+        },
+        {
+            "id": "file_path",
+            "type": "promptString",
+            "description": "Enter the path to the file to typecheck, e.g. test/prism_regression/case.rb",
+        }
+    ]
+}

@@ -34,7 +34,7 @@ module OuterModule
     extend T::Sig
     sig {params(name: String).void}
     def initialize(name)
-      # ^ hover: def initialize(name); end
+      # ^ hover: private def initialize(name); end
       @name = name
     end
 
@@ -55,6 +55,12 @@ module OuterModule
 
     sig {params(fname: String, lname: String).returns(String)}
     def positional_args(fname, lname)
+      "#{fname}:#{lname}"
+    end
+
+    sig {params(fname: String, lname: String).returns(String)}
+    def positional_args_with_defaults(fname='Jane', lname='Doe')
+      # ^ hover: def positional_args_with_defaults(fname=…, lname=…); end
       "#{fname}:#{lname}"
     end
 
@@ -93,7 +99,7 @@ module OuterModule
     def class_usages
       s = "Foo"
       qualified = InnerClass.new(s)
-      #                        ^ hover: def initialize(name); end
+      #                        ^ hover: private def initialize(name); end
       [
         no_args_return_void,
         # ^ hover: def no_args_return_void; end

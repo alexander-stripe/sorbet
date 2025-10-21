@@ -1,76 +1,135 @@
 #include "ast/Helpers.h"
 #include "cfg/builder/builder.h"
-#include "common/sort.h"
+#include "common/sort/sort.h"
 #include "core/Names.h"
 
 using namespace std;
 
 namespace sorbet::cfg {
 
-void jumpToDead(BasicBlock *from, CFG &inWhat, core::Loc loc);
-
 unique_ptr<CFG> CFGBuilder::buildFor(core::Context ctx, ast::MethodDef &md) {
+    Timer timeit(ctx.state.tracer(), "cfg");
     ENFORCE(md.symbol.exists());
-    ENFORCE(!md.symbol.data(ctx)->isOverloaded());
+    ENFORCE(!md.symbol.data(ctx)->flags.isOverloaded);
     unique_ptr<CFG> res(new CFG); // private constructor
+    res->loc = md.loc;
     res->symbol = md.symbol.data(ctx)->dealiasMethod(ctx);
-    if (res->symbol.data(ctx)->isAbstract()) {
-        res->basicBlocks.clear();
-        return res;
-    }
-    u4 temporaryCounter = 1;
-    UnorderedMap<core::SymbolRef, core::LocalVariable> aliases;
-    UnorderedMap<core::NameRef, core::LocalVariable> discoveredUndeclaredFields;
-    CFGContext cctx(ctx, *res.get(), core::LocalVariable(), 0, 0, nullptr, nullptr, nullptr, aliases,
+    uint32_t temporaryCounter = 1;
+    UnorderedMap<core::SymbolRef, LocalRef> aliases;
+    UnorderedMap<core::NameRef, LocalRef> discoveredUndeclaredFields;
+    CFGContext cctx(ctx, *res.get(), LocalRef::noVariable(), 0, nullptr, nullptr, nullptr, aliases,
                     discoveredUndeclaredFields, temporaryCounter);
 
-    core::LocalVariable retSym = cctx.newTemporary(core::Names::returnMethodTemp());
-
+    LocalRef retSym;
     BasicBlock *entry = res->entry();
-    auto selfClaz = md.symbol.data(ctx)->rebind();
-    if (!selfClaz.exists()) {
-        selfClaz = md.symbol;
-    }
-    synthesizeExpr(entry, core::LocalVariable::selfVariable(), md.loc,
-                   make_unique<Cast>(core::LocalVariable::selfVariable(),
-                                     selfClaz.data(ctx)->enclosingClass(ctx).data(ctx)->selfType(ctx),
-                                     core::Names::cast()));
-    int i = -1;
-    for (auto &argExpr : md.args) {
-        i++;
-        auto *a = ast::MK::arg2Local(argExpr.get());
-        synthesizeExpr(entry, a->localVariable, a->loc, make_unique<LoadArg>(md.symbol, i));
-    }
-    auto cont = walk(cctx.withTarget(retSym), md.rhs.get(), entry);
-    core::LocalVariable retSym1(core::Names::finalReturn(), 0);
+    BasicBlock *cont;
+    {
+        CFG::UnfreezeCFGLocalVariables unfreezeVars(*res);
+        retSym = cctx.newTemporary(core::Names::returnMethodTemp());
 
-    auto rvLoc = cont->exprs.empty() || isa_instruction<LoadArg>(cont->exprs.back().value.get())
-                     ? md.loc
-                     : cont->exprs.back().loc;
-    synthesizeExpr(cont, retSym1, rvLoc, make_unique<Return>(retSym)); // dead assign.
+        auto selfClaz = md.symbol.data(ctx)->rebind;
+        if (!selfClaz.exists()) {
+            selfClaz = md.symbol.enclosingClass(ctx);
+        }
+        synthesizeExpr(entry, LocalRef::selfVariable(), md.declLoc.copyWithZeroLength(),
+                       make_insn<Cast>(LocalRef::selfVariable(), md.declLoc.copyWithZeroLength(),
+                                       selfClaz.data(ctx)->selfType(ctx), core::Names::cast()));
+
+        BasicBlock *presentCont = entry;
+        BasicBlock *defaultCont = nullptr;
+
+        auto &paramInfos = md.symbol.data(ctx)->parameters;
+        bool isAbstract = md.symbol.data(ctx)->flags.isAbstract;
+        bool seenKeyword = false;
+        int i = -1;
+        for (auto &paramExpr : md.params) {
+            i++;
+            auto *p = ast::MK::arg2Local(paramExpr);
+            auto local = res->enterLocal(p->localVariable);
+            auto &paramInfo = paramInfos[i];
+
+            seenKeyword = seenKeyword || paramInfo.flags.isKeyword;
+
+            // If defaultCont is non-null, that means that the previous argument had a default. If the current argument
+            // has a default and also is not a keyword, block or repeated arg, then we can continue by extending that
+            // fall-through case. However if any of those conditions fail, we must merge the two paths back together,
+            // and break out of the fast-path for defaulting.
+            if (defaultCont &&
+                (seenKeyword || paramInfo.flags.isBlock || paramInfo.flags.isRepeated || !paramInfo.flags.isDefault)) {
+                presentCont = joinBlocks(cctx, presentCont, defaultCont);
+                defaultCont = nullptr;
+            }
+
+            // Ignore defaults for abstract methods, because abstract methods do not have bodies and are not called.
+            if (!isAbstract) {
+                // Only emit conditional arg loading if the arg has a default
+                if (auto opt = ast::cast_tree<ast::OptionalParam>(paramExpr)) {
+                    auto [result, presentNext, defaultNext] =
+                        walkDefault(cctx, i, paramInfo, local, p->loc, opt->default_, presentCont, defaultCont);
+
+                    synthesizeExpr(defaultNext, local, p->loc, make_insn<Ident>(result));
+
+                    presentCont = presentNext;
+                    defaultCont = defaultNext;
+                }
+            }
+
+            synthesizeExpr(presentCont, local, p->loc, make_insn<LoadArg>(md.symbol, i));
+        }
+
+        // Join the presentCont and defaultCont paths together
+        if (defaultCont) {
+            presentCont = joinBlocks(cctx, presentCont, defaultCont);
+        }
+
+        cont = walk(cctx.withTarget(retSym), md.rhs, presentCont);
+    }
+    // Past this point, res->localVariables is a fixed size.
+
+    LocalRef retSym1 = LocalRef::finalReturn();
+
+    core::LocOffsets rvLoc;
+    if (cont->exprs.empty() || isa_instruction<LoadArg>(cont->exprs.back().value)) {
+        auto beginAdjust = md.loc.endPos() - md.loc.beginPos() - 3;
+        auto endLoc = ctx.locAt(md.loc).adjust(ctx, beginAdjust, 0);
+        if (endLoc.source(ctx) == "end") {
+            rvLoc = endLoc.offsets();
+            res->implicitReturnLoc = rvLoc;
+        } else {
+            rvLoc = md.loc;
+        }
+    } else {
+        rvLoc = cont->exprs.back().loc;
+    }
+    synthesizeExpr(cont, retSym1, rvLoc, make_insn<Return>(retSym, rvLoc)); // dead assign.
     jumpToDead(cont, *res.get(), rvLoc);
 
     vector<Binding> aliasesPrefix;
     for (auto kv : aliases) {
         core::SymbolRef global = kv.first;
-        core::LocalVariable local = kv.second;
-        aliasesPrefix.emplace_back(local, global.data(ctx)->loc(), make_unique<Alias>(global));
-        if (global.data(ctx)->isField() || global.data(ctx)->isStaticField()) {
-            res->minLoops[local] = CFG::MIN_LOOP_FIELD;
+        LocalRef local = kv.second;
+        aliasesPrefix.emplace_back(local, core::LocOffsets::none(), make_insn<Alias>(global));
+        if (global.isFieldOrStaticField()) {
+            res->minLoops[local.id()] = CFG::MIN_LOOP_FIELD;
         } else {
-            res->minLoops[local] = CFG::MIN_LOOP_GLOBAL;
+            // We used to have special handling here for "MIN_LOOP_GLOBAL" but it was meaningless,
+            // because it only happened for type members, and we already prohibit re-assigning type
+            // members (in namer). If this ENFORCE fails, we might have to resurrect the old logic
+            // we had for handling MIN_LOOP_GLOBAL (or at least, add some tests that would trigger
+            // pinning errors).
+            ENFORCE(global.isTypeMember());
         }
     }
     for (auto kv : discoveredUndeclaredFields) {
-        aliasesPrefix.emplace_back(kv.second, core::Loc::none(),
-                                   make_unique<Alias>(core::Symbols::Magic_undeclaredFieldStub()));
-        res->minLoops[kv.second] = CFG::MIN_LOOP_FIELD;
+        aliasesPrefix.emplace_back(kv.second, core::LocOffsets::none(),
+                                   make_insn<Alias>(core::Symbols::Magic_undeclaredFieldStub(), kv.first));
+        res->minLoops[kv.second.id()] = CFG::MIN_LOOP_FIELD;
     }
     histogramInc("cfgbuilder.aliases", aliasesPrefix.size());
     auto basicBlockCreated = res->basicBlocks.size();
     histogramInc("cfgbuilder.basicBlocksCreated", basicBlockCreated);
     fast_sort(aliasesPrefix,
-              [](const Binding &l, const Binding &r) -> bool { return l.bind.variable < r.bind.variable; });
+              [](const Binding &l, const Binding &r) -> bool { return l.bind.variable.id() < r.bind.variable.id(); });
 
     entry->exprs.insert(entry->exprs.begin(), make_move_iterator(aliasesPrefix.begin()),
                         make_move_iterator(aliasesPrefix.end()));
@@ -80,27 +139,26 @@ unique_ptr<CFG> CFGBuilder::buildFor(core::Context ctx, ast::MethodDef &md) {
     dealias(ctx, *res);
     CFG::ReadsAndWrites RnW = res->findAllReadsAndWrites(ctx);
     computeMinMaxLoops(ctx, RnW, *res);
-    fillInBlockArguments(ctx, RnW, *res);
-    removeDeadAssigns(ctx, RnW, *res); // requires block arguments to be filled
+    auto blockArgs = fillInBlockArguments(ctx, RnW, *res);
+    removeDeadAssigns(ctx, RnW, *res, blockArgs); // requires block arguments to be filled
     simplify(ctx, *res);
     histogramInc("cfgbuilder.basicBlocksSimplified", basicBlockCreated - res->basicBlocks.size());
     markLoopHeaders(ctx, *res);
     sanityCheck(ctx, *res);
     res->sanityCheck(ctx);
+    histogramInc("cfgbuilder.numLocalVariables", res->numLocalVariables());
     return res;
 }
 
 void CFGBuilder::fillInTopoSorts(core::Context ctx, CFG &cfg) {
-    auto &target1 = cfg.forwardsTopoSort;
-    target1.resize(cfg.basicBlocks.size());
-    int count = topoSortFwd(target1, 0, cfg.entry());
-    cfg.forwardsTopoSort.resize(count);
+    // A map from the index space of the basicBlocks index to forwardsTopoSort index.
+    auto forwardsIds = topoSortFwd(cfg.forwardsTopoSort, cfg.maxBasicBlockId, cfg.entry());
 
     // Remove unreachable blocks (which were not found by the toposort)
     for (auto &bb : cfg.basicBlocks) {
-        if (bb->fwdId == -1) {
+        if (forwardsIds[bb->id] == -1) {
             for (auto &prev : bb->backEdges) {
-                ENFORCE(prev->fwdId == -1);
+                ENFORCE(forwardsIds[prev->id] == -1);
             }
 
             bb->bexit.thenb->backEdges.erase(
@@ -111,31 +169,35 @@ void CFGBuilder::fillInTopoSorts(core::Context ctx, CFG &cfg) {
                 bb->bexit.elseb->backEdges.end());
         }
     }
-    cfg.basicBlocks.erase(
-        remove_if(cfg.basicBlocks.begin(), cfg.basicBlocks.end(), [](auto &bb) -> bool { return bb->fwdId == -1; }),
-        cfg.basicBlocks.end());
+    cfg.basicBlocks.erase(remove_if(cfg.basicBlocks.begin(), cfg.basicBlocks.end(),
+                                    [&forwardsIds](auto &bb) -> bool { return forwardsIds[bb->id] == -1; }),
+                          cfg.basicBlocks.end());
 
     // needed to find loop headers.
     for (auto &bb : cfg.basicBlocks) {
-        fast_sort(bb->backEdges, [](const BasicBlock *a, const BasicBlock *b) -> bool { return a->fwdId > b->fwdId; });
+        fast_sort(bb->backEdges, [&forwardsIds](const BasicBlock *a, const BasicBlock *b) -> bool {
+            return forwardsIds[a->id] > forwardsIds[b->id];
+        });
     }
 }
 
-CFGContext CFGContext::withTarget(core::LocalVariable target) {
+CFGContext CFGContext::withTarget(LocalRef target) {
     auto ret = CFGContext(*this);
     ret.target = target;
     return ret;
 }
 
-CFGContext CFGContext::withRubyBlockId(int blockId) {
+CFGContext CFGContext::withBlockBreakTarget(LocalRef blockBreakTarget) {
     auto ret = CFGContext(*this);
-    ret.rubyBlockId = blockId;
+    ret.blockBreakTarget = blockBreakTarget;
+    ret.breakIsJump = false;
     return ret;
 }
 
-CFGContext CFGContext::withBlockBreakTarget(core::LocalVariable blockBreakTarget) {
+CFGContext CFGContext::withLoopBreakTarget(LocalRef blockBreakTarget) {
     auto ret = CFGContext(*this);
     ret.blockBreakTarget = blockBreakTarget;
+    ret.breakIsJump = true;
     return ret;
 }
 
@@ -148,9 +210,9 @@ CFGContext CFGContext::withLoopScope(BasicBlock *nextScope, BasicBlock *breakSco
     return ret;
 }
 
-CFGContext CFGContext::withSendAndBlockLink(const shared_ptr<core::SendAndBlockLink> &link) {
+CFGContext CFGContext::withSendAndBlockLink(shared_ptr<core::SendAndBlockLink> link) {
     auto ret = CFGContext(*this);
-    ret.link = link;
+    ret.link = std::move(link);
     return ret;
 }
 

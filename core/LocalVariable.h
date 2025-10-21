@@ -14,15 +14,15 @@ public:
     // local name, and identifies the block scope it was defined in.
     // Additionally, this value can only be non-zero if the variable is defined
     // in the scope of a block with a non-zero scope id.
-    u4 unique;
+    uint32_t unique;
 
-    LocalVariable(NameRef name, u4 unique) : _name(name), unique(unique) {}
+    LocalVariable(NameRef name, uint32_t unique);
 
     LocalVariable() = default;
 
     bool exists() const;
 
-    bool isSyntheticTemporary(const GlobalState &gs) const;
+    bool isSyntheticTemporary() const;
 
     bool isAliasForGlobal(const GlobalState &gs) const;
 
@@ -39,10 +39,10 @@ public:
     bool operator!=(const LocalVariable &rhs) const;
 
     inline bool operator<(const LocalVariable &rhs) const {
-        if (this->_name.id() < rhs._name.id()) {
+        if (this->_name.rawId() < rhs._name.rawId()) {
             return true;
         }
-        if (this->_name.id() > rhs._name.id()) {
+        if (this->_name.rawId() > rhs._name.rawId()) {
             return false;
         }
         return this->unique < rhs.unique;
@@ -64,6 +64,10 @@ public:
 
     static inline LocalVariable selfVariable() {
         return LocalVariable(Names::selfLocal(), 0);
+    }
+
+    static inline LocalVariable unconditional() {
+        return LocalVariable(Names::unconditional(), 0);
     }
 };
 

@@ -1,13 +1,17 @@
 #ifndef RUBY_TYPER_LSPCONFIGURATION_H
 #define RUBY_TYPER_LSPCONFIGURATION_H
 
-#include "common/concurrency/WorkerPool.h"
-#include "main/lsp/json_types.h"
+#include "core/Loc.h"
+#include "main/lsp/json_enums.h"
 #include "main/options/options.h"
 
 namespace sorbet::realmain::lsp {
 
 class LSPOutput;
+class InitializeParams;
+class SorbetInitializationOptions;
+class Position;
+class Location;
 
 /**
  * Client options sent during initialization.
@@ -30,6 +34,23 @@ public:
     bool enableSorbetURIs = false;
     /** If true, then LSP sends metadata to the client every time it typechecks files. Used in tests. */
     bool enableTypecheckInfo = false;
+
+    /**
+     * Initial value for where LSP should output an information diagnostic for untyped values
+     * (current value is tracked in GlobalState)
+     */
+    core::TrackUntyped initialEnableHighlightUntyped = core::TrackUntyped::Nowhere;
+
+    /** If false, nudges in `typed: false` files are disabled */
+    bool enableTypedFalseCompletionNudges = true;
+
+    /**
+     * Initial value for which DiagnosticSeverity level to use when reporting untyped values.
+     *
+     * See `GlobalState::highlightUntypedDiagnosticSeverity` for more.
+     */
+    DiagnosticSeverity initialHighlightUntypedDiagnosticSeverity = DiagnosticSeverity::Information;
+
     /**
      * Whether or not the active client has support for snippets in CompletionItems.
      * Note: There is a generated ClientCapabilities class, but it is cumbersome to work with as most fields are
@@ -40,8 +61,15 @@ public:
     MarkupKind clientHoverMarkupKind = MarkupKind::Plaintext;
     /** What completion item markup should we send to the client? */
     MarkupKind clientCompletionItemMarkupKind = MarkupKind::Plaintext;
+    /** If true, then LSP client can resolve CodeAction's `edit` property lazily */
+    bool clientCodeActionResolveEditSupport = false;
+    /** If true, then LSP client can pass additional data between codeAction and codeAction/resolve requests */
+    bool clientCodeActionDataSupport = false;
 
     LSPClientConfiguration(const InitializeParams &initializeParams);
+
+    static core::TrackUntyped parseEnableHighlightUntyped(const SorbetInitializationOptions &options,
+                                                          core::TrackUntyped defaultIfUnset);
 };
 
 /**
@@ -73,10 +101,7 @@ public:
     /** Command line / startup options. */
     const options::Options &opts;
     const std::shared_ptr<LSPOutput> output;
-    WorkerPool &workers;
     const std::shared_ptr<spdlog::logger> logger;
-    /** If true, LSPLoop will skip configatron during type checking */
-    const bool skipConfigatron;
     /** If true, all queries will hit the slow path. */
     const bool disableFastPath;
     /** File system root of LSP client workspace. May be empty if it is the current working directory. */
@@ -84,9 +109,8 @@ public:
 
     // The following properties are configured during initialization.
 
-    LSPConfiguration(const options::Options &opts, const std::shared_ptr<LSPOutput> &output, WorkerPool &workers,
-                     const std::shared_ptr<spdlog::logger> &logger, bool skipConfigatron = false,
-                     bool disableFastPath = false);
+    LSPConfiguration(const options::Options &opts, const std::shared_ptr<LSPOutput> &output,
+                     const std::shared_ptr<spdlog::logger> &logger, bool disableFastPath = false);
 
     // Note: These two methods should only be called from the LSPPreprocessor thread, which is the only place that
     // should have mutable access to LSPConfiguration.
@@ -101,12 +125,15 @@ public:
     const LSPClientConfiguration &getClientConfig() const;
     core::FileRef uri2FileRef(const core::GlobalState &gs, std::string_view uri) const;
     std::string fileRef2Uri(const core::GlobalState &gs, const core::FileRef) const;
+    std::vector<std::string> frefsToPaths(const core::GlobalState &gs, const std::vector<core::FileRef> &refs) const;
     std::string remoteName2Local(std::string_view uri) const;
     std::string localName2Remote(std::string_view filePath) const;
-    core::Loc lspPos2Loc(core::FileRef fref, const Position &pos, const core::GlobalState &gs) const;
     // returns nullptr if this loc doesn't exist
     std::unique_ptr<Location> loc2Location(const core::GlobalState &gs, core::Loc loc) const;
     bool isFileIgnored(std::string_view filePath) const;
+
+    // Returns true if this path has an extension that sorbet can handle.
+    bool hasAllowedExtension(std::string_view filePath) const;
 
     /**
      * Returns 'true' if the URI corresponds to a path within the active workspace.

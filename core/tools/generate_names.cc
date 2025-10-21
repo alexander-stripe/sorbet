@@ -28,30 +28,48 @@ NameDef names[] = {
     {"initialize"},
     {"andAnd", "&&"},
     {"orOr", "||"},
-    {"to_s"},
-    {"to_a"},
-    {"to_h"},
-    {"to_hash"},
-    {"to_proc"},
+    {"orAsgn", "||="},
+    {"andAsgn", "&&="},
+    {"opAsgn", "op="},
+    {"toS", "to_s"},
+    {"toA", "to_a"},
+    {"toAry", "to_ary"},
+    {"toH", "to_h"},
+    {"toHash", "to_hash"},
+    {"toProc", "to_proc"},
     {"concat"},
     {"key_p", "key?"},
     {"intern"},
     {"call"},
     {"bang", "!"},
+    {"tilde", "~"},
     {"squareBrackets", "[]"},
     {"squareBracketsEq", "[]="},
     {"unaryPlus", "+@"},
     {"unaryMinus", "-@"},
+    {"plus", "+"},
+    {"minus", "-"},
     {"star", "*"},
     {"starStar", "**"},
     {"ampersand", "&"},
     {"tripleEq", "==="},
     {"orOp", "|"},
     {"backtick", "`"},
-    {"slice"},
     {"defined_p", "defined?"},
     {"undef"},
     {"each"},
+    {"subclasses"},
+    {"transpose"},
+    {"caseWhen"},
+
+    // Used in parser for error recovery
+    {"methodNameMissing", "<method-name-missing>"},
+    {"methodDefNameMissing", "<method-def-name-missing>"},
+    {"ivarNameMissing", "@<ivar-name-missing>"},
+    {"cvarNameMissing", "@@<cvar-name-missing>"},
+    {"ConstantNameMissing", "<ConstantNameMissing>", true},
+    {"ErrorNode", "<ErrorNode>", true},
+    {"dynamicConstAssign", "<dynamic-const-assign>"},
 
     // used in CFG for temporaries
     {"whileTemp", "<whileTemp>"},
@@ -69,17 +87,19 @@ NameDef names[] = {
     {"hashTemp", "<hashTemp>"},
     {"arrayTemp", "<arrayTemp>"},
     {"rescueTemp", "<rescueTemp>"},
-    {"rescueStartTemp", "<rescueStartTemp>"},
-    {"rescueEndTemp", "<rescueEndTemp>"},
+    {"exceptionValue", "<exceptionValue>"},
     {"gotoDeadTemp", "<gotoDeadTemp>"},
     {"exceptionClassTemp", "<exceptionClassTemp>"},
     {"isaCheckTemp", "<isaCheckTemp>"},
+    {"keepForCfgTemp", "<keepForCfgTemp>"},
+    {"retryTemp", "<retryTemp>"},
     {"throwAwayTemp", "<throwAwayTemp>"},
     {"castTemp", "<castTemp>"},
     {"finalReturn", "<finalReturn>"},
     {"cfgAlias", "<cfgAlias>"},
     {"magic", "<magic>"},
-    {"tConstTemp", "<tConstTemp>"},
+    {"unconditional", "<unconditional>"},
+    {"argPresent", "<argPresent>"},
     // end CFG temporaries
 
     {"include"},
@@ -95,43 +115,69 @@ NameDef names[] = {
     {"implementation"},
     {"override_", "override"},
     {"overridable"},
-    {"allow_incompatible"},
+    {"allowIncompatible", "allow_incompatible"},
+    {"visibility"},
+    {"reader"},
+    {"writer"},
+    {"sigForMethod"},
 
     // Sig builders
     {"bind"},
     {"params"},
     {"final_", "final"},
     {"returns"},
+    {"packagePrivate", "package_private"},
+    {"packagePrivateClassMethod", "package_private_class_method"},
     {"void_", "void"},
+    {"VOID", "VOID", true},
     {"checked"},
-    {"on_failure"},
+    {"never"},
+    {"onFailure", "on_failure"},
 
     {"all"},
     {"any"},
     {"enum_", "enum"},
+    {"deprecatedEnum", "deprecated_enum"},
     {"enums"},
+    {"serialize"},
     {"nilable"},
     {"proc"},
     {"untyped"},
     {"noreturn"},
+    {"anything"},
     {"singletonClass", "singleton_class"},
     {"class_", "class"},
     {"classOf", "class_of"},
     {"selfType", "self_type"},
-    {"attachedClass", "experimental_attached_class"},
+    {"experimentalAttachedClass", "experimental_attached_class"},
+    {"attachedClass", "attached_class"},
     {"coerce"},
 
     {"assertType", "assert_type!"},
     {"cast"},
     {"let"},
+    {"let_bang", "let!"},
+    {"subject"},
+    {"uncheckedLet", "<unchecked_let>"},
+    {"syntheticBind", "<synthetic bind>"},
+    {"assumeType", "<assume type>"},
     {"unsafe"},
     {"must"},
+    {"mustBecause", "must_because"},
     {"declareInterface", "interface!"},
     {"declareAbstract", "abstract!"},
     {"declareFinal", "final!"},
     {"declareSealed", "sealed!"},
     {"revealType", "reveal_type"},
     {"absurd"},
+    {"nonForcingIsA_p", "non_forcing_is_a?"},
+    {"valid_p", "valid?"},
+    {"recursivelyValid_p", "recursively_valid?"},
+    {"subtypeOf_p", "subtype_of?"},
+    {"describeObj", "describe_obj"},
+    {"errorMessageForObj", "error_message_for_obj"},
+    {"errorMessageForObjRecursive", "error_message_for_obj_recursive"},
+    {"validate_bang", "validate!"},
     // end T keywords
 
     // Ruby DSL methods which we understand
@@ -143,6 +189,8 @@ NameDef names[] = {
     {"protected_", "protected"},
     {"public_", "public"},
     {"privateClassMethod", "private_class_method"},
+    {"publicClassMethod", "public_class_method"},
+    {"privateConstant", "private_constant"},
     {"moduleFunction", "module_function"},
     {"aliasMethod", "alias_method"},
 
@@ -157,38 +205,43 @@ NameDef names[] = {
     {"typeTemplate", "type_template"},
     {"covariant", "out"},
     {"contravariant", "in"},
-    {"invariant", "<invariant>"},
     {"fixed"},
     {"lower"},
     {"upper"},
+    {"declareHasAttachedClass", "has_attached_class!"},
 
     {"prop"},
-    {"token_prop"},
-    {"timestamped_token_prop"},
-    {"created_prop"},
-    {"merchant_prop"},
-    {"encrypted_prop"},
-    {"array"},
+    {"tokenProp", "token_prop"},
+    {"timestampedTokenProp", "timestamped_token_prop"},
+    {"createdProp", "created_prop"},
+    {"updatedProp", "updated_prop"},
+    {"merchantProp", "merchant_prop"},
+    {"merchantTokenProp", "merchant_token_prop"},
+    {"name"},
+    {"encryptedProp", "encrypted_prop"},
+    {"defDelegator", "def_delegator"},
+    {"defDelegators", "def_delegators"},
     {"delegate"},
-    {"type"},
-    {"optional"},
     {"immutable"},
-    {"migrate"},
     {"default_", "default"},
     {"const_", "const"},
     {"token"},
     {"created"},
+    {"updated"},
     {"merchant"},
     {"foreign"},
+    {"allowDirectMutation", "allow_direct_mutation"},
+    {"ifunset"},
+    {"instanceVariableGet", "instance_variable_get"},
+    {"instanceVariableSet", "instance_variable_set"},
     {"computedBy", "computed_by"},
     {"factory"},
-    {"Chalk", "Chalk", true},
-    {"ODM", "ODM", true},
-    {"Mutator", "Mutator", true},
+    {"InexactStruct", "InexactStruct", true},
+    {"ImmutableStruct", "ImmutableStruct", true},
     {"Private", "Private", true},
-    {"HashMutator", "HashMutator", true},
-    {"ArrayMutator", "ArrayMutator", true},
-    {"DocumentMutator", "DocumentMutator", true},
+    {"Types", "Types", true},
+    {"Methods", "Methods", true},
+    {"DeclBuilder", "DeclBuilder", true},
 
     {"prefix"},
     {"to"},
@@ -199,6 +252,8 @@ NameDef names[] = {
     {"cattrAccessor", "cattr_accessor"},
     {"cattrReader", "cattr_reader"},
     {"cattrWriter", "cattr_writer"},
+    {"threadMattrAccessor", "thread_mattr_accessor"},
+    {"threadCattrAccessor", "thread_cattr_accessor"},
     {"instanceReader", "instance_reader"},
     {"instanceWriter", "instance_writer"},
     {"instanceAccessor", "instance_accessor"},
@@ -206,18 +261,47 @@ NameDef names[] = {
     {"classAttribute", "class_attribute"},
 
     {"describe"},
+    {"exampleGroup", "example_group"},
+    {"context"},
+    {"xdescribe"},
+    {"xcontext"},
+    {"fdescribe"},
+    {"fcontext"},
     {"it"},
+    {"fit"},
+    {"xit"},
+    {"specify"},
+    {"fspecify"},
+    {"xspecify"},
+    {"example"},
+    {"fexample"},
+    {"xexample"},
+    {"focus"},
+    {"pending"},
+    {"skip"},
     {"before"},
+    {"beforeAngles", "<before>"},
     {"after"},
     {"afterAngles", "<after>"},
+    {"itAngles", "<it>"},
+    {"testEach", "test_each"},
+    {"testEachHash", "test_each_hash"},
+    {"sharedExamples", "shared_examples"},
+    {"sharedContext", "shared_context"},
+    {"sharedExamplesFor", "shared_examples_for"},
+    {"includeExamples", "include_examples"},
+    {"includeContext", "include_context"},
+    {"RSpec", "RSpec", true},
+    {"Core", "Core", true},
+    {"ExampleGroup", "ExampleGroup", true},
+
+    {"constSet", "const_set"},
 
     {"dslOptional", "dsl_optional"},
     {"dslRequired", "dsl_required"},
     {"implied"},
     {"skipGetter", "skip_getter"},
     {"skipSetter", "skip_setter"},
-
-    {"wrapInstance", "wrap_instance"},
 
     {"registered"},
     {"instanceRegistered", "<instance_registered>"},
@@ -233,19 +317,24 @@ NameDef names[] = {
     {"Command", "Command", true},
     {"Enum", "Enum", true},
 
-    {"Google", "Google", true},
-    {"Protobuf", "Protobuf", true},
-    {"DescriptorPool", "DescriptorPool", true},
-    {"generatedPool", "generated_pool"},
-    {"lookup"},
-    {"msgclass"},
-    {"enummodule"},
-
     {"ActiveRecord", "ActiveRecord", true},
     {"Migration", "Migration", true},
     {"Compatibility", "Compatibility", true},
+    {"ActiveSupport", "ActiveSupport", true},
+    {"Concern", "Concern", true},
 
     {"instance"},
+    {"singletonClassInstance", "singleton class instance"},
+    {"normal"},
+    {"genericPropGetter"},
+
+    {"raise"},
+    {"fail"},
+    {"rewriterRaiseUnimplemented", "Sorbet rewriter pass partially unimplemented"},
+
+    {"test"},
+    {"setup"},
+    {"teardown"},
     // end DSL methods
 
     // The next two names are used as keys in SymbolInfo::members to store
@@ -260,17 +349,22 @@ NameDef names[] = {
     {"singleton", "<singleton class>"},
     {"attached", "<attached class>"},
 
+    // Requires ancestor
+    {"requiredAncestors", "<required-ancestor>"},
+    {"requiredAncestorsLin", "<required-ancestor-lin>"},
+    {"requiresAncestor", "requires_ancestor"},
+
     // This behaves like the above two names, in the sense that we use a member
     // on a class to lookup an associated symbol with some extra info.
     {"sealedSubclasses", "sealed_subclasses"},
 
-    // This name is used as a key in SymbolInfo::members to store the module
-    // registered via the `mixes_in_class_method` name.
-    {"classMethods", "<class methods>"},
+    // Used to store arguments to a "mixes_in_class_methods()" call
+    {"mixedInClassMethods", "<mixed_in_class_methods>"},
     {"mixesInClassMethods", "mixes_in_class_methods"},
+    {"ClassMethods", "ClassMethods", true},
+    {"classMethods", "class_methods"},
 
     {"blockTemp", "<block>"},
-    {"blockRetrunType", "<block-return-type>"},
     {"blockPreCallTemp", "<block-pre-call-temp>"},
     {"blockPassTemp", "<block-pass>"},
     {"forTemp"},
@@ -278,38 +372,64 @@ NameDef names[] = {
     {"blockCall", "<block-call>"},
     {"blockBreakAssign", "<block-break-assign>"},
     {"arg", "<arg>"},
+    {"kwargs", "<kwargs>"},
+    {"restargs", "<restargs>"},
     {"blkArg", "<blk>"},
     {"blockGiven_p", "block_given?"},
+    {"anonymousBlock", "<anonymous-block>"},
+
+    // Method names known to Data
+    {"define"},
 
     // Used to generate temporary names for destructuring arguments ala proc do
     //  |(x,y)|; end
     {"destructureArg", "<destructure>"},
 
     {"lambda"},
+    {"lambdaTLet", "<lambda T.let>"},
+    {"returnType", "return_type"},
     {"nil_p", "nil?"},
     {"blank_p", "blank?"},
     {"present_p", "present?"},
     {"nil"},
-    {"super"},
+    {"super", "<super>"},
+    {"untypedSuper", "<untypedSuper>"},
     {"empty", ""},
 
     {"buildHash", "<build-hash>"},
     {"buildArray", "<build-array>"},
+    {"buildRange", "<build-range>"},
+    {"mergeHash", "<merge-hash>"},
+    {"mergeHashValues", "<merge-hash-values>"},
+    {"toHashDup", "<to-hash-dup>"},
+    {"toHashNoDup", "<to-hash-nodup>"},
     {"splat", "<splat>"},
     {"expandSplat", "<expand-splat>"},
-    {"suggestType", "<suggest-type>"},
+    {"suggestConstantType", "<suggest-constant-type>"},
+    {"suggestFieldType", "<suggest-field-type>"},
+    {"checkMatchArray", "<check-match-array>"},
+    {"definedInstanceVar", "<defined-instance-var>"},
+    {"definedClassVar", "<defined-class-var>"},
     {"arg0"},
     {"arg1"},
     {"arg2"},
+    {"arg3"},
     {"opts"},
+    {"args"},
     {"Elem", "Elem", true},
     {"keepForIde", "keep_for_ide"},
-    {"keepForTypechecking", "keep_for_typechecking"},
+    {"retry", "<retry>"},
     {"unresolvedAncestors", "<unresolved-ancestors>"},
+    {"defineTopClassOrModule", "<define-top-class-or-module>"},
+    {"nilForSafeNavigation", "<nil-for-safe-navigation>"},
+    {"checkAndAnd", "<check-and-and>"},
 
-    {"is_a_p", "is_a?"},
-    {"kind_of", "kind_of?"},
+    {"isA_p", "is_a?"},
+    {"kindOf_p", "kind_of?"},
+    {"instanceOf_p", "instance_of?"},
     {"lessThan", "<"},
+    {"greaterThan", ">"},
+    {"equal_p", "equal?"},
     {"eqeq", "=="},
     {"neq", "!="},
     {"leq", "<="},
@@ -321,26 +441,66 @@ NameDef names[] = {
     {"first"},
     {"min"},
     {"max"},
+    {"sum"},
+    {"sample"},
+    {"at"},
+
+    // Argument forwarding
+    {"fwdArgs", "<fwd-args>"},
+    {"fwdKwargs", "<fwd-kwargs>"},
+    {"fwdBlock", "<fwd-block>"},
 
     // Enumerable#flat_map has special-case logic in Infer
     {"flatMap", "flat_map"},
 
-    // Array#flatten, #product and #compact are also custom-implemented
+    // Array#dig, Array#flatten, #product, #compact and #zip are also custom-implemented
+    {"dig"},
     {"flatten"},
     {"product"},
     {"compact"},
+    {"zip"},
+
+    // Pattern matching
+    {"patternMatch", "<pattern-match>"},
+
+    {"regexBackref", "<regex-backref>"},
 
     {"staticInit", "<static-init>"},
 
     {"require"},
     {"callWithSplat", "<call-with-splat>"},
-    {"callWithBlock", "<call-with-block>"},
-    {"callWithSplatAndBlock", "<call-with-splat-and-block>"},
-    {"enumerable_to_h"},
-    {"selfNew", "<self-new>"},
+    {"callWithBlockPass", "<call-with-block-pass>"},
+    {"callWithSplatAndBlockPass", "<call-with-splat-and-block-pass>"},
+    {"enumerableToH", "enumerable_to_h"},
+    {"blockBreak", "<block-break>"},
+    {"stringInterpolate", "<string-interpolate>"},
+
+    // Packager
+    {"import"},
+    {"testImport", "test_import"},
+    {"export_", "export"},
+    {"legacy"},
+    {"strict"},
+    {"visibleTo", "visible_to"},
+    {"tests"},
+    {"exportAll", "export_all!"},
+    {"layer"},
+    {"strictDependencies", "strict_dependencies"},
+    {"false_", "false"},
+    {"layered"},
+    {"layeredDag", "layered_dag"},
+    {"dag"},
+    {"sorbet"},
+    {"minTypedLevel", "min_typed_level"},
+    {"testsMinTypedLevel", "tests_min_typed_level"},
+    {"PackageSpec", "PackageSpec", true},
+    {"PackageSpecRegistry", "<PackageSpecRegistry>", true},
+    {"only"},
+    {"testRb", "test_rb"},
+    {"preludePackage", "prelude_package"},
 
     // GlobalState initEmpty()
-    {"Top", "<any>", true},
+    {"Top", "T.anything", true},
     {"Bottom", "T.noreturn", true},
     {"Untyped", "T.untyped", true},
     {"Root", "<root>", true},
@@ -348,6 +508,7 @@ NameDef names[] = {
     {"String", "String", true},
     {"Integer", "Integer", true},
     {"Float", "Float", true},
+    {"Numeric", "Numeric", true},
     {"Symbol", "Symbol", true},
     {"Array", "Array", true},
     {"Hash", "Hash", true},
@@ -358,40 +519,62 @@ NameDef names[] = {
     {"NilClass", "NilClass", true},
     {"Class", "Class", true},
     {"Module", "Module", true},
+    {"Time", "Time", true},
     {"Todo", "<todo sym>", true},
+    {"TodoMethod", "<todo method>", false},
+    {"TodoTypeParameter", "<todo typeargument>", true},
     {"NoSymbol", "<none>", true},
+    {"noFieldOrStaticField", "<no-field-or-static-field>", false},
+    {"noMethod", "<no-method>", false},
+    {"NoTypeParameter", "<no-type-argument>", true},
+    {"NoTypeMember", "<no-type-member>", true},
     {"Opus", "Opus", true},
     {"T", "T", true},
     {"BasicObject", "BasicObject", true},
     {"Kernel", "Kernel", true},
     {"Range", "Range", true},
     {"Regexp", "Regexp", true},
+    {"Exception", "Exception", true},
     {"StandardError", "StandardError", true},
     {"Complex", "Complex", true},
     {"Rational", "Rational", true},
     // A magic non user-creatable class with methods to keep state between passes
     {"Magic", "<Magic>", true},
-    // A magic non user-creatable class for mimicing the decl builder during cfg
+    // A magic non user-creatable class to attach symbols for blaming untyped to
+    {"UntypedSource", "<UntypedSource>", true},
+    {"tupleUnderlying", "<tupleUnderlying>", true},
+    {"shapeUnderlying", "<shapeUnderlying>", true},
+    {"tupleLub", "<tupleLub>", true},
+    {"shapeLub", "<shapeLub>", true},
+    {"YieldLoadArg", "<YieldLoadArg>", true},
+    {"GetCurrentException", "<GetCurrentException>", true},
+    {"LoadYieldParams", "<LoadYieldParams>", true},
+    {"shapeSquareBracketsEq", "<shapeSquareBracketsEq>", true},
+    // A magic non user-creatable class for binding procs to attached_class
+    {"BindToAttachedClass", "<BindToAttachedClass>", true},
+    // A magic non user-creatable class for binding procs to self_type
+    {"BindToSelfType", "<BindToSelfType>", true},
+    // A magic non user-creatable class for mimicking the decl builder during cfg
     // construction
     {"DeclBuilderForProcs", "<DeclBuilderForProcs>", true},
     {"Enumerable", "Enumerable", true},
     {"Enumerator", "Enumerator", true},
     {"Lazy", "Lazy", true},
+    {"Chain", "Chain", true},
     {"Set", "Set", true},
     {"Struct", "Struct", true},
+    {"Data", "Data", true},
     {"File", "File", true},
+    {"Encoding", "Encoding", true},
+    {"getEncoding", "<get-encoding>"},
     {"Static", "Static", true},
-    {"StubModule", "StubModule", true},
-    {"StubSuperClass", "StubSuperClass", true},
-    {"StubMixin", "StubMixin", true},
-    {"Configatron", "Configatron", true},
-    {"Store", "Store", true},
-    {"RootStore", "RootStore", true},
+    {"StubModule", "<StubModule>", true},
+    {"StubSuperClass", "<StubSuperClass>", true},
+    {"StubMixin", "<StubMixin>", true},
+    {"PlaceholderMixin", "<PlaceholderMixin>", true},
     {"Base", "Base", true},
     {"Void", "Void", true},
     {"TypeAlias", "<TypeAlias>", true},
-    {"Tools", "Tools", true},
-    {"Accessible", "Accessible", true},
     {"Generic", "Generic", true},
     {"Tuple", "Tuple", true},
     {"Shape", "Shape", true},
@@ -405,17 +588,38 @@ NameDef names[] = {
     {"Builder", "Builder", true},
     {"Sig", "Sig", true},
     {"Utils", "Utils", true},
-    {"RuntimeProfiled", "RuntimeProfiled", true},
     {"UndeclaredFieldStub", "<undeclared-field-stub>", true},
     {"badAliasMethodStub", "<bad-method-alias-stub>"},
     {"Helpers", "Helpers", true},
     {"Net", "Net", true},
     {"IMAP", "IMAP", true},
     {"Protocol", "Protocol", true},
-    {"CFGExport", "CFGExport", true},
     {"WithoutRuntime", "WithoutRuntime", true},
     {"Singleton", "Singleton", true},
     {"AttachedClass", "<AttachedClass>", true},
+    {"NonForcingConstants", "NonForcingConstants", true},
+    {"VERSION", "VERSION", true},
+    {"Thread", "Thread", true},
+    {"Configuration", "Configuration", true},
+    {"Test", "Test", true},
+    {"Autogen", "Autogen", true},
+    {"Tokens", "Tokens", true},
+    {"AccountModelMerchant", "AccountModelMerchant", true},
+    {"Token", "Token", true},
+    {"Account", "Account", true},
+    {"Merchant", "Merchant", true},
+
+    // RBS
+    {"RBSBind", "<RBSBind>", true},
+    {"RBSTypeAlias", "<RBSTypeAlias>", true},
+
+    // RBS synthetic generics
+    {"syntheticSquareBrackets", "<syntheticSquareBrackets>"},
+
+    // Typos
+    {"Int", "Int", true},
+    {"Timestamp", "Timestamp", true},
+    {"Bool", "Bool", true},
 };
 
 void emit_name_header(ostream &out, NameDef &name) {
@@ -423,7 +627,8 @@ void emit_name_header(ostream &out, NameDef &name) {
     out << "#define NAME_" << name.srcName << '\n';
     out << "    // \"" << name.val << "\"" << '\n';
     out << "    static inline constexpr NameRef " << name.srcName << "() {" << '\n';
-    out << "        return NameRef(NameRef::WellKnown{}, " << name.id << ");" << '\n';
+    out << "        return NameRef(NameRef::WellKnown{}, NameKind::" << (name.isConstant ? "CONSTANT" : "UTF8") << ", "
+        << name.id << ");" << '\n';
     out << "    }" << '\n';
     out << "#endif" << '\n';
     out << '\n';
@@ -433,7 +638,7 @@ void emit_name_string(ostream &out, NameDef &name) {
     out << "const char *" << name.srcName << " = \"";
     out << absl::CEscape(name.val) << "\";" << '\n';
 
-    out << "std::string_view " << name.srcName << "_DESC{(char*)";
+    out << "string_view " << name.srcName << "_DESC{(char*)";
     out << name.srcName << "," << name.val.size() << "};" << '\n';
     out << '\n';
 }
@@ -446,22 +651,26 @@ void emit_register(ostream &out) {
     }
     out << '\n';
     for (auto &name : names) {
-        out << "    ENFORCE(" << name.srcName << "_id._id == " << name.id << "); /* " << name.srcName << "() */"
-            << '\n';
+        out << "    ENFORCE(" << name.srcName << "_id." << (name.isConstant ? "constantIndex" : "utf8Index")
+            << "() == " << name.id << "); /* " << name.srcName << "() */" << '\n';
     }
     out << '\n';
     out << "}" << '\n';
 }
 
 int main(int argc, char **argv) {
-    int i = 1;
+    int constantI = 0;
+    int utf8I = 0;
     for (auto &name : names) {
         if (name.isConstant) {
-            i++;
+            utf8I++;
+            name.id = constantI++;
+        } else {
+            name.id = utf8I++;
         }
-        name.id = i++;
     }
-    int lastId = i;
+    int lastConstantId = constantI;
+    int lastUtf8Id = utf8I;
 
     // emit header file
     {
@@ -490,9 +699,14 @@ int main(int argc, char **argv) {
         }
         header << "}" << '\n';
 
-        header << "#ifndef NAME_LAST_WELL_KNOWN_NAME" << '\n';
-        header << "#define NAME_LAST_WELL_KNOWN_NAME" << '\n';
-        header << "constexpr int LAST_WELL_KNOWN_NAME = " << lastId << ";" << '\n';
+        header << "#ifndef NAME_LAST_WELL_KNOWN_CONSTANT_NAME" << '\n';
+        header << "#define NAME_LAST_WELL_KNOWN_CONSTANT_NAME" << '\n';
+        header << "constexpr int LAST_WELL_KNOWN_CONSTANT_NAME = " << lastConstantId << ";" << '\n';
+        header << "#endif" << '\n';
+
+        header << "#ifndef NAME_LAST_WELL_KNOWN_UTF8_NAME" << '\n';
+        header << "#define NAME_LAST_WELL_KNOWN_UTF8_NAME" << '\n';
+        header << "constexpr int LAST_WELL_KNOWN_UTF8_NAME = " << lastUtf8Id << ";" << '\n';
         header << "#endif" << '\n';
 
         header << "    void registerNames(GlobalState &gs);" << '\n';
@@ -511,6 +725,7 @@ int main(int argc, char **argv) {
         classfile << "#include \"core/GlobalState.h\"" << '\n' << '\n';
         classfile << "#include \"core/Names.h\"" << '\n' << '\n';
         classfile << "#include \"core/Names_gen.h\"" << '\n' << '\n';
+        classfile << "using namespace std;" << '\n';
         classfile << "namespace sorbet {" << '\n';
         classfile << "namespace core {" << '\n';
         classfile << "namespace Names {" << '\n';

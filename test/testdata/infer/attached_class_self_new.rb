@@ -3,14 +3,14 @@
 class NoArgs
   extend T::Sig
 
-  sig {returns(T.experimental_attached_class)}
+  sig {returns(T.attached_class)}
   def self.make
-    T.reveal_type(self.new) # error: Revealed type: `T.class_of(NoArgs)::<AttachedClass>`
+    T.reveal_type(self.new) # error: Revealed type: `T.attached_class (of NoArgs)`
   end
 
-  sig {returns(T.experimental_attached_class)}
+  sig {returns(T.attached_class)}
   def self.make_implicit_new
-    T.reveal_type(new) # error: Revealed type: `T.class_of(NoArgs)::<AttachedClass>`
+    T.reveal_type(new) # error: Revealed type: `T.attached_class (of NoArgs)`
   end
 
 end
@@ -21,31 +21,31 @@ class PosArgs
   sig {params(x: Integer, y: String).void}
   def initialize(x, y); end
 
-  sig {returns(T.experimental_attached_class)}
+  sig {returns(T.attached_class)}
   def self.make
-    T.reveal_type(self.new(10, "foo")) # error: Revealed type: `T.class_of(PosArgs)::<AttachedClass>`
+    T.reveal_type(self.new(10, "foo")) # error: Revealed type: `T.attached_class (of PosArgs)`
 
     # Not matching initialize
     T.reveal_type(self.new())
-                # ^^^^^^^^^^ error: Not enough arguments provided
-  # ^^^^^^^^^^^^^^^^^^^^^^^^^ error: Revealed type: `T.class_of(PosArgs)::<AttachedClass>`
+    #                      ^ error: Not enough arguments provided
+  # ^^^^^^^^^^^^^^^^^^^^^^^^^ error: Revealed type: `T.attached_class (of PosArgs)`
   end
 end
 
-class NamedArgs
+class NamedParams
   extend T::Sig
 
   sig {params(x: Integer, y: String).void}
   def initialize(x:, y:); end
 
-  sig {returns(T.experimental_attached_class)}
+  sig {returns(T.attached_class)}
   def self.make
-    T.reveal_type(self.new(x: 10, y: "foo")) # error: Revealed type: `T.class_of(NamedArgs)::<AttachedClass>`
+    T.reveal_type(self.new(x: 10, y: "foo")) # error: Revealed type: `T.attached_class (of NamedParams)`
 
     # Not matching initialize
     T.reveal_type(self.new(x: 10))
-                # ^^^^^^^^^^^^^^^ error: Missing required keyword argument `y`
-  # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ error: Revealed type: `T.class_of(NamedArgs)::<AttachedClass>`
+    #                           ^ error: Missing required keyword argument `y`
+  # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ error: Revealed type: `T.attached_class (of NamedParams)`
   end
 end
 
@@ -55,13 +55,13 @@ class BlockArg
   sig {params(blk: T.proc.params(x: Integer).void).void}
   def initialize(&blk); end
 
-  sig {returns(T.experimental_attached_class)}
+  sig {returns(T.attached_class)}
   def self.make
-    T.reveal_type(self.new {|x| x + 1}) # error: Revealed type: `T.class_of(BlockArg)::<AttachedClass>`
+    T.reveal_type(self.new {|x| x + 1}) # error: Revealed type: `T.attached_class (of BlockArg)`
 
     T.reveal_type(self.new)
-                # ^^^^^^^^ error: `initialize` requires a block parameter
-  # ^^^^^^^^^^^^^^^^^^^^^^^ error: Revealed type: `T.class_of(BlockArg)::<AttachedClass>`
+    #                     ^ error: `initialize` requires a block parameter
+  # ^^^^^^^^^^^^^^^^^^^^^^^ error: Revealed type: `T.attached_class (of BlockArg)`
   end
 end
 
@@ -93,4 +93,29 @@ class InstNewBlock
   def test
     T.reveal_type(self.new {|x| x + 1}) # error: Revealed type: `String`
   end
+end
+
+# typed: true
+class OverridesNewBad
+  extend T::Sig
+
+  sig {params(arg0: Integer).returns(Integer)}
+  def self.new(arg0); 0; end
+
+  def initialize; end
+
+  x = new # error: Not enough arguments provided for method `OverridesNewBad.new`
+  T.reveal_type(x) # error: Revealed type: `Integer`
+end
+
+class OverridesNewNotGreatButWellTakeIt
+  extend T::Sig
+
+  sig {params(arg0: Integer).returns(T.attached_class)}
+  def self.new(arg0); super; end
+
+  def initialize(arg0); end
+
+  x = new # error: Not enough arguments provided for method `OverridesNewNotGreatButWellTakeIt.new`
+  T.reveal_type(x) # error: `T.attached_class (of OverridesNewNotGreatButWellTakeIt)`
 end

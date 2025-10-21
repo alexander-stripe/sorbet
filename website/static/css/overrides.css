@@ -4,6 +4,17 @@
  * https://docusaurus.io/docs/en/api-pages#styles
  */
 
+/**
+ * Once the text gets this small, the additional bottom margin just makes it
+ * harder to see that there was a heading there at all, versus just a bold
+ * sentence.
+ */
+h4,
+h5,
+h6 {
+  margin-bottom: 0;
+}
+
 /*
  * Docusaurus uses blockquote to show warnings / yellow callouts.
  * Sometimes, we don't want this.
@@ -49,6 +60,12 @@ a:hover {
 
 .nav-footer a {
   color: var(--sorbet-purple-6);
+}
+
+.nav-footer .wrapper svg {
+  position: relative;
+  top: +7px;
+  margin: 0 32px 0 0;
 }
 
 /* Don't highlight the logo in the header on hover:
@@ -102,7 +119,7 @@ sup {
 /*
  * The default showcase section heading uses our one of the colors from our
  * siteConfig.js. This color only looks good in the headers for us, not in text
- * colors, so we're reseting it to initial (black) here.
+ * colors, so we're resetting it to initial (black) here.
  */
 .productShowcaseSection h2 {
   color: initial;
@@ -150,6 +167,11 @@ sup {
   .productShowcaseSection .link {
     /* 64px for the image + (2 x 20px) for the padding. */
     max-width: 104px;
+  }
+
+  .nav-footer .wrapper svg {
+    display: block;
+    margin: 0 0 8px;
   }
 }
 

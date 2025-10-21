@@ -3,29 +3,33 @@
 #include "ast/verifier/verifier.h"
 #include "common/typecase.h"
 #include "main/pipeline/semantic_extension/SemanticExtension.h"
+#include "rewriter/AttrReader.h"
 #include "rewriter/ClassNew.h"
+#include "rewriter/Cleanup.h"
 #include "rewriter/Command.h"
+#include "rewriter/Concern.h"
+#include "rewriter/ConstantAssumeType.h"
 #include "rewriter/DSLBuilder.h"
-#include "rewriter/DefaultArgs.h"
+#include "rewriter/Data.h"
+#include "rewriter/DefDelegator.h"
 #include "rewriter/Delegate.h"
 #include "rewriter/Flatfiles.h"
-#include "rewriter/InterfaceWrapper.h"
+#include "rewriter/Flatten.h"
+#include "rewriter/HasAttachedClass.h"
+#include "rewriter/Initializer.h"
 #include "rewriter/Mattr.h"
 #include "rewriter/Minitest.h"
 #include "rewriter/MixinEncryptedProp.h"
+#include "rewriter/ModuleFunction.h"
+#include "rewriter/PackageSpec.h"
 #include "rewriter/Private.h"
 #include "rewriter/Prop.h"
-#include "rewriter/ProtobufDescriptorPool.h"
 #include "rewriter/Rails.h"
-#include "rewriter/Regexp.h"
-#include "rewriter/SelfNew.h"
 #include "rewriter/Struct.h"
 #include "rewriter/TEnum.h"
+#include "rewriter/TestCase.h"
+#include "rewriter/TypeAssertion.h"
 #include "rewriter/TypeMembers.h"
-#include "rewriter/attr_reader.h"
-#include "rewriter/cleanup.h"
-#include "rewriter/flatten.h"
-#include "rewriter/module_function.h"
 
 using namespace std;
 
@@ -35,107 +39,126 @@ class Rewriterer {
     friend class Rewriter;
 
 public:
-    unique_ptr<ast::ClassDef> postTransformClassDef(core::MutableContext ctx, unique_ptr<ast::ClassDef> classDef) {
-        Command::run(ctx, classDef.get());
-        Rails::run(ctx, classDef.get());
-        TEnum::run(ctx, classDef.get());
-        Flatfiles::run(ctx, classDef.get());
-        Prop::run(ctx, classDef.get());
-        TypeMembers::run(ctx, classDef.get());
-        DefaultArgs::run(ctx, classDef.get());
+    void postTransformClassDef(core::MutableContext ctx, ast::ExpressionPtr &tree) {
+        auto classDef = ast::cast_tree<ast::ClassDef>(tree);
+
+        auto isClass = classDef->kind == ast::ClassDef::Kind::Class;
+
+        Command::run(ctx, classDef);
+        Rails::run(ctx, classDef);
+        TEnum::run(ctx, classDef);
+        Flatfiles::run(ctx, classDef);
+        Prop::run(ctx, classDef);
+        TypeMembers::run(ctx, classDef);
+        Concern::run(ctx, classDef);
+        TestCase::run(ctx, classDef);
+
+        PackageSpec::run(ctx, classDef);
 
         for (auto &extension : ctx.state.semanticExtensions) {
-            extension->run(ctx, classDef.get());
+            extension->run(ctx, classDef);
         }
 
-        ast::Expression *prevStat = nullptr;
-        UnorderedMap<ast::Expression *, vector<unique_ptr<ast::Expression>>> replaceNodes;
+        ast::ExpressionPtr *prevStat = nullptr;
+        UnorderedMap<void *, vector<ast::ExpressionPtr>> replaceNodes;
         for (auto &stat : classDef->rhs) {
             typecase(
-                stat.get(),
-                [&](ast::Assign *assign) {
-                    vector<unique_ptr<ast::Expression>> nodes;
+                stat,
+                [&](ast::Assign &assign) {
+                    vector<ast::ExpressionPtr> nodes;
 
-                    nodes = Struct::run(ctx, assign);
+                    nodes = Struct::run(ctx, &assign);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = std::move(nodes);
                         return;
                     }
 
-                    nodes = ClassNew::run(ctx, assign);
+                    nodes = Data::run(ctx, &assign);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = std::move(nodes);
                         return;
                     }
 
-                    nodes = ProtobufDescriptorPool::run(ctx, assign);
+                    nodes = ClassNew::run(ctx, &assign);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = std::move(nodes);
                         return;
                     }
 
-                    nodes = Regexp::run(ctx, assign);
-                    if (!nodes.empty()) {
-                        replaceNodes[stat.get()] = std::move(nodes);
-                        return;
-                    }
+                    // This has to come after the `Class.new` rewriter, because they would otherwise overlap.
+                    ConstantAssumeType::run(ctx, &assign);
                 },
 
-                [&](ast::Send *send) {
-                    vector<unique_ptr<ast::Expression>> nodes;
+                [&](ast::Send &send) {
+                    vector<ast::ExpressionPtr> nodes;
 
-                    nodes = MixinEncryptedProp::run(ctx, send);
+                    nodes = MixinEncryptedProp::run(ctx, &send);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = std::move(nodes);
                         return;
                     }
 
-                    nodes = Minitest::run(ctx, send);
+                    nodes = Minitest::run(ctx, isClass, &send);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = move(nodes);
                         return;
                     }
 
-                    nodes = DSLBuilder::run(ctx, send);
+                    nodes = DSLBuilder::run(ctx, &send);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = std::move(nodes);
                         return;
                     }
 
-                    nodes = Private::run(ctx, send);
+                    nodes = Private::run(ctx, &send);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = std::move(nodes);
                         return;
                     }
 
-                    nodes = Delegate::run(ctx, send);
+                    nodes = DefDelegator::run(ctx, &send);
+                    if (!nodes.empty()) {
+                        replaceNodes[stat.get()] = std::move(nodes);
+                        return;
+                    }
+
+                    nodes = Delegate::run(ctx, &send);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = std::move(nodes);
                         return;
                     }
 
                     // This one is different: it gets an extra prevStat argument.
-                    nodes = AttrReader::run(ctx, send, prevStat);
+                    nodes = AttrReader::run(ctx, &send, prevStat);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = std::move(nodes);
                         return;
                     }
 
                     // This one is also a little different: it gets the ClassDef kind
-                    nodes = Mattr::run(ctx, send, classDef->kind);
+                    nodes = Mattr::run(ctx, &send, classDef->kind);
+                    if (!nodes.empty()) {
+                        replaceNodes[stat.get()] = std::move(nodes);
+                        return;
+                    }
+
+                    // This one is also a little different: it gets the ClassDef kind
+                    nodes = HasAttachedClass::run(ctx, isClass, &send);
                     if (!nodes.empty()) {
                         replaceNodes[stat.get()] = std::move(nodes);
                         return;
                     }
                 },
 
-                [&](ast::Expression *e) {});
+                [&](ast::MethodDef &mdef) { Initializer::run(ctx, &mdef, prevStat); },
 
-            prevStat = stat.get();
+                [&](const ast::ExpressionPtr &e) {});
+
+            prevStat = &stat;
         }
         if (replaceNodes.empty()) {
-            ModuleFunction::run(ctx, classDef.get());
-            return classDef;
+            ModuleFunction::run(ctx, classDef);
+            return;
         }
 
         auto oldRHS = std::move(classDef->rhs);
@@ -143,42 +166,43 @@ public:
         classDef->rhs.reserve(oldRHS.size());
 
         for (auto &stat : oldRHS) {
-            if (replaceNodes.find(stat.get()) == replaceNodes.end()) {
+            auto replacement = replaceNodes.find(stat.get());
+            if (replacement == replaceNodes.end()) {
                 classDef->rhs.emplace_back(std::move(stat));
             } else {
-                for (auto &newNode : replaceNodes.at(stat.get())) {
+                for (auto &newNode : replacement->second) {
                     classDef->rhs.emplace_back(std::move(newNode));
                 }
             }
         }
-        ModuleFunction::run(ctx, classDef.get());
-
-        return classDef;
+        ModuleFunction::run(ctx, classDef);
     }
 
     // NOTE: this case differs from the `Send` typecase branch in `postTransformClassDef` above, as it will apply to all
     // sends, not just those that are present in the RHS of a `ClassDef`.
-    unique_ptr<ast::Expression> postTransformSend(core::MutableContext ctx, unique_ptr<ast::Send> send) {
-        if (auto expr = InterfaceWrapper::run(ctx, send.get())) {
-            return expr;
+    void postTransformSend(core::MutableContext ctx, ast::ExpressionPtr &tree) {
+        auto send = ast::cast_tree<ast::Send>(tree);
+
+        if (ClassNew::run(ctx, send)) {
+            return;
         }
 
-        if (auto expr = SelfNew::run(ctx, send.get())) {
-            return expr;
+        if (auto expr = TypeAssertion::run(ctx, send)) {
+            tree = std::move(expr);
+            return;
         }
-
-        return send;
     }
 
 private:
     Rewriterer() = default;
 };
 
-unique_ptr<ast::Expression> Rewriter::run(core::MutableContext ctx, unique_ptr<ast::Expression> tree) {
+ast::ExpressionPtr Rewriter::run(core::MutableContext ctx, ast::ExpressionPtr tree) {
     auto ast = std::move(tree);
 
     Rewriterer rewriter;
-    ast = ast::TreeMap::apply(ctx, rewriter, std::move(ast));
+
+    ast::TreeWalk::apply(ctx, rewriter, ast);
     // This AST flattening pass requires that we mutate the AST in a way that our previous DSL passes were not designed
     // around, which is why it runs all at once and is not expressed as a `patch` method like the other DSL passes. This
     // is a rare case: in general, we should *not* add new DSL passes here.

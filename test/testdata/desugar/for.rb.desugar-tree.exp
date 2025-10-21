@@ -1,25 +1,25 @@
-class <emptyTree><<C <root>>> < ()
+class <emptyTree><<C <root>>> < (::<todo sym>)
   class <emptyTree>::<C A><<C <todo sym>>> < (::<todo sym>)
-    def self.each<<C <todo sym>>>(&<blk>)
+    def self.each<<todo method>>(&blk)
       begin
-        <blk>.call(1, 2, 3, 4, 5)
-        <blk>.call(6, 7, 8, 9, 0)
+        blk.call(1, 2, 3, 4, 5)
+        blk.call(6, 7, 8, 9, 0)
       end
     end
   end
 
   class <emptyTree>::<C E><<C <todo sym>>> < (::<todo sym>)
-    def self.e=<<C <todo sym>>>(e, &<blk>)
+    def self.e=<<todo method>>(e, &<blk>)
       @e = e
     end
 
-    def self.e<<C <todo sym>>>(&<blk>)
+    def self.e<<todo method>>(&<blk>)
       @e
     end
   end
 
   class <emptyTree>::<C Main><<C <todo sym>>> < (::<todo sym>)
-    def self.main<<C <todo sym>>>(&<blk>)
+    def self.main<<todo method>>(&<blk>)
       begin
         <emptyTree>::<C A>.each() do |a|
           <self>.puts(a.inspect())
@@ -27,7 +27,7 @@ class <emptyTree><<C <root>>> < ()
         <emptyTree>::<C A>.each() do |*forTemp|
           begin
             begin
-              <assignTemp>$2 = forTemp.to_a()
+              <assignTemp>$2 = ::<Magic>.<splat>(forTemp)
               <assignTemp>$3 = ::<Magic>.<expand-splat>(<assignTemp>$2, 1, 0)
               a = <assignTemp>$3.[](0)
               <assignTemp>$2
@@ -44,7 +44,7 @@ class <emptyTree><<C <root>>> < ()
         <emptyTree>::<C A>.each() do |*forTemp|
           begin
             begin
-              <assignTemp>$4 = forTemp.to_a()
+              <assignTemp>$4 = ::<Magic>.<splat>(forTemp)
               <assignTemp>$5 = ::<Magic>.<expand-splat>(<assignTemp>$4, 2, 0)
               a = <assignTemp>$5.[](0)
               b = <assignTemp>$5.[](1)
@@ -79,7 +79,7 @@ class <emptyTree><<C <root>>> < ()
         <emptyTree>::<C A>.each() do |*forTemp|
           begin
             begin
-              <assignTemp>$9 = forTemp.to_a()
+              <assignTemp>$9 = ::<Magic>.<splat>(forTemp)
               <assignTemp>$10 = ::<Magic>.<expand-splat>(<assignTemp>$9, 5, 0)
               @a = <assignTemp>$10.[](0)
               @@b = <assignTemp>$10.[](1)

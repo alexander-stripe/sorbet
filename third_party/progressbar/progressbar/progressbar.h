@@ -1,22 +1,22 @@
 /**
-* \file
-* \author Trevor Fountain
-* \author Johannes Buchner
-* \author Erik Garrison
-* \date 2010-2014
-* \copyright BSD 3-Clause
-*
-* progressbar -- a C class (by convention) for displaying progress
-* on the command line (to stderr).
-*/
+ * \file
+ * \author Trevor Fountain
+ * \author Johannes Buchner
+ * \author Erik Garrison
+ * \date 2010-2014
+ * \copyright BSD 3-Clause
+ *
+ * progressbar -- a C class (by convention) for displaying progress
+ * on the command line (to stderr).
+ */
 
 #ifndef PROGRESSBAR_H
 #define PROGRESSBAR_H
 
-#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,26 +25,25 @@ extern "C" {
 /**
  * Progressbar data structure (do not modify or create directly)
  */
-typedef struct _progressbar_t
-{
-  /// maximum value
-  unsigned long max;
-  /// current value
-  unsigned long value;
+typedef struct _progressbar_t {
+    /// maximum value
+    unsigned long max;
+    /// current value
+    unsigned long value;
 
-  /// time progressbar was started
-  time_t start;
+    /// time progressbar was started
+    time_t start;
 
-  /// label
-  const char *label;
+    /// label
+    const char *label;
 
-  /// characters for the beginning, filling and end of the
-  /// progressbar. E.g. |###    | has |#|
-  struct {
-    char begin;
-    char fill;
-    char end;
-  } format;
+    /// characters for the beginning, filling and end of the
+    /// progressbar. E.g. |###    | has |#|
+    struct {
+        char begin;
+        char fill;
+        char end;
+    } format;
 } progressbar;
 
 /// Create a new progressbar with the specified label and number of steps.
@@ -63,7 +62,7 @@ progressbar *progressbar_new(const char *label, unsigned long max);
 /// @param max The number of times the progressbar must be incremented before it is considered complete,
 ///            or, in other words, the number of tasks that this progressbar is tracking.
 /// @param format The format of the progressbar. The string provided must be three characters, and it will
-///               be interpretted with the first character as the left border of the bar, the second
+///               be interpreted with the first character as the left border of the bar, the second
 ///               character of the bar and the third character as the right border of the bar. For example,
 ///               "<->" would result in a bar formatted like "<------     >".
 ///

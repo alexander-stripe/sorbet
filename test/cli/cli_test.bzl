@@ -1,17 +1,59 @@
-def cli_test(path):
-    # path will be like `$name/$name.sh`
-    words = path.split("/")
-    name = words[-2]
+def _verify_single_test_script(scripts):
+    # build a mapping from name => test script
+    mapping = {}
+
+    # script will be "$name/$name.sh"
+    for script in scripts:
+        words = script.split("/")
+        name = words[-2]
+        script_file = words[-1]
+        expected_file = "test.sh"
+        if script_file != expected_file:
+            fail("cli test scripts must be named cli/$name/test.sh")
+
+        existing = mapping.get(name)
+        if existing != None:
+            fail("cli tests must have a single shell script in their top-level directory")
+        mapping[name] = script_file
+
+    return mapping
+
+def cli_tests(suite_name, scripts, tags = []):
+    tests = []
+    updates = []
+
+    mapping = _verify_single_test_script(scripts)
+
+    for name, script in mapping.items():
+        test_name, update_name = _cli_test(name, script, tags)
+        tests.append(test_name)
+        updates.append(update_name)
+
+    native.test_suite(
+        name = suite_name,
+        tests = tests,
+    )
+
+    native.test_suite(
+        name = "update",
+        tags = ["manual"],
+        tests = updates,
+    )
+
+def _cli_test(name, script, tags = []):
     test_name = "test_{}".format(name)
-    if words[-1] != "{}.sh".format(name):
-        fail("cli test scripts must be named cli/$name/$name.sh")
+    update_name = "update_{}".format(name)
+
+    script_path = "{}/{}".format(name, script)
 
     native.sh_binary(
         name = "run_{}".format(name),
-        srcs = [path],
+        srcs = [script_path],
         data = native.glob([
             "{}/**/*.rb".format(name),
             "{}/**/*.rbi".format(name),
+            "{}/**/*.rake".format(name),
+            "{}/**/*.ru".format(name),
             "{}/*.rbi".format(name),
             "{}/*.yaml".format(name),
             "{}/*.input".format(name),
@@ -20,26 +62,28 @@ def cli_test(path):
         ]) + ["//main:sorbet", "@com_google_protobuf//:protoc", "//proto:protos"],
     )
 
-    output = path.replace(".sh", ".out")
+    output = script_path.replace(".sh", ".out")
 
     native.sh_test(
         name = test_name,
         srcs = ["test_one.sh"],
-        args = ["$(location {})".format(path), "$(location {})".format(output)],
+        args = ["$(location {})".format(script_path), "$(location {})".format(output), update_name],
         data = [
-            path,
+            script_path,
             ":run_{}".format(name),
             output,
+            "//test/cli:llvm-symbolizer",
         ],
         size = "medium",
+        tags = tags,
     )
 
     native.sh_test(
-        name = "update_{}".format(name),
+        name = update_name,
         srcs = ["update_one.sh"],
-        args = ["$(location {})".format(path), "$(location {})".format(output)],
+        args = ["$(location {})".format(script_path), "$(location {})".format(output)],
         data = [
-            path,
+            script_path,
             ":run_{}".format(name),
             output,
         ],
@@ -47,25 +91,8 @@ def cli_test(path):
             "manual",
             "external",
             "local",
-        ],
+        ] + tags,
         size = "small",
     )
 
-    return test_name
-
-def update_test():
-    existing = native.existing_rules()
-    update_rules = [
-        rule
-        for (rule, data) in existing.items()
-        if rule.startswith("update_") and data["kind"] == "sh_test"
-    ]
-    native.test_suite(
-        name = "update",
-        tags = [
-            "manual",
-            "external",
-            "local",
-        ],
-        tests = update_rules,
-    )
+    return test_name, update_name

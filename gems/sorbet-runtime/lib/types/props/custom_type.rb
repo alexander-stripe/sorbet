@@ -1,20 +1,35 @@
 # frozen_string_literal: true
-# typed: false
+# typed: strict
 
 module T::Props
   module CustomType
+    extend T::Sig
+    extend T::Helpers
+
+    abstract!
+
     include Kernel # for `is_a?`
 
-    # Returns true if the given Ruby value can be assigned to a T::Props field
-    # of this type.
-    #
-    # @param [Object] _value
-    # @return T::Boolean
-    def instance?(_value)
-      raise NotImplementedError.new('Must override in included class')
+    # Alias for backwards compatibility
+    sig(:final) do
+      params(
+        value: BasicObject,
+      )
+      .returns(T::Boolean)
+      .checked(:never)
+    end
+    def instance?(value)
+      self.===(value)
     end
 
-    # Alias for consistent interface with T::Types::Base
+    # Alias for backwards compatibility
+    sig(:final) do
+      params(
+        value: BasicObject,
+      )
+      .returns(T::Boolean)
+      .checked(:never)
+    end
     def valid?(value)
       instance?(value)
     end
@@ -22,27 +37,27 @@ module T::Props
     # Given an instance of this type, serialize that into a scalar type
     # supported by T::Props.
     #
-    # @param [Object] _instance
+    # @param [Object] instance
     # @return An instance of one of T::Configuration.scalar_types
-    def serialize(_instance)
-      raise NotImplementedError.new('Must override in included class')
-    end
+    sig { abstract.params(instance: T.untyped).returns(T.untyped).checked(:never) }
+    def serialize(instance); end
 
     # Given the serialized form of your type, this returns an instance
     # of that custom type representing that value.
     #
-    # @param _mongo_scalar One of T::Configuration.scalar_types
+    # @param scalar One of T::Configuration.scalar_types
     # @return Object
-    def deserialize(_mongo_scalar)
-      raise NotImplementedError.new('Must override in included class')
-    end
+    sig { abstract.params(scalar: T.untyped).returns(T.untyped).checked(:never) }
+    def deserialize(scalar); end
 
+    sig { override.params(_base: Module).void }
     def self.included(_base)
       super
 
       raise 'Please use "extend", not "include" to attach this module'
     end
 
+    sig(:final) { params(val: T.untyped).returns(T::Boolean).checked(:never) }
     def self.scalar_type?(val)
       # We don't need to check for val's included modules in
       # T::Configuration.scalar_types, because T::Configuration.scalar_types
@@ -59,16 +74,8 @@ module T::Props
     # implement set-like fields that store a unique-array, but forbid
     # hashes; Custom hash types should be implemented via an emebdded
     # T::Struct (or a subclass like Chalk::ODM::Document) or via T.
-    def self.valid_serialization?(val, type=nil)
-      if type&.name == 'Chalk::ODM::BsonTypes::BsonObject'
-        # Special case we allow for backwards compatibility with props formerly
-        # typed as "Object" or "Hash", which contain arbitrarily-nested BSON
-        # data (e.g. parsed API request bodies). In general, we aren't pushing
-        # to convert these to Chalk::ODM::BsonTypes - we'd rather delurk them -
-        # but this lets us convert events with these types to Proto.
-        return true
-      end
-
+    sig(:final) { params(val: Object).returns(T::Boolean).checked(:never) }
+    def self.valid_serialization?(val)
       case val
       when Array
         val.each do |v|
@@ -79,6 +86,23 @@ module T::Props
       else
         scalar_type?(val)
       end
+    end
+
+    sig(:final) do
+      params(instance: Object)
+      .returns(T.untyped)
+      .checked(:never)
+    end
+    def self.checked_serialize(instance)
+      val = T.cast(instance.class, T::Props::CustomType).serialize(instance)
+      unless valid_serialization?(val)
+        msg = "#{instance.class} did not serialize to a valid scalar type. It became a: #{val.class}"
+        if val.is_a?(Hash)
+          msg += "\nIf you want to store a structured Hash, consider using a T::Struct as your type."
+        end
+        raise TypeError.new(msg)
+      end
+      val
     end
   end
 end

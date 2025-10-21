@@ -2,41 +2,51 @@
 # typed: true
 
 module T::Utils
+  module Private
+    def self.coerce_and_check_module_types(val, check_val, check_module_type)
+      # rubocop:disable Style/CaseLikeIf
+      if val.is_a?(T::Types::Base)
+        if val.is_a?(T::Private::Types::TypeAlias)
+          val.aliased_type
+        else
+          val
+        end
+      elsif val.is_a?(Module)
+        if check_module_type && check_val.is_a?(val)
+          nil
+        else
+          T::Types::Simple::Private::Pool.type_for_module(val)
+        end
+      elsif val.is_a?(::Array)
+        T::Types::FixedArray.new(val)
+      elsif val.is_a?(::Hash)
+        T::Types::FixedHash.new(val)
+      elsif val.is_a?(T::Private::Methods::DeclBuilder)
+        T::Private::Methods.finalize_proc(val.decl)
+      elsif val.is_a?(::T::Enum)
+        T::Types::TEnum.new(val)
+      elsif val.is_a?(::String)
+        raise "Invalid String literal for type constraint. Must be an #{T::Types::Base}, a " \
+              "class/module, or an array. Got a String with value `#{val}`."
+      else
+        raise "Invalid value for type constraint. Must be an #{T::Types::Base}, a " \
+              "class/module, or an array. Got a `#{val.class}`."
+      end
+      # rubocop:enable Style/CaseLikeIf
+    end
+  end
+
   # Used to convert from a type specification to a `T::Types::Base`.
   def self.coerce(val)
-    if val.is_a?(T::Private::Types::TypeAlias)
-      val.aliased_type
-    elsif val.is_a?(T::Types::Base)
-      val
-    elsif val == ::Array
-      T::Array[T.untyped]
-    elsif val == ::Set
-      T::Set[T.untyped]
-    elsif val == ::Hash
-      T::Hash[T.untyped, T.untyped]
-    elsif val == ::Enumerable
-      T::Enumerable[T.untyped]
-    elsif val == ::Enumerator
-      T::Enumerator[T.untyped]
-    elsif val == ::Range
-      T::Range[T.untyped]
-    elsif val.is_a?(Module)
-      T::Types::Simple.new(val) # rubocop:disable PrisonGuard/UseOpusTypesShortcut
-    elsif val.is_a?(::Array)
-      T::Types::FixedArray.new(val) # rubocop:disable PrisonGuard/UseOpusTypesShortcut
-    elsif val.is_a?(::Hash)
-      T::Types::FixedHash.new(val) # rubocop:disable PrisonGuard/UseOpusTypesShortcut
-    elsif val.is_a?(T::Private::Methods::DeclBuilder)
-      T::Private::Methods.finalize_proc(val.decl)
-    elsif val.is_a?(::T::Enum)
-      T::Types::TEnum.new(val) # rubocop:disable PrisonGuard/UseOpusTypesShortcut
-    elsif val.is_a?(::String)
-      raise "Invalid String literal for type constraint. Must be an #{T::Types::Base}, a " \
-            "class/module, or an array. Got a String with value `#{val}`."
-    else
-      raise "Invalid value for type constraint. Must be an #{T::Types::Base}, a " \
-            "class/module, or an array. Got a `#{val.class}`."
-    end
+    Private.coerce_and_check_module_types(val, nil, false)
+  end
+
+  # Dynamically confirm that `value` is recursively a valid value of
+  # type `type`, including recursively through collections. Note that
+  # in some cases this runtime check can be very expensive, especially
+  # with large collections of objects.
+  def self.check_type_recursive!(value, type)
+    T::Private::Casts.cast_recursive(value, type, "T.check_type_recursive!")
   end
 
   # Returns the set of all methods (public, protected, private) defined on a module or its
@@ -52,17 +62,11 @@ module T::Utils
     end.uniq
   end
 
-  # Associates a signature with a forwarder method that matches the signature of the method it
-  # forwards to. This is necessary because forwarder methods are often declared with catch-all
-  # splat parameters, rather than the exact set of parameters ultimately used by the target method,
-  # so they cannot be validated as strictly.
+  # Returns the signature for the `UnboundMethod`, or nil if it's not sig'd
   #
-  # The caller of this method must ensure that the forwarder method properly forwards all parameters
-  # such that the signature is accurate.
-  def self.register_forwarder(from_method, to_method, remove_first_param: false)
-    T::Private::Methods.register_forwarder(
-      from_method, to_method, remove_first_param: remove_first_param
-    )
+  # @example T::Utils.signature_for_method(x.method(:foo))
+  def self.signature_for_method(method)
+    T::Private::Methods.signature_for_method(method)
   end
 
   # Returns the signature for the instance method on the supplied module, or nil if it's not found or not typed.
@@ -77,8 +81,8 @@ module T::Utils
   end
 
   # Unwraps all the sigs.
-  def self.run_all_sig_blocks
-    T::Private::Methods.run_all_sig_blocks
+  def self.run_all_sig_blocks(force_type_init: true)
+    T::Private::Methods.run_all_sig_blocks(force_type_init: force_type_init)
   end
 
   # Return the underlying type for a type alias. Otherwise returns type.
@@ -96,12 +100,7 @@ module T::Utils
   def self.unwrap_nilable(type)
     case type
     when T::Types::Union
-      non_nil_types = type.types.reject {|t| t == T::Utils.coerce(NilClass)}
-      if non_nil_types.length == 1
-        non_nil_types.first
-      else
-        nil
-      end
+      type.unwrap_nilable
     else
       nil
     end
@@ -109,10 +108,10 @@ module T::Utils
 
   # Returns the arity of a method, unwrapping the sig if needed
   def self.arity(method)
-    arity = method.arity # rubocop:disable PrisonGuard/NoArity
+    arity = method.arity
     return arity if arity != -1 || method.is_a?(Proc)
     sig = T::Private::Methods.signature_for_method(method)
-    sig ? sig.method.arity : arity # rubocop:disable PrisonGuard/NoArity
+    sig ? sig.method.arity : arity
   end
 
   # Elide the middle of a string as needed and replace it with an ellipsis.
@@ -151,15 +150,32 @@ module T::Utils
     "#{start_part}#{ellipsis}#{end_part}"
   end
 
+  def self.lift_enum(enum)
+    unless enum.is_a?(T::Types::Enum)
+      raise ArgumentError.new("#{enum.inspect} is not a T.deprecated_enum")
+    end
+
+    classes = T.unsafe(enum.values).map(&:class).uniq
+    if classes.empty?
+      T.untyped
+    elsif classes.length > 1
+      T::Types::Union.new(classes)
+    else
+      T::Types::Simple::Private::Pool.type_for_module(classes.first)
+    end
+  end
+
   module Nilable
     # :is_union_type, T::Boolean: whether the type is an T::Types::Union type
     # :non_nilable_type, Class: if it is an T.nilable type, the corresponding underlying type; otherwise, nil.
     TypeInfo = Struct.new(:is_union_type, :non_nilable_type)
 
+    NIL_TYPE = T::Utils.coerce(NilClass)
+
     def self.get_type_info(prop_type)
       if prop_type.is_a?(T::Types::Union)
-        non_nilable_type = T::Utils.unwrap_nilable(prop_type)
-        if non_nilable_type && non_nilable_type.is_a?(T::Types::Simple)
+        non_nilable_type = prop_type.unwrap_nilable
+        if non_nilable_type.is_a?(T::Types::Simple)
           non_nilable_type = non_nilable_type.raw_type
         end
         TypeInfo.new(true, non_nilable_type)
@@ -172,9 +188,12 @@ module T::Utils
     #  - if the type is A, the function returns A
     #  - if the type is T.nilable(A), the function returns A
     def self.get_underlying_type(prop_type)
-      type_info = get_type_info(prop_type)
-      if type_info.is_union_type
-        type_info.non_nilable_type || prop_type
+      if prop_type.is_a?(T::Types::Union)
+        non_nilable_type = prop_type.unwrap_nilable
+        if non_nilable_type.is_a?(T::Types::Simple)
+          non_nilable_type = non_nilable_type.raw_type
+        end
+        non_nilable_type || prop_type
       elsif prop_type.is_a?(T::Types::Simple)
         prop_type.raw_type
       else
@@ -191,7 +210,7 @@ module T::Utils
     def self.is_union_with_nilclass(prop_type)
       case prop_type
       when T::Types::Union
-        prop_type.types.any? {|t| t == T::Utils.coerce(NilClass)}
+        prop_type.types.include?(NIL_TYPE)
       else
         false
       end

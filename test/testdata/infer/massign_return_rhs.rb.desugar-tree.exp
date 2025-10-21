@@ -1,11 +1,11 @@
-class <emptyTree><<C <root>>> < ()
+class <emptyTree><<C <root>>> < (::<todo sym>)
   <self>.extend(<emptyTree>::<C T>::<C Sig>)
 
   <self>.sig() do ||
     <self>.returns(<emptyTree>::<C T>.nilable(<emptyTree>::<C T>::<C Array>.[](<emptyTree>::<C Integer>)))
   end
 
-  def foo<<C <todo sym>>>(&<blk>)
+  def foo<<todo method>>(&<blk>)
     nil
   end
 

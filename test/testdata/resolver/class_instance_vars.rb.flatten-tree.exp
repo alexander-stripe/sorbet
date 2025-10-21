@@ -1,52 +1,22 @@
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
+  class <emptyTree><<C <root>>> < (::<todo sym>)
+    <emptyTree>
+
+    <emptyTree>
+
+    <emptyTree>
+
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
-      begin
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::Parent)
-          <emptyTree>
-        end
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::Mixin)
-          <emptyTree>
-        end
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::Child)
-          ::Sorbet::Private::Static.keep_for_ide(::Parent)
-          <emptyTree>
-        end
-        ::Alias = ::Parent
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::Child1)
-          ::Sorbet::Private::Static.keep_for_ide(::Alias)
-          <emptyTree>
-        end
-        <emptyTree>
-      end
+      ::Alias = ::Parent
     end
   end
   class ::Parent<<C Parent>> < (::<todo sym>)
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
     def initialize(<blk>)
       begin
-        @ivar = begin
-          ::Sorbet::Private::Static.keep_for_typechecking(::Integer)
-          T.let(1, Integer)
-        end
-        @ivar2 = begin
-          ::Sorbet::Private::Static.keep_for_typechecking(::Integer)
-          T.let(2, Integer)
-        end
+        @ivar = <cast:let>(1, Integer, ::Integer)
+        @ivar2 = <cast:let>(2, Integer, ::Integer)
       end
     end
 
@@ -58,29 +28,24 @@ begin
     end
 
     def self.<static-init>(<blk>)
-      @@class_var = begin
-        ::Sorbet::Private::Static.keep_for_typechecking(::String)
-        T.let("hi", String)
+      begin
+        <runtime method definition of initialize>
+        @@class_var = <cast:let>("hi", String, ::String)
+        <runtime method definition of hi>
+        <emptyTree>
       end
     end
   end
   module ::Mixin<<C Mixin>> < ()
     def self.<static-init>(<blk>)
       begin
-        @@mixin_cvar = begin
-          ::Sorbet::Private::Static.keep_for_typechecking(::Integer)
-          T.let(3, Integer)
-        end
+        @@mixin_cvar = <cast:let>(3, Integer, ::Integer)
         @@mixin_cvar
         <emptyTree>
       end
     end
   end
   class ::Child<<C Child>> < (::Parent, ::Mixin)
-    <emptyTree>
-
-    <emptyTree>
-
     def child_method(<blk>)
       begin
         @@class_var
@@ -92,10 +57,11 @@ begin
 
     def self.<static-init>(<blk>)
       begin
+        <self>.include(::Mixin)
         @@class_var
         @@mixin_cvar
         @@undefined_cvar
-        ::Sorbet::Private::Static.keep_for_ide(::Mixin)
+        <runtime method definition of child_method>
         <emptyTree>
       end
     end

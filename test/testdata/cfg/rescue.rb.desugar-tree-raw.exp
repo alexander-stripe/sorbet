@@ -1,22 +1,26 @@
 ClassDef{
   kind = class
-  name = EmptyTree<<C <U <root>>>>
-  ancestors = []
+  name = EmptyTree
+  symbol = <C <U <root>>>
+  ancestors = [ConstantLit{
+      symbol = (class ::<todo sym>)
+      orig = nullptr
+    }]
   rhs = [
     MethodDef{
-      flags = 0
-      name = <U main><<C <U <todo sym>>>>
-      args = [BlockArg{ expr = UnresolvedIdent{
+      flags = {}
+      name = <U main><<U <todo method>>>
+      params = [BlockParam{ expr = UnresolvedIdent{
           kind = Local
           name = <U <blk>>
         } }]
       rhs = Rescue{
         body = Send{
-          recv = Local{
-            localVariable = <U <self>>
-          }
+          flags = {privateOk}
+          recv = Self
           fun = <U a>
           block = nullptr
+          pos_args = 0
           args = [
           ]
         }
@@ -29,31 +33,31 @@ ClassDef{
               name = <D <U <rescueTemp>> $2>
             }
             body = Send{
-              recv = Local{
-                localVariable = <U <self>>
-              }
+              flags = {privateOk}
+              recv = Self
               fun = <U b>
               block = nullptr
+              pos_args = 0
               args = [
               ]
             }
           }
         ]
         else = Send{
-          recv = Local{
-            localVariable = <U <self>>
-          }
+          flags = {privateOk}
+          recv = Self
           fun = <U c>
           block = nullptr
+          pos_args = 0
           args = [
           ]
         }
         ensure = Send{
-          recv = Local{
-            localVariable = <U <self>>
-          }
+          flags = {privateOk}
+          recv = Self
           fun = <U d>
           block = nullptr
+          pos_args = 0
           args = [
           ]
         }
@@ -61,9 +65,9 @@ ClassDef{
     }
 
     MethodDef{
-      flags = 0
-      name = <U a><<C <U <todo sym>>>>
-      args = [BlockArg{ expr = UnresolvedIdent{
+      flags = {}
+      name = <U a><<U <todo method>>>
+      params = [BlockParam{ expr = UnresolvedIdent{
           kind = Local
           name = <U <blk>>
         } }]
@@ -71,9 +75,9 @@ ClassDef{
     }
 
     MethodDef{
-      flags = 0
-      name = <U b><<C <U <todo sym>>>>
-      args = [BlockArg{ expr = UnresolvedIdent{
+      flags = {}
+      name = <U b><<U <todo method>>>
+      params = [BlockParam{ expr = UnresolvedIdent{
           kind = Local
           name = <U <blk>>
         } }]
@@ -81,9 +85,9 @@ ClassDef{
     }
 
     MethodDef{
-      flags = 0
-      name = <U c><<C <U <todo sym>>>>
-      args = [BlockArg{ expr = UnresolvedIdent{
+      flags = {}
+      name = <U c><<U <todo method>>>
+      params = [BlockParam{ expr = UnresolvedIdent{
           kind = Local
           name = <U <blk>>
         } }]
@@ -91,9 +95,9 @@ ClassDef{
     }
 
     MethodDef{
-      flags = 0
-      name = <U d><<C <U <todo sym>>>>
-      args = [BlockArg{ expr = UnresolvedIdent{
+      flags = {}
+      name = <U d><<U <todo method>>>
+      params = [BlockParam{ expr = UnresolvedIdent{
           kind = Local
           name = <U <blk>>
         } }]
@@ -101,18 +105,18 @@ ClassDef{
     }
 
     Send{
-      recv = Local{
-        localVariable = <U <self>>
-      }
+      flags = {privateOk}
+      recv = Self
       fun = <U puts>
       block = nullptr
+      pos_args = 1
       args = [
         Send{
-          recv = Local{
-            localVariable = <U <self>>
-          }
+          flags = {privateOk}
+          recv = Self
           fun = <U foo>
           block = nullptr
+          pos_args = 0
           args = [
           ]
         }

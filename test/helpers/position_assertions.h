@@ -2,27 +2,19 @@
 #define TEST_HELPERS_POSITION_ASSERTIONS_H
 
 #include "main/lsp/json_types.h"
-#include "main/lsp/lsp.h"
 #include "main/lsp/wrapper.h"
+#include "main/options/options.h"
 #include "test/helpers/expectations.h"
 #include <regex>
 
 namespace sorbet::test {
 using namespace sorbet::realmain::lsp;
 
-// Compares the two errors. Returns -1 if `a` comes before `b`, 1 if `b` comes before `a`, and 0 if they are equivalent.
-// Compares filenames, then ranges, and then compares messages in the event of a tie.
-int errorComparison(std::string_view aFilename, const Range &a, std::string_view aMessage, std::string_view bFilename,
-                    const Range &b, std::string_view bMessage);
-
-/**
- * prettyPrintComment("foo.bar", {start: {character: 4}, end: {character: 7}}, "error: bar not defined") ->
- * foo.bar
- *     ^^^ error: bar not defined
- */
-std::string prettyPrintRangeComment(std::string_view sourceLine, const Range &range, std::string_view comment);
+// This is needed to skip error assertions when running under Prism
+extern realmain::options::Parser parser;
 
 class ErrorAssertion;
+class UntypedAssertion;
 
 /**
  * An assertion that is relevant to a specific set of characters on a line.
@@ -40,16 +32,25 @@ public:
     static std::vector<std::shared_ptr<RangeAssertion>>
     parseAssertions(const UnorderedMap<std::string, std::shared_ptr<core::File>> filesAndContents);
 
+    static realmain::options::Options parseOptions(std::vector<std::shared_ptr<RangeAssertion>> &assertions);
+
     // Creates a Range object for a source line and character range. Matches arbitrary subset of line if only sourceLine
     // is provided.
     static std::unique_ptr<Range> makeRange(int sourceLine, int startChar = 0,
                                             int endChar = RangeAssertion::END_OF_LINE_POS);
+
+    static bool compareByRange(const std::shared_ptr<RangeAssertion> &a, const std::shared_ptr<RangeAssertion> &b) {
+        return a->cmp(*b) < 0;
+    }
 
     /**
      * Filters a vector of assertions and returns only ErrorAssertions.
      */
     static std::vector<std::shared_ptr<ErrorAssertion>>
     getErrorAssertions(const std::vector<std::shared_ptr<RangeAssertion>> &assertions);
+
+    static std::vector<std::shared_ptr<UntypedAssertion>>
+    getUntypedAssertions(const std::vector<std::shared_ptr<RangeAssertion>> &assertions);
 
     const std::string filename;
     const std::unique_ptr<Range> range;
@@ -92,11 +93,37 @@ public:
 
     const std::string message;
     const bool matchesDuplicateErrors;
+    static constexpr DiagnosticSeverity severity = DiagnosticSeverity::Error;
 
     ErrorAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
                    std::string_view message, bool matchesDuplicateErrors);
 
     std::string toString() const override;
+
+    bool check(const Diagnostic &diagnostic, std::string_view sourceLine, std::string_view errorPrefix);
+};
+
+class UntypedAssertion final : public RangeAssertion {
+public:
+    static std::shared_ptr<UntypedAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                  int assertionLine, std::string_view assertionContents,
+                                                  std::string_view assertionType);
+
+    UntypedAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                     std::string_view message);
+
+    std::string toString() const override;
+    const std::string message;
+
+    // this exists solely to allow us to reuse ErrorAssertion's checkAll
+    // for UntypedAssertion. It should *always* be false.
+    static constexpr bool matchesDuplicateErrors = false;
+    static constexpr DiagnosticSeverity severity = DiagnosticSeverity::Information;
+
+    static bool checkAll(const UnorderedMap<std::string, std::shared_ptr<core::File>> &files,
+                         std::vector<std::shared_ptr<UntypedAssertion>> errorAssertions,
+                         std::map<std::string, std::vector<std::unique_ptr<Diagnostic>>> &filenamesAndDiagnostics,
+                         std::string errorPrefix = "");
 
     bool check(const Diagnostic &diagnostic, std::string_view sourceLine, std::string_view errorPrefix);
 };
@@ -110,18 +137,21 @@ public:
 
     const std::string symbol;
     const int version;
+    const bool isDefOfSelf;
+    const bool isDefaultArgValue;
 
     DefAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine, std::string_view symbol,
-                 int version);
+                 int version, bool isDefOfSelf, bool isDefaultArgValue);
 
-    void check(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents, LSPWrapper &wrapper,
-               int &nextId, const Location &queryLoc);
+    static void check(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents,
+                      LSPWrapper &wrapper, int &nextId, const Location &queryLoc,
+                      const std::vector<std::shared_ptr<DefAssertion>> &definitions);
 
     std::string toString() const override;
 };
 
 // # ^^^ usage: symbol
-class UsageAssertion final : public RangeAssertion {
+class UsageAssertion : public RangeAssertion {
 public:
     static std::shared_ptr<UsageAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
                                                 int assertionLine, std::string_view assertionContents,
@@ -137,11 +167,75 @@ public:
                                 const std::vector<std::shared_ptr<RangeAssertion>> &allLocs);
 
     const std::string symbol;
-    const int version;
+    const std::vector<int> versions;
     std::shared_ptr<DefAssertion> def;
 
     UsageAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine, std::string_view symbol,
-                   int version);
+                   std::vector<int> versions);
+
+    std::string toString() const override;
+};
+
+// # ^^^ import: symbol
+class ImportAssertion final : public UsageAssertion {
+public:
+    static std::shared_ptr<ImportAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                 int assertionLine, std::string_view assertionContents,
+                                                 std::string_view assertionType);
+
+    ImportAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                    std::string_view symbol, std::vector<int> versions);
+};
+
+// # ^^^ importusage: symbol
+class ImportUsageAssertion final : public UsageAssertion {
+public:
+    static std::shared_ptr<ImportUsageAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                      int assertionLine, std::string_view assertionContents,
+                                                      std::string_view assertionType);
+
+    ImportUsageAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                         std::string_view symbol, std::vector<int> versions);
+};
+
+// This is special, because most of the time "textDocument/definition" is tested with `def` and
+// `usage` assertions. For most symbols, "Go to Definition" on a location returned by "Find All
+// References" should jump back to the definition.
+//
+// But there are some "special" cases where that's not the case: where you can jump to def from one
+// place to get to the definition, but you can never get there via find all references.
+//
+// Unless you know you're building such a special case, you probably want to use a normal `usage`
+// assertion.
+//
+// # ^^^ go-to-def-special: symbol
+class GoToDefSpecialAssertion final : public UsageAssertion {
+public:
+    static std::shared_ptr<GoToDefSpecialAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                         int assertionLine, std::string_view assertionContents,
+                                                         std::string_view assertionType);
+
+    GoToDefSpecialAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                            std::string_view symbol, std::vector<int> versions);
+
+    std::string toString() const override;
+};
+
+// # some-property: foo
+class StringPropertyAssertion final : public RangeAssertion {
+public:
+    static std::shared_ptr<StringPropertyAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                         int assertionLine, std::string_view assertionContents,
+                                                         std::string_view assertionType);
+
+    static std::optional<std::string> getValue(std::string_view type,
+                                               const std::vector<std::shared_ptr<RangeAssertion>> &assertions);
+
+    const std::string assertionType;
+    const std::string value;
+
+    StringPropertyAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                            std::string value, std::string_view assertionType);
 
     std::string toString() const override;
 };
@@ -241,6 +335,29 @@ public:
     std::string toString() const override;
 };
 
+// # ^ hover-line: 1 foo
+class HoverLineAssertion final : public RangeAssertion {
+public:
+    static std::shared_ptr<HoverLineAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                    int assertionLine, std::string_view assertionContents,
+                                                    std::string_view assertionType);
+    /** Checks all HoverLineAssertions within the assertion vector. Skips over non-hover assertions.*/
+    static void checkAll(const std::vector<std::shared_ptr<RangeAssertion>> &assertions,
+                         const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents,
+                         LSPWrapper &wrapper, int &nextId, std::string errorPrefix = "");
+
+    HoverLineAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine, int lineno,
+                       std::string_view message);
+
+    const int lineno;
+    const std::string message;
+
+    void check(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents, LSPWrapper &wrapper,
+               int &nextId, std::string errorPrefix = "");
+
+    std::string toString() const override;
+};
+
 // # ^ completion: foo
 class CompletionAssertion final : public RangeAssertion {
 public:
@@ -299,11 +416,53 @@ public:
     ApplyCodeActionAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
                              std::string_view version, std::string_view title);
 
+    // method applies an edit and asserts results after each edit
     void check(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents, LSPWrapper &wrapper,
                const CodeAction &codeAction);
 
+    // method applies all edits and asserts results after every edit is applied
+    void checkAll(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents, LSPWrapper &wrapper,
+                  const CodeAction &codeAction);
+
     const std::string title;
     const std::string version;
+    std::optional<CodeActionKind> kind;
+
+    std::string toString() const override;
+
+private:
+    std::optional<std::pair<std::string, std::string>> expectedFile(std::string filename, std::string version);
+    void assertResults(std::string expectedPath, std::string expectedContents, std::string actualContents);
+    std::unique_ptr<TextDocumentEdit> sortEdits(std::unique_ptr<TextDocumentEdit> changes);
+};
+
+// ^ apply-rename: [version] newName
+class ApplyRenameAssertion final : public RangeAssertion {
+public:
+    static std::shared_ptr<ApplyRenameAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                      int assertionLine, std::string_view assertionContents,
+                                                      std::string_view assertionType);
+
+    /** Checks all ApplyRenameAssertions within the assertion vector. Skips over non-ApplyRenameAssertions. */
+    static void checkAll(const std::vector<std::shared_ptr<RangeAssertion>> &assertions,
+                         const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents,
+                         LSPWrapper &wrapper, int &nextId, std::string errorPrefix = "");
+
+    ApplyRenameAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                         std::string_view version, std::string newName, std::string placeholderText, bool invalid,
+                         std::string expectedErrorMessage);
+
+    // The part between [..] in the assertion which specifies which `.[..].rbedited` file to compare against
+    const std::string version;
+    // New name for constant
+    const std::string newName;
+    // The name of the thing being renamed
+    const std::string placeholderText;
+    const bool invalid;
+    const std::string expectedErrorMessage;
+
+    void check(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents, LSPWrapper &wrapper,
+               int &nextId, std::string errorPrefix = "");
 
     std::string toString() const override;
 };
@@ -313,7 +472,8 @@ public:
 // that matches the indicated range in the given file.  Options:
 // * `name = "str"` => the result's `name` must *exactly* match the given string
 //   (useful for synthetic results, like the `foo=` of an `attr_writer`)
-// * `container = "str"` => the `containerName` must *exactly* match the given string
+// * `container = "str"` => the `containerName` must *exactly* match the given string (also supports "(nothing)" to
+//   dictate no entry)
 // * `uri = "substr"` => the `location->uri` must *contain* the given string,
 //   rather than matching the containing file
 //   (container + uri can be useful for matching entries in `rbi` files)
@@ -346,6 +506,119 @@ public:
     /** Returns true if the given symbol matches this assertion. */
     bool matches(const LSPConfiguration &config, const SymbolInformation &symbol) const;
 
+    std::string toString() const override;
+};
+
+// # ^^^ implementation: symbol
+class ImplementationAssertion final : public RangeAssertion {
+public:
+    ImplementationAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                            std::string_view symbol);
+    static std::shared_ptr<ImplementationAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                         int assertionLine, std::string_view assertionContents,
+                                                         std::string_view assertionType);
+    const std::string symbol;
+    std::string toString() const override;
+};
+
+// # ^^^ find-implementation: symbol
+class FindImplementationAssertion final : public RangeAssertion {
+public:
+    FindImplementationAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                                std::string_view symbol);
+    static std::shared_ptr<FindImplementationAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                             int assertionLine, std::string_view assertionContents,
+                                                             std::string_view assertionType);
+
+    static void check(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents,
+                      LSPWrapper &wrapper, int &nextId, std::string_view symbol, const Location &queryLoc,
+                      const std::vector<std::shared_ptr<ImplementationAssertion>> &allLocs);
+
+    const std::string symbol;
+    std::string toString() const override;
+};
+
+// # ^ show-symbol: Foo
+class ShowSymbolAssertion final : public RangeAssertion {
+public:
+    static std::shared_ptr<ShowSymbolAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                     int assertionLine, std::string_view assertionContents,
+                                                     std::string_view assertionType);
+    /** Checks all ShowSymbolAssertions within the assertion vector. Skips over non-hover assertions.*/
+    static void checkAll(const std::vector<std::shared_ptr<RangeAssertion>> &assertions,
+                         const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents,
+                         LSPWrapper &wrapper, int &nextId, std::string errorPrefix = "");
+
+    ShowSymbolAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                        std::string_view message);
+
+    const std::string message;
+
+    void check(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents, LSPWrapper &wrapper,
+               int &nextId, std::string errorPrefix = "");
+
+    std::string toString() const override;
+};
+
+// # selective-apply-code-action: quickfix
+class StringPropertyAssertions final : public RangeAssertion {
+public:
+    static std::shared_ptr<StringPropertyAssertions> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                          int assertionLine, std::string_view assertionContents,
+                                                          std::string_view assertionType);
+
+    const std::string assertionType;
+    const std::vector<std::string> values;
+
+    static std::optional<std::vector<std::string>>
+    getValues(std::string_view type, const std::vector<std::shared_ptr<RangeAssertion>> &assertions);
+    StringPropertyAssertions(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                             std::vector<std::string> values, std::string_view assertionType);
+
+    std::string toString() const override;
+};
+
+// # ^^^ hierarchy-ref-set: symbol
+class HierarchyRefSetAssertion final : public RangeAssertion {
+public:
+    HierarchyRefSetAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                             std::string_view symbol);
+    static std::shared_ptr<HierarchyRefSetAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                          int assertionLine, std::string_view assertionContents,
+                                                          std::string_view assertionType);
+
+    void check(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents, LSPWrapper &wrapper,
+               int &nextId, const std::vector<std::shared_ptr<RangeAssertion>> &allReferences) const;
+
+    const std::string symbol;
+    std::string toString() const override;
+};
+
+// # ^^^ find-hierarchy-refs: symbol
+class FindHierarchyRefsAssertion final : public RangeAssertion {
+public:
+    FindHierarchyRefsAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                               std::string_view symbol);
+    static std::shared_ptr<FindHierarchyRefsAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                            int assertionLine, std::string_view assertionContents,
+                                                            std::string_view assertionType);
+
+    void check(const UnorderedMap<std::string, std::shared_ptr<core::File>> &sourceFileContents, LSPWrapper &wrapper,
+               int &nextId, const std::vector<std::shared_ptr<RangeAssertion>> &allReferences) const;
+
+    const std::string symbol;
+    std::string toString() const override;
+};
+
+// # ^^^ hierarchy-ref: symbol
+class HierarchyRefAssertion final : public RangeAssertion {
+public:
+    HierarchyRefAssertion(std::string_view filename, std::unique_ptr<Range> &range, int assertionLine,
+                          std::string_view symbol);
+    static std::shared_ptr<HierarchyRefAssertion> make(std::string_view filename, std::unique_ptr<Range> &range,
+                                                       int assertionLine, std::string_view assertionContents,
+                                                       std::string_view assertionType);
+    const std::string symbol;
     std::string toString() const override;
 };
 

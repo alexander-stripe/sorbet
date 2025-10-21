@@ -1,6 +1,7 @@
 # typed: true
 class EnumProp
-  prop :enum_field, T.enum(["hi", "there"])
+  include T::Props
+  prop :enum_field, T.deprecated_enum(["hi", "there"])
 end
 
 EnumProp.new.enum_field

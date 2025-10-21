@@ -1,15 +1,20 @@
 # typed: __STDLIB_INTERNAL
 
-# Objects of class `Binding` encapsulate the execution context at some
-# particular place in the code and retain this context for future use. The
-# variables, methods, value of `self`, and possibly an iterator block that can
-# be accessed in this context are all retained.
-# [`Binding`](https://docs.ruby-lang.org/en/2.6.0/Binding.html) objects can be
-# created using `Kernel#binding`, and are made available to the callback of
-# `Kernel#set_trace_func`.
+# Objects of class [`Binding`](https://docs.ruby-lang.org/en/2.7.0/Binding.html)
+# encapsulate the execution context at some particular place in the code and
+# retain this context for future use. The variables, methods, value of `self`,
+# and possibly an iterator block that can be accessed in this context are all
+# retained. [`Binding`](https://docs.ruby-lang.org/en/2.7.0/Binding.html)
+# objects can be created using
+# [`Kernel#binding`](https://docs.ruby-lang.org/en/2.7.0/Kernel.html#method-i-binding),
+# and are made available to the callback of
+# [`Kernel#set_trace_func`](https://docs.ruby-lang.org/en/2.7.0/Kernel.html#method-i-set_trace_func)
+# and instances of
+# [`TracePoint`](https://docs.ruby-lang.org/en/2.7.0/TracePoint.html).
 #
 # These binding objects can be passed as the second argument of the
-# `Kernel#eval` method, establishing an environment for the evaluation.
+# [`Kernel#eval`](https://docs.ruby-lang.org/en/2.7.0/Kernel.html#method-i-eval)
+# method, establishing an environment for the evaluation.
 #
 # ```ruby
 # class Demo
@@ -31,9 +36,22 @@
 # eval("@secret")       #=> nil
 # ```
 #
-# [`Binding`](https://docs.ruby-lang.org/en/2.6.0/Binding.html) objects have no
+# [`Binding`](https://docs.ruby-lang.org/en/2.7.0/Binding.html) objects have no
 # class-specific methods.
 class Binding < Object
+  # Evaluates the Ruby expression(s) in *string*, in the *binding*'s context. If
+  # the optional *filename* and *lineno* parameters are present, they will be
+  # used when reporting syntax errors.
+  #
+  # ```ruby
+  # def get_binding(param)
+  #   binding
+  # end
+  # b = get_binding("hello")
+  # b.eval("param")   #=> "hello"
+  # ```
+  def eval(*_); end
+
   # Returns `true` if a local variable `symbol` exists.
   #
   # ```ruby
@@ -70,7 +88,7 @@ class Binding < Object
   sig {params(symbol: T.any(String, Symbol)).returns(T.untyped)}
   def local_variable_get(symbol); end
 
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) local variable named
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) local variable named
   # `symbol` as `obj`.
   #
   # ```ruby
@@ -98,6 +116,24 @@ class Binding < Object
   sig {params(symbol: T.any(String, Symbol), obj: T.untyped).returns(T.untyped)}
   def local_variable_set(symbol, obj); end
 
+  # Returns the names of the binding's local variables as symbols.
+  #
+  # ```ruby
+  # def foo
+  #   a = 1
+  #   2.times do |n|
+  #     binding.local_variables #=> [:a, :n]
+  #   end
+  # end
+  # ```
+  #
+  # This method is the short version of the following code:
+  #
+  # ```ruby
+  # binding.eval("local_variables")
+  # ```
+  def local_variables; end
+
   # Returns the bound receiver of the binding object.
   sig {returns(Object)}
   def receiver(); end
@@ -105,4 +141,63 @@ class Binding < Object
   # Returns the Ruby source filename and line number of the binding object.
   sig {returns([String, Integer])}
   def source_location(); end
+
+  # Opens an IRB session where +binding.irb+ is called which allows for
+  # interactive debugging. You can call any methods or variables available in
+  # the current scope, and mutate state if you need to.
+  #
+  #
+  # Given a Ruby file called +potato.rb+ containing the following code:
+  #
+  #     class Potato
+  #       def initialize
+  #         @cooked = false
+  #         binding.irb
+  #         puts "Cooked potato: #{@cooked}"
+  #       end
+  #     end
+  #
+  #     Potato.new
+  #
+  # Running <code>ruby potato.rb</code> will open an IRB session where
+  # +binding.irb+ is called, and you will see the following:
+  #
+  #     $ ruby potato.rb
+  #
+  #     From: potato.rb @ line 4 :
+  #
+  #         1: class Potato
+  #         2:   def initialize
+  #         3:     @cooked = false
+  #      => 4:     binding.irb
+  #         5:     puts "Cooked potato: #{@cooked}"
+  #         6:   end
+  #         7: end
+  #         8:
+  #         9: Potato.new
+  #
+  #     irb(#<Potato:0x00007feea1916670>):001:0>
+  #
+  # You can type any valid Ruby code and it will be evaluated in the current
+  # context. This allows you to debug without having to run your code repeatedly:
+  #
+  #     irb(#<Potato:0x00007feea1916670>):001:0> @cooked
+  #     => false
+  #     irb(#<Potato:0x00007feea1916670>):002:0> self.class
+  #     => Potato
+  #     irb(#<Potato:0x00007feea1916670>):003:0> caller.first
+  #     => ".../2.5.1/lib/ruby/2.5.0/irb/workspace.rb:85:in `eval'"
+  #     irb(#<Potato:0x00007feea1916670>):004:0> @cooked = true
+  #     => true
+  #
+  # You can exit the IRB session with the +exit+ command. Note that exiting will
+  # resume execution where +binding.irb+ had paused it, as you can see from the
+  # output printed to standard output in this example:
+  #
+  #     irb(#<Potato:0x00007feea1916670>):005:0> exit
+  #     Cooked potato: true
+  #
+  # See IRB for more information.
+  sig {params(show_code: T::Boolean).void}
+  def irb(show_code: true); end
 end

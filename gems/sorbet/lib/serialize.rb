@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 # typed: true
 
-require 'bigdecimal'
-
 class Sorbet::Private::Serialize
-  BLACKLIST_CONSTANTS = [
+  DENYLIST_CONSTANTS = [
     ['DidYouMean', :NameErrorCheckers], # https://github.com/yuki24/did_you_mean/commit/b72fdbe194401f1be21f8ad7b6e3f784a0ad197d
     ['Net', :OpenSSL], # https://github.com/yuki24/did_you_mean/commit/b72fdbe194401f1be21f8ad7b6e3f784a0ad197d
   ]
@@ -56,7 +54,7 @@ class Sorbet::Private::Serialize
     superclass_str = !superclass_str || superclass_str.empty? ? '' : " < #{superclass_str}"
     ret << (Sorbet::Private::RealStdlib.real_is_a?(klass, Class) ? "class #{class_name}#{superclass_str}\n" : "module #{class_name}\n")
 
-    # We don't use .included_modules since that also has all the aweful things
+    # We don't use .included_modules since that also has all the awful things
     # that are mixed into Object. This way we at least have a delimiter before
     # the awefulness starts (the superclass).
     Sorbet::Private::RealStdlib.real_ancestors(klass).each do |ancestor|
@@ -112,7 +110,7 @@ class Sorbet::Private::Serialize
       [const_sym, value]
     end
     constants += get_constants(klass, false).uniq.map do |const_sym|
-      next if BLACKLIST_CONSTANTS.include?([class_name, const_sym])
+      next if DENYLIST_CONSTANTS.include?([class_name, const_sym])
       next if Sorbet::Private::ConstantLookupCache::DEPRECATED_CONSTANTS.include?("#{class_name}::#{const_sym}")
       begin
         value = klass.const_get(const_sym, false)
@@ -144,14 +142,14 @@ class Sorbet::Private::Serialize
       initialize = nil
     end
     if initialize && initialize.owner == klass
-      # This method never apears in the reflection list...
+      # This method never appears in the reflection list...
       instance_methods += [:initialize]
     end
     Sorbet::Private::RealStdlib.real_ancestors(klass).reject {|ancestor| @constant_cache.name_by_class(ancestor)}.each do |ancestor|
       instance_methods += ancestor.instance_methods(false)
     end
 
-    # uniq here is required because we populate additional methos from anonymous superclasses and there
+    # uniq here is required because we populate additional methods from anonymous superclasses and there
     # might be duplicates
     methods += instance_methods.sort.uniq.map do |method_sym|
       begin
@@ -160,9 +158,9 @@ class Sorbet::Private::Serialize
         ret << "# #{e}\n"
         next
       end
-      next if blacklisted_method(method)
+      next if denylisted_method(method)
       next if ancestor_has_method(method, klass)
-      serialize_method(method)
+      serialize_method(method, with_sig: false)
     end
     # uniq is not required here, but added to be on the safe side
     methods += Sorbet::Private::RealStdlib.real_singleton_methods(klass, false).sort.uniq.map do |method_sym|
@@ -172,9 +170,9 @@ class Sorbet::Private::Serialize
         ret << "# #{e}\n"
         next
       end
-      next if blacklisted_method(method)
+      next if denylisted_method(method)
       next if ancestor_has_method(method, Sorbet::Private::RealStdlib.real_singleton_class(klass))
-      serialize_method(method, true)
+      serialize_method(method, true, with_sig: false)
     end
     ret << methods.join("\n")
     ret << "end\n"
@@ -189,13 +187,14 @@ class Sorbet::Private::Serialize
   end
 
   def comparable?(value)
-    return false if Sorbet::Private::RealStdlib.real_is_a?(value, BigDecimal) && value.nan?
-    return false if Sorbet::Private::RealStdlib.real_is_a?(value, Float) && value.nan?
+    return false if Sorbet::Private::RealStdlib.real_is_a?(value, Numeric) &&
+      Sorbet::Private::RealStdlib.real_respond_to?(value, :nan?) &&
+      value.nan?
     return false if Sorbet::Private::RealStdlib.real_is_a?(value, Complex)
     true
   end
 
-  def blacklisted_method(method)
+  def denylisted_method(method)
     method.name =~ /__validator__[0-9]{8}/ || method.name =~ /.*:.*/
   end
 
@@ -220,31 +219,29 @@ class Sorbet::Private::Serialize
   end
 
   def constant(const, value)
-    #if Sorbet::Private::RealStdlib.real_is_a?(value, T::Types::TypeTemplate)
-      #"  #{const} = type_template"
-    #elsif Sorbet::Private::RealStdlib.real_is_a?(value, T::Types::TypeMember)
-      #"  #{const} = type_member"
-    #else
-      #"  #{const} = ::T.let(nil, ::T.untyped)"
-    #end
     if KEYWORDS.include?(const.to_sym)
       return "# Illegal constant name: #{const}"
     end
-    "  #{const} = ::T.let(nil, ::T.untyped)"
+    if defined?(T::Types::TypeMember) && Sorbet::Private::RealStdlib.real_is_a?(value, T::Types::TypeMember)
+      value.variance == :invariant ? "  #{const} = type_member" : "  #{const} = type_member(#{value.variance.inspect})"
+    elsif defined?(T::Types::TypeTemplate) && Sorbet::Private::RealStdlib.real_is_a?(value, T::Types::TypeTemplate)
+      value.variance == :invariant ? "  #{const} = type_template" : "  #{const} = type_template(#{value.variance.inspect})"
+    else
+      "  #{const} = ::T.let(nil, ::T.untyped)"
+    end
   end
 
   def serialize_method(method, static=false, with_sig: true)
     name = method.name.to_s
-    ret = String.new
     if !valid_method_name(name)
-      ret << "# Illegal method name: #{name}"
-      return
+      return "# Illegal method name: #{name}\n"
     end
     parameters = from_method(method)
     # a hack for appeasing Sorbet in the presence of the Enumerable interface
     if name == 'each' && !parameters.any? {|(kind, _)| kind == :block}
       parameters.push([:block, "blk"])
     end
+    ret = String.new
     ret << serialize_sig(parameters) if with_sig
     args = parameters.map do |(kind, param_name)|
       to_sig(kind, param_name)
@@ -335,10 +332,23 @@ class Sorbet::Private::Serialize
         if (!KEYWORDS.include?(arg_name.to_sym)) && method.name.to_s.end_with?('=') && arg_name =~ /\A[a-z_][a-z0-9A-Z_]*\Z/ && index == 0
           name = arg_name
         else
-          name = '_' + (uniq == 0 ? '' : uniq.to_s)
+          name = 'arg' + (uniq == 0 ? '' : uniq.to_s)
           uniq += 1
         end
       end
+
+      # Sanitize parameter names that are not valid.
+      # Ruby 2.7+ argument forwarding works by expanding `foo(...)`
+      # to `foo(**, ****, &&)`, in other words, to a rest parameter named
+      # `*`, a keyword rest parameter named `**` and a block argument named
+      # `&`. Those are all illegal parameter names which we should NOT
+      # generate. (Coincidentally, that is why Ruby 2.7+ uses those names,
+      # so that user code cannot mess with the forwarded arguments)
+      if ["*", "**", "&"].include?(name.to_s)
+        name = 'arg' + (uniq == 0 ? '' : uniq.to_s)
+        uniq += 1
+      end
+
       [kind, name]
     end
   end

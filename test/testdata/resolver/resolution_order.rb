@@ -1,4 +1,4 @@
-# typed: strong
+# typed: strict
 
 # This file is not valid Ruby since we reference A before
 # definition. However, it would work with our autoloader, and also
@@ -28,7 +28,7 @@ end
 class TestInheritace1 < A::AB
 end
 
-class TestInheritace2 < E::EA
+class TestInheritace2 < E::EA # error: The super class `A` of `TestInheritace2` does not derive from `Class`
 end
 
 module A

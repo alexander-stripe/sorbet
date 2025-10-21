@@ -1,209 +1,163 @@
 #include "main/lsp/LSPPreprocessor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_replace.h"
+#include "common/kvstore/KeyValueStore.h"
 #include "main/lsp/LSPOutput.h"
-#include "main/lsp/ShowOperation.h"
-#include "main/lsp/lsp.h"
-#include "main/pipeline/pipeline.h"
+#include "main/lsp/json_types.h"
+#include "main/lsp/notifications/notifications.h"
+#include "main/lsp/requests/requests.h"
 
 using namespace std;
 
 namespace sorbet::realmain::lsp {
 
 namespace {
-bool sanityCheckUpdate(const core::GlobalState &gs, const LSPFileUpdates &updates) {
-    UnorderedSet<string> encounteredFiles;
-    ENFORCE(updates.updatedFiles.size() == updates.updatedFileHashes.size());
-    ENFORCE(updates.updatedFiles.size() == updates.updatedFileIndexes.size());
-    for (int i = 0; i < updates.updatedFiles.size(); i++) {
-        const auto &f = updates.updatedFiles[i];
-        // const auto &h = updates.updatedFileHashes[i];
-        const auto &ast = updates.updatedFileIndexes[i];
-        ENFORCE(f->path() == ast.file.data(gs).path());
-        ENFORCE(!encounteredFiles.contains(f->path()));
-        encounteredFiles.insert(string(f->path()));
-    }
-    ENFORCE(updates.canTakeFastPath || updates.updatedGS.has_value());
-    if (updates.hasNewFiles) {
-        ENFORCE(!updates.canTakeFastPath);
-    }
-    return true;
-}
-
-void cancelTimer(unique_ptr<Timer> &timer) {
-    // Protect against nullptrs.
-    if (timer) {
-        timer->cancel();
-    }
-}
-
-void cancelRequest(std::deque<std::unique_ptr<LSPMessage>> &pendingRequests, const CancelParams &cancelParams) {
-    for (auto &current : pendingRequests) {
-        if (current->isRequest()) {
-            auto &request = current->asRequest();
-            if (request.id == cancelParams.id) {
-                // We didn't start processing it yet -- great! Cancel it and return.
-                current->canceled = true;
-                // Don't report a latency metric for canceled requests.
-                cancelTimer(current->timer);
-                return;
-            }
-        }
-    }
-    // Else... it's too late; we have either already processed it, or are currently processing it. Swallow cancellation
-    // and ignore.
-}
-
-string readFile(string_view path, const FileSystem &fs) {
+string readFile(const string &path, const FileSystem &fs) {
     try {
         return fs.readFile(path);
     } catch (FileNotFoundException e) {
         // Act as if file is completely empty.
-        // NOTE: It is not appropriate to throw an error here. Sorbet does not differentiate between Watchman updates
-        // that specify if a file has changed or has been deleted, so this is the 'golden path' for deleted files.
+        // NOTE: It is not appropriate to throw an error here. Sorbet does not differentiate between Watchman
+        // updates that specify if a file has changed or has been deleted, so this is the 'golden path' for deleted
+        // files.
         // TODO(jvilk): Use Tombstone files instead.
         return "";
     }
 }
 
-string_view getFileContents(LSPFileUpdates &updates, const core::GlobalState &initialGS, string_view path) {
-    // Get last file in array matching path. There may be duplicates (which will be culled before committing).
-    const auto &updatedFiles = updates.updatedFiles;
-    for (auto it = updatedFiles.rbegin(); it != updatedFiles.rend(); it++) {
-        if ((*it)->path() == path) {
-            return (*it)->source();
-        }
-    }
+class TerminateOnDestruction final {
+    TaskQueue &queue;
 
-    auto currentFileRef = initialGS.findFileByPath(path);
-    if (currentFileRef.exists()) {
-        return currentFileRef.data(initialGS).source();
-    } else {
-        return "";
+public:
+    TerminateOnDestruction(TaskQueue &queue) : queue{queue} {}
+    ~TerminateOnDestruction() {
+        absl::MutexLock lck(queue.getMutex());
+        queue.terminate();
     }
-}
+};
 
 } // namespace
 
-LSPPreprocessor::LSPPreprocessor(unique_ptr<core::GlobalState> initialGS, const shared_ptr<LSPConfiguration> &config,
-                                 u4 initialVersion)
-    : ttgs(TimeTravelingGlobalState(config, move(initialGS), initialVersion)), config(config),
-      owner(this_thread::get_id()), nextVersion(initialVersion + 1) {}
+bool TaskQueue::isTerminated() const {
+    return this->terminated;
+}
 
-void LSPPreprocessor::mergeFileChanges(absl::Mutex &mtx, QueueState &state) {
-    mtx.AssertHeld();
+void TaskQueue::terminate() {
+    this->terminated = true;
+}
+
+bool TaskQueue::isPaused() const {
+    return this->paused;
+}
+
+void TaskQueue::pause() {
+    this->paused = true;
+}
+
+void TaskQueue::resume() {
+    this->paused = false;
+}
+
+int TaskQueue::getErrorCode() const {
+    return this->errorCode;
+}
+
+void TaskQueue::setErrorCode(int code) {
+    this->errorCode = code;
+}
+
+CounterState &TaskQueue::getCounters() {
+    return this->counters;
+}
+
+const std::deque<unique_ptr<LSPTask>> &TaskQueue::tasks() const {
+    return this->pendingTasks;
+}
+
+std::deque<unique_ptr<LSPTask>> &TaskQueue::tasks() {
+    return this->pendingTasks;
+}
+
+absl::Mutex *TaskQueue::getMutex() {
+    return &this->stateMutex;
+}
+
+bool TaskQueue::ready() const {
+    return this->terminated || (!this->paused && !this->pendingTasks.empty());
+}
+
+LSPPreprocessor::LSPPreprocessor(shared_ptr<LSPConfiguration> config, shared_ptr<TaskQueue> taskQueue,
+                                 uint32_t initialVersion)
+    : config(move(config)), taskQueue(std::move(taskQueue)), owner(this_thread::get_id()),
+      nextVersion(initialVersion + 1) {}
+
+string_view LSPPreprocessor::getFileContents(string_view path) const {
+    auto maybeFileContents = maybeGetFileContents(path);
+    if (!maybeFileContents.has_value()) {
+        ENFORCE(false, "Editor sent a change request without a matching open request.");
+        return string_view();
+    }
+    return maybeFileContents.value();
+}
+
+optional<string_view> LSPPreprocessor::maybeGetFileContents(string_view path) const {
+    auto it = openFiles.find(path);
+    optional<string_view> result;
+    if (it == openFiles.end()) {
+        return result;
+    }
+    result = it->second->source();
+    return result;
+}
+
+void LSPPreprocessor::mergeFileChanges() {
+    taskQueue->getMutex()->AssertHeld();
     auto &logger = config->logger;
     // mergeFileChanges is the most expensive operation this thread performs while holding the mutex lock.
     Timer timeit(logger, "lsp.mergeFileChanges");
-    u4 earliestActiveEditVersion = nextVersion;
-    auto &pendingRequests = state.pendingRequests;
+    auto &pendingRequests = taskQueue->tasks();
     const int originalSize = pendingRequests.size();
     int requestsMergedCounter = 0;
 
     for (auto it = pendingRequests.begin(); it != pendingRequests.end();) {
-        auto &msg = **it;
+        auto *olderEdit = dynamic_cast<SorbetWorkspaceEditTask *>(it->get());
         it++;
-        if (!msg.isNotification() || msg.method() != LSPMethod::SorbetWorkspaceEdit) {
+        if (olderEdit == nullptr) {
+            // Is not an edit.
             continue;
         }
-        auto &msgParams = get<unique_ptr<SorbetWorkspaceEditParams>>(msg.asNotification().params);
-        // See which newer requests we can enqueue. We want to merge them *backwards* into msgParams.
-        earliestActiveEditVersion = ttgs.minVersion(earliestActiveEditVersion, msgParams->updates.versionStart);
+        // See which newer requests we can merge. We want to merge them *backwards* into olderEdit so we can complete
+        // merging (and erase merged edits) in a single loop over the queue.
         while (it != pendingRequests.end()) {
-            auto &mergeMsg = **it;
-            const bool canMerge = mergeMsg.isNotification() && mergeMsg.method() == LSPMethod::SorbetWorkspaceEdit;
-            if (!canMerge) {
-                if (mergeMsg.isDelayable()) {
+            auto &task = *it;
+            auto *newerEdit = dynamic_cast<SorbetWorkspaceEditTask *>(task.get());
+            if (newerEdit == nullptr) {
+                if (task->isDelayable()) {
                     ++it;
                     continue;
                 } else {
-                    // Stop merging if the pointed-to message failed to merge AND is not a delayable message.
+                    // Stop merging edits into olderEdit if the pointed-to message is neither an edit nor delayable
                     break;
                 }
             }
-
-            // Merge updates and tracers, and cancel its timer to avoid a distorted latency metric.
-            auto &mergeableParams = get<unique_ptr<SorbetWorkspaceEditParams>>(mergeMsg.asNotification().params);
-            mergeEdits(msgParams->updates, mergeableParams->updates);
-            cancelTimer(msg.timer);
-            msg.startTracers.insert(msg.startTracers.end(), mergeMsg.startTracers.begin(), mergeMsg.startTracers.end());
+            olderEdit->mergeNewer(*newerEdit);
             // Delete the update we just merged and move on to next item.
             it = pendingRequests.erase(it);
             requestsMergedCounter++;
         }
     }
     ENFORCE(pendingRequests.size() + requestsMergedCounter == originalSize);
-
-    // Check if we should cancel the slow path.
-    const auto &gs = ttgs.getGlobalState();
-    const auto runningSlowPath = gs.getRunningSlowPath();
-    // Only try to cancel if the typechecking thread is running the slow path.
-    if (runningSlowPath.has_value()) {
-        const auto &[committed, end] = runningSlowPath.value();
-        earliestActiveEditVersion = ttgs.minVersion(committed, earliestActiveEditVersion);
-
-        // Avoid canceling if the currently-running slow path has already been canceled.
-        if (!gs.wasTypecheckingCanceled()) {
-            for (auto &msg : pendingRequests) {
-                if (msg->isNotification() && msg->method() == LSPMethod::SorbetWorkspaceEdit) {
-                    Timer timeit(logger, "tryCancelSlowPath");
-                    auto &params = get<unique_ptr<SorbetWorkspaceEditParams>>(msg->asNotification().params);
-                    auto combinedUpdates = ttgs.getCombinedUpdates(committed + 1, params->updates.versionEnd);
-                    // Cancel if combined updates end up taking the fast path, or if the new updates will just take the
-                    // slow path a second time when the current slow path finishes.
-                    if ((combinedUpdates.canTakeFastPath || !params->updates.canTakeFastPath) &&
-                        gs.tryCancelSlowPath(params->updates.versionEnd)) {
-                        if (combinedUpdates.canTakeFastPath) {
-                            logger->debug(
-                                "[Preprocessor] Canceling typechecking, as edits {} thru {} can take fast path.",
-                                combinedUpdates.versionStart, combinedUpdates.versionEnd);
-                        } else {
-                            logger->debug(
-                                "[Preprocessor] Canceling typechecking, as new edits {} thru {} will just take "
-                                "the slow path again.",
-                                params->updates.versionStart, params->updates.versionEnd);
-                            combinedUpdates.updatedGS = getTypecheckingGS();
-                        }
-                        params->updates = move(combinedUpdates);
-                    }
-                    break;
-                } else if (!msg->isDelayable()) {
-                    // Message is not delayable, and is not an edit. Can't cancel the slow path.
-                    break;
-                }
-            }
-        }
-    }
-
-    // Prune history for all messages no longer in queue and no longer being typechecked.
-    ttgs.pruneBefore(earliestActiveEditVersion);
-}
-
-unique_ptr<core::GlobalState> LSPPreprocessor::getTypecheckingGS() const {
-    return ttgs.getGlobalState().deepCopy();
-}
-
-unique_ptr<LSPMessage> LSPPreprocessor::makeAndCommitWorkspaceEdit(unique_ptr<SorbetWorkspaceEditParams> params,
-                                                                   unique_ptr<LSPMessage> oldMsg) {
-    ttgs.commitEdits(params->updates);
-    if (!params->updates.canTakeFastPath) {
-        params->updates.updatedGS = getTypecheckingGS();
-    }
-    auto newMsg =
-        make_unique<LSPMessage>(make_unique<NotificationMessage>("2.0", LSPMethod::SorbetWorkspaceEdit, move(params)));
-    newMsg->timer = move(oldMsg->timer);
-    newMsg->startTracers = move(oldMsg->startTracers);
-    return newMsg;
 }
 
 bool LSPPreprocessor::ensureInitialized(LSPMethod method, const LSPMessage &msg) const {
+    // The following whitelisted methods are OK to run prior to LSP server initialization.
+    // TODO(jvilk): Could encode this in each LSPTask.
     if (config->isInitialized() || method == LSPMethod::Initialize || method == LSPMethod::Initialized ||
         method == LSPMethod::Exit || method == LSPMethod::Shutdown || method == LSPMethod::SorbetError ||
         method == LSPMethod::SorbetFence) {
         return true;
     }
     config->logger->error("Serving request before got an Initialize & Initialized handshake from IDE");
-    vector<unique_ptr<LSPMessage>> responses;
     if (!msg.isNotification()) {
         auto id = msg.id().value_or(0);
         auto response = make_unique<ResponseMessage>("2.0", id, msg.method());
@@ -215,9 +169,192 @@ bool LSPPreprocessor::ensureInitialized(LSPMethod method, const LSPMessage &msg)
     return false;
 }
 
-void LSPPreprocessor::preprocessAndEnqueue(QueueState &state, unique_ptr<LSPMessage> msg, absl::Mutex &stateMtx) {
+unique_ptr<LSPTask> LSPPreprocessor::getTaskForMessage(LSPMessage &msg) {
+    if (msg.isResponse()) {
+        // We currently send no requests to the client, so we don't expect any response messages.
+        return make_unique<SorbetErrorTask>(
+            *config, make_unique<SorbetErrorParams>((int)LSPErrorCodes::MethodNotFound, "Unexpected response message"));
+    }
+    const LSPMethod method = msg.method();
+    if (msg.isNotification()) {
+        auto &rawParams = msg.asNotification().params;
+        switch (method) {
+            case LSPMethod::TextDocumentDidOpen: {
+                auto &params = get<unique_ptr<DidOpenTextDocumentParams>>(rawParams);
+                auto newParams = canonicalizeEdits(nextVersion++, move(params));
+                return make_unique<SorbetWorkspaceEditTask>(*config, move(newParams));
+            }
+            case LSPMethod::TextDocumentDidClose: {
+                auto &params = get<unique_ptr<DidCloseTextDocumentParams>>(rawParams);
+                auto newParams = canonicalizeEdits(nextVersion++, move(params));
+                return make_unique<SorbetWorkspaceEditTask>(*config, move(newParams));
+            }
+            case LSPMethod::TextDocumentDidChange: {
+                auto &params = get<unique_ptr<DidChangeTextDocumentParams>>(rawParams);
+                auto newParams = canonicalizeEdits(nextVersion++, move(params));
+                return make_unique<SorbetWorkspaceEditTask>(*config, move(newParams));
+            }
+            case LSPMethod::SorbetWatchmanFileChange: {
+                auto &params = get<unique_ptr<WatchmanQueryResponse>>(rawParams);
+                auto newParams = canonicalizeEdits(nextVersion++, move(params));
+                return make_unique<SorbetWorkspaceEditTask>(*config, move(newParams));
+            }
+            case LSPMethod::SorbetWatchmanStateEnter:
+                return make_unique<WatchmanStateEnterTask>(*config,
+                                                           move(get<unique_ptr<WatchmanStateEnter>>(rawParams)));
+            case LSPMethod::SorbetWatchmanStateLeave:
+                return make_unique<WatchmanStateLeaveTask>(*config,
+                                                           move(get<unique_ptr<WatchmanStateLeave>>(rawParams)));
+            case LSPMethod::SorbetWorkspaceEdit:
+                return make_unique<SorbetWorkspaceEditTask>(
+                    *config, move(get<unique_ptr<SorbetWorkspaceEditParams>>(rawParams)));
+            case LSPMethod::$CancelRequest:
+                return make_unique<CancelRequestTask>(*config, move(get<unique_ptr<CancelParams>>(rawParams)));
+            case LSPMethod::Initialized:
+                return make_unique<InitializedTask>(*config);
+            case LSPMethod::Exit:
+                return make_unique<ExitTask>(*config, 0);
+            case LSPMethod::SorbetFence:
+                return make_unique<SorbetFenceTask>(*config, get<int>(rawParams));
+            case LSPMethod::PAUSE:
+                return make_unique<SorbetPauseTask>(*config);
+            case LSPMethod::RESUME:
+                return make_unique<SorbetResumeTask>(*config);
+            case LSPMethod::SorbetError:
+                return make_unique<SorbetErrorTask>(*config, move(get<unique_ptr<SorbetErrorParams>>(rawParams)));
+            case LSPMethod::WorkspaceDidChangeConfiguration: {
+                return make_unique<DidChangeConfigurationTask>(
+                    *config, move(get<unique_ptr<DidChangeConfigurationParams>>(rawParams)), this->openFilePaths(),
+                    nextVersion++);
+            }
+            default:
+                return make_unique<SorbetErrorTask>(
+                    *config, make_unique<SorbetErrorParams>(
+                                 (int)LSPErrorCodes::MethodNotFound,
+                                 fmt::format("Unknown notification method: {}", convertLSPMethodToString(method))));
+        }
+    } else if (msg.isRequest()) {
+        auto &requestMessage = msg.asRequest();
+        // asRequest() should guarantee the presence of an ID.
+        ENFORCE(msg.id());
+        auto id = *msg.id();
+        auto &rawParams = requestMessage.params;
+        switch (method) {
+            case LSPMethod::TextDocumentDefinition:
+                return make_unique<DefinitionTask>(*config, id,
+                                                   move(get<unique_ptr<TextDocumentPositionParams>>(rawParams)));
+            case LSPMethod::Initialize:
+                return make_unique<InitializeTask>(*config, id, move(get<unique_ptr<InitializeParams>>(rawParams)));
+            case LSPMethod::TextDocumentDocumentHighlight:
+                return make_unique<DocumentHighlightTask>(*config, id,
+                                                          move(get<unique_ptr<TextDocumentPositionParams>>(rawParams)));
+            case LSPMethod::TextDocumentDocumentSymbol:
+                return make_unique<DocumentSymbolTask>(*config, id,
+                                                       move(get<unique_ptr<DocumentSymbolParams>>(rawParams)));
+            case LSPMethod::TextDocumentHover:
+                return make_unique<HoverTask>(*config, id,
+                                              move(get<unique_ptr<TextDocumentPositionParams>>(rawParams)));
+            case LSPMethod::TextDocumentTypeDefinition:
+                return make_unique<TypeDefinitionTask>(*config, id,
+                                                       move(get<unique_ptr<TextDocumentPositionParams>>(rawParams)));
+            case LSPMethod::WorkspaceSymbol:
+                return make_unique<WorkspaceSymbolsTask>(*config, id,
+                                                         move(get<unique_ptr<WorkspaceSymbolParams>>(rawParams)));
+            case LSPMethod::TextDocumentCompletion:
+                return make_unique<CompletionTask>(*config, id, move(get<unique_ptr<CompletionParams>>(rawParams)));
+            case LSPMethod::TextDocumentCodeAction:
+                return make_unique<CodeActionTask>(*config, id, move(get<unique_ptr<CodeActionParams>>(rawParams)));
+            case LSPMethod::CodeActionResolve:
+                return make_unique<CodeActionResolveTask>(*config, id, move(get<unique_ptr<CodeAction>>(rawParams)));
+            case LSPMethod::TextDocumentFormatting:
+                return make_unique<DocumentFormattingTask>(*config, id,
+                                                           move(get<unique_ptr<DocumentFormattingParams>>(rawParams)));
+            case LSPMethod::TextDocumentSignatureHelp:
+                return make_unique<SignatureHelpTask>(*config, id,
+                                                      move(get<unique_ptr<TextDocumentPositionParams>>(rawParams)));
+            case LSPMethod::TextDocumentReferences:
+                return make_unique<ReferencesTask>(*config, id, move(get<unique_ptr<ReferenceParams>>(rawParams)),
+                                                   /* hierarchyReferences */ false);
+            case LSPMethod::SorbetHierarchyReferences:
+                return make_unique<ReferencesTask>(*config, id, move(get<unique_ptr<ReferenceParams>>(rawParams)),
+                                                   /* hierarchyReferences */ true);
+            case LSPMethod::TextDocumentImplementation:
+                return make_unique<ImplementationTask>(*config, id,
+                                                       move(get<unique_ptr<ImplementationParams>>(rawParams)));
+            case LSPMethod::SorbetReadFile:
+                return make_unique<SorbetReadFileTask>(*config, id,
+                                                       move(get<unique_ptr<TextDocumentIdentifier>>(rawParams)));
+            case LSPMethod::SorbetShowSymbol:
+                return make_unique<SorbetShowSymbolTask>(*config, id,
+                                                         move(get<unique_ptr<TextDocumentPositionParams>>(rawParams)));
+            case LSPMethod::Shutdown:
+                return make_unique<ShutdownTask>(*config, id);
+            case LSPMethod::SorbetError:
+                return make_unique<SorbetErrorTask>(*config, move(get<unique_ptr<SorbetErrorParams>>(rawParams)), id);
+            case LSPMethod::GETCOUNTERS:
+                return make_unique<GetCountersTask>(*config, id);
+            case LSPMethod::TextDocumentPrepareRename:
+                return make_unique<PrepareRenameTask>(*config, id,
+                                                      move(get<unique_ptr<TextDocumentPositionParams>>(rawParams)));
+            case LSPMethod::TextDocumentRename:
+                return make_unique<RenameTask>(*config, id, move(get<unique_ptr<RenameParams>>(rawParams)));
+            default:
+                return make_unique<SorbetErrorTask>(
+                    *config,
+                    make_unique<SorbetErrorParams>(
+                        (int)LSPErrorCodes::MethodNotFound,
+                        fmt::format("Unknown request method: {}", convertLSPMethodToString(method))),
+                    id);
+        }
+    } else {
+        // This should be impossible.
+        Exception::raise("Message isn't a request, notification, or response.");
+    }
+}
+
+bool LSPPreprocessor::cancelRequest(const CancelParams &params) {
+    absl::MutexLock lock(taskQueue->getMutex());
+    auto &pendingTasks = taskQueue->tasks();
+    for (auto it = pendingTasks.begin(); it != pendingTasks.end(); ++it) {
+        auto &current = **it;
+        if (current.cancel(params.id)) {
+            pendingTasks.erase(it);
+            // Now that we've removed this request, we may be able to merge more edits together.
+            mergeFileChanges();
+            return true;
+        }
+    }
+    // It's too late; we have either already processed the request or are currently processing it. Swallow cancellation
+    // and ignore.
+    return false;
+}
+
+void LSPPreprocessor::pause() {
+    absl::MutexLock lock(taskQueue->getMutex());
+    ENFORCE(!taskQueue->isPaused());
+    config->logger->error("Pausing");
+    taskQueue->pause();
+}
+
+void LSPPreprocessor::resume() {
+    absl::MutexLock lock(taskQueue->getMutex());
+    ENFORCE(taskQueue->isPaused());
+    config->logger->error("Resuming");
+    taskQueue->resume();
+}
+
+void LSPPreprocessor::exit(int exitCode) {
+    absl::MutexLock lock(taskQueue->getMutex());
+    if (!taskQueue->isTerminated()) {
+        taskQueue->terminate();
+        taskQueue->setErrorCode(exitCode);
+    }
+}
+
+void LSPPreprocessor::preprocessAndEnqueue(unique_ptr<LSPMessage> msg) {
     ENFORCE(owner == this_thread::get_id());
     if (msg->isResponse()) {
+        // We ignore responses.
         return;
     }
 
@@ -227,254 +364,155 @@ void LSPPreprocessor::preprocessAndEnqueue(QueueState &state, unique_ptr<LSPMess
         return;
     }
 
-    auto &logger = config->logger;
-    bool shouldEnqueue = false;
-    bool shouldMerge = false;
-    // Ensure TTGS has file contents from previous edit.
-    ttgs.travel(nextVersion - 1);
-    switch (method) {
-        case LSPMethod::$CancelRequest: {
-            absl::MutexLock lock(&stateMtx);
-            cancelRequest(state.pendingRequests, *get<unique_ptr<CancelParams>>(msg->asNotification().params));
-            // A canceled request can be moved around, so we may be able to merge more file changes.
-            mergeFileChanges(stateMtx, state);
-            break;
+    auto task = getTaskForMessage(*msg);
+    task->latencyTimer = move(msg->latencyTimer);
+
+    {
+        Timer timeit(config->logger, "LSPTask::preprocess");
+        timeit.setTag("method", task->methodString());
+        task->preprocess(*this);
+    }
+    if (task->finalPhase() != LSPTask::Phase::PREPROCESS) {
+        // Enqueue task to be processed on processing thread.
+        absl::MutexLock lock(taskQueue->getMutex());
+        const bool isEdit = task->method == LSPMethod::SorbetWorkspaceEdit;
+        taskQueue->tasks().push_back(move(task));
+        if (isEdit) {
+            // Only edits can be merged; avoid looping over the queue on every request.
+            mergeFileChanges();
         }
-        case LSPMethod::PAUSE: {
-            absl::MutexLock lock(&stateMtx);
-            ENFORCE(!state.paused);
-            logger->error("Pausing");
-            state.paused = true;
-            break;
-        }
-        case LSPMethod::RESUME: {
-            absl::MutexLock lock(&stateMtx);
-            logger->error("Resuming");
-            ENFORCE(state.paused);
-            state.paused = false;
-            break;
-        }
-        case LSPMethod::Exit: {
-            absl::MutexLock lock(&stateMtx);
-            // Don't override previous error code if already terminated.
-            if (!state.terminate) {
-                state.terminate = true;
-                state.errorCode = 0;
-            }
-            state.pendingRequests.push_back(move(msg));
-            break;
-        }
-        case LSPMethod::Initialize: {
-            // Update configuration object. Needed to intelligently process edits.
-            const auto &params = get<unique_ptr<InitializeParams>>(msg->asRequest().params);
-            config->setClientConfig(make_shared<LSPClientConfiguration>(*params));
-            shouldEnqueue = true;
-            break;
-        }
-        case LSPMethod::Initialized: {
-            InitializedParams &params = *get<unique_ptr<InitializedParams>>(msg->asNotification().params);
+    } else {
+        prodCategoryCounterInc("lsp.messages.processed", task->methodString());
+    }
+}
+
+unique_ptr<Joinable> LSPPreprocessor::runPreprocessor(MessageQueueState &messageQueue, absl::Mutex &messageQueueMutex) {
+    return runInAThread("lspPreprocess", [this, &messageQueue, &messageQueueMutex] {
+        // Propagate the termination flag across the two queues.
+        MessageQueueState::NotifyOnDestruction notify(messageQueue, messageQueueMutex);
+        TerminateOnDestruction notifyProcessing(*taskQueue);
+        owner = this_thread::get_id();
+        while (true) {
+            unique_ptr<LSPMessage> msg;
             {
-                Timer timeit(logger, "initial_index");
-                ShowOperation op(*config, "Indexing", "Indexing files...");
-                params.updates.updatedFileIndexes = ttgs.indexFromFileSystem();
-                params.updates.updatedFileHashes = ttgs.getGlobalStateHashes();
+                absl::MutexLock lck(&messageQueueMutex);
+                messageQueueMutex.Await(absl::Condition(
+                    +[](MessageQueueState *messageQueue) -> bool {
+                        return messageQueue->terminate || !messageQueue->pendingRequests.empty();
+                    },
+                    &messageQueue));
+                // Only terminate once incoming queue is drained.
+                if (messageQueue.terminate && messageQueue.pendingRequests.empty()) {
+                    config->logger->debug("Preprocessor terminating");
+                    return;
+                }
+                msg = move(messageQueue.pendingRequests.front());
+                messageQueue.pendingRequests.pop_front();
+                // Combine counters with this thread's counters.
+                if (!messageQueue.counters.hasNullCounters()) {
+                    counterConsume(move(messageQueue.counters));
+                }
             }
-            config->markInitialized();
-            params.updates.canTakeFastPath = false;
-            params.updates.updatedGS = getTypecheckingGS();
-            shouldEnqueue = true;
-            break;
-        }
-        /* For file update events, convert to a SorbetWorkspaceEdit and commit the changes to GlobalState. */
-        case LSPMethod::TextDocumentDidOpen: {
-            auto &params = get<unique_ptr<DidOpenTextDocumentParams>>(msg->asNotification().params);
-            // Ignore files not in workspace.
-            if (config->isUriInWorkspace(params->textDocument->uri)) {
-                openFiles.insert(config->remoteName2Local(params->textDocument->uri));
-                auto newParams = make_unique<SorbetWorkspaceEditParams>();
-                canonicalizeEdits(nextVersion++, move(params), newParams->updates);
-                msg = makeAndCommitWorkspaceEdit(move(newParams), move(msg));
-                shouldEnqueue = shouldMerge = true;
-            }
-            break;
-        }
-        case LSPMethod::TextDocumentDidClose: {
-            auto &params = get<unique_ptr<DidCloseTextDocumentParams>>(msg->asNotification().params);
-            if (config->isUriInWorkspace(params->textDocument->uri)) {
-                openFiles.erase(config->remoteName2Local(params->textDocument->uri));
-                auto newParams = make_unique<SorbetWorkspaceEditParams>();
-                canonicalizeEdits(nextVersion++, move(params), newParams->updates);
-                msg = makeAndCommitWorkspaceEdit(move(newParams), move(msg));
-                shouldEnqueue = shouldMerge = true;
-            }
-            break;
-        }
-        case LSPMethod::TextDocumentDidChange: {
-            auto &params = get<unique_ptr<DidChangeTextDocumentParams>>(msg->asNotification().params);
-            if (config->isUriInWorkspace(params->textDocument->uri)) {
-                auto newParams = make_unique<SorbetWorkspaceEditParams>();
-                canonicalizeEdits(nextVersion++, move(params), newParams->updates);
-                msg = makeAndCommitWorkspaceEdit(move(newParams), move(msg));
-                shouldEnqueue = shouldMerge = true;
-            }
-            break;
-        }
-        case LSPMethod::SorbetWatchmanFileChange: {
-            auto &params = get<unique_ptr<WatchmanQueryResponse>>(msg->asNotification().params);
-            auto newParams = make_unique<SorbetWorkspaceEditParams>();
-            canonicalizeEdits(nextVersion++, move(params), newParams->updates);
-            if (newParams->updates.updatedFiles.empty()) {
-                // No need to commit; these file system updates are ignored.
-                // Reclaim edit version, as we didn't actually use this one.
-                nextVersion--;
-                return;
-            }
-            msg = makeAndCommitWorkspaceEdit(move(newParams), move(msg));
-            shouldEnqueue = shouldMerge = true;
-            break;
-        }
-        default: {
-            // No need to merge; this isn't a file edit.
-            shouldEnqueue = true;
-            break;
-        }
-    }
 
-    if (shouldEnqueue || shouldMerge) {
-        absl::MutexLock lock(&stateMtx);
-        if (shouldEnqueue) {
-            state.pendingRequests.push_back(move(msg));
+            preprocessAndEnqueue(move(msg));
+
+            {
+                absl::MutexLock lck(taskQueue->getMutex());
+                // Merge the counters from all of the worker threads with those stored in
+                // taskQueue.
+                taskQueue->getCounters() = mergeCounters(move(taskQueue->getCounters()));
+                if (taskQueue->isTerminated()) {
+                    // We must have processed an exit notification, or one of the downstream threads exited.
+                    return;
+                }
+            }
         }
-        if (shouldMerge) {
-            mergeFileChanges(stateMtx, state);
-        }
-    }
+    });
 }
 
-void LSPPreprocessor::canonicalizeEdits(u4 v, unique_ptr<DidChangeTextDocumentParams> changeParams,
-                                        LSPFileUpdates &updates) const {
-    updates.versionStart = v;
-    updates.versionEnd = v;
-    string_view uri = changeParams->textDocument->uri;
+unique_ptr<SorbetWorkspaceEditParams>
+LSPPreprocessor::canonicalizeEdits(uint32_t v, unique_ptr<DidChangeTextDocumentParams> changeParams) {
+    auto edit = make_unique<SorbetWorkspaceEditParams>();
+    edit->epoch = v;
+    edit->sorbetCancellationExpected = changeParams->sorbetCancellationExpected.value_or(false);
+    edit->sorbetPreemptionsExpected = changeParams->sorbetPreemptionsExpected.value_or(0);
+    const auto &uri = changeParams->textDocument->uri;
     if (config->isUriInWorkspace(uri)) {
         string localPath = config->remoteName2Local(uri);
-        if (config->isFileIgnored(localPath)) {
-            return;
-        }
-        string fileContents;
-        for (auto &change : changeParams->contentChanges) {
-            if (change->range) {
-                fileContents = string(getFileContents(updates, ttgs.getGlobalState(), localPath));
-                auto &range = *change->range;
-                // incremental update
-                core::Loc::Detail start, end;
-                start.line = range->start->line + 1;
-                start.column = range->start->character + 1;
-                end.line = range->end->line + 1;
-                end.column = range->end->character + 1;
-                core::File old(string(localPath), string(fileContents), core::File::Type::Normal);
-                // These offsets are non-nullopt assuming the input range is a valid range.
-                auto startOffset = core::Loc::pos2Offset(old, start).value();
-                auto endOffset = core::Loc::pos2Offset(old, end).value();
-                fileContents = fileContents.replace(startOffset, endOffset - startOffset, change->text);
-            } else {
-                // replace
-                fileContents = move(change->text);
-            }
-        }
-        updates.updatedFiles.push_back(
-            make_shared<core::File>(move(localPath), move(fileContents), core::File::Type::Normal));
-    }
-}
-
-void LSPPreprocessor::canonicalizeEdits(u4 v, unique_ptr<DidOpenTextDocumentParams> openParams,
-                                        LSPFileUpdates &updates) const {
-    updates.versionStart = v;
-    updates.versionEnd = v;
-    string_view uri = openParams->textDocument->uri;
-    if (config->isUriInWorkspace(uri)) {
-        string localPath = config->remoteName2Local(uri);
-        if (!config->isFileIgnored(localPath)) {
-            updates.updatedFiles.push_back(make_shared<core::File>(
-                move(localPath), move(openParams->textDocument->text), core::File::Type::Normal));
+        if (!config->isFileIgnored(localPath) && config->hasAllowedExtension(localPath)) {
+            string fileContents = changeParams->getSource(getFileContents(localPath));
+            auto fileType = core::File::Type::Normal;
+            auto &slot = openFiles[localPath];
+            auto file = make_shared<core::File>(move(localPath), move(fileContents), fileType, v);
+            file->setIsOpenInClient(true);
+            edit->updates.push_back(file);
+            slot = move(file);
         }
     }
+    return edit;
 }
 
-void LSPPreprocessor::canonicalizeEdits(u4 v, unique_ptr<DidCloseTextDocumentParams> closeParams,
-                                        LSPFileUpdates &updates) const {
-    updates.versionStart = v;
-    updates.versionEnd = v;
-    string_view uri = closeParams->textDocument->uri;
+unique_ptr<SorbetWorkspaceEditParams>
+LSPPreprocessor::canonicalizeEdits(uint32_t v, unique_ptr<DidOpenTextDocumentParams> openParams) {
+    auto edit = make_unique<SorbetWorkspaceEditParams>();
+    edit->epoch = v;
+    const auto &uri = openParams->textDocument->uri;
     if (config->isUriInWorkspace(uri)) {
         string localPath = config->remoteName2Local(uri);
-        if (!config->isFileIgnored(localPath)) {
+        if (!config->isFileIgnored(localPath) && config->hasAllowedExtension(localPath)) {
+            auto fileType = core::File::Type::Normal;
+            auto &slot = openFiles[localPath];
+            auto file = make_shared<core::File>(move(localPath), move(openParams->textDocument->text), fileType, v);
+            file->setIsOpenInClient(true);
+            edit->updates.push_back(file);
+            slot = move(file);
+        }
+    }
+    return edit;
+}
+
+unique_ptr<SorbetWorkspaceEditParams>
+LSPPreprocessor::canonicalizeEdits(uint32_t v, unique_ptr<DidCloseTextDocumentParams> closeParams) {
+    auto edit = make_unique<SorbetWorkspaceEditParams>();
+    edit->epoch = v;
+    const auto &uri = closeParams->textDocument->uri;
+    if (config->isUriInWorkspace(uri)) {
+        string localPath = config->remoteName2Local(uri);
+        if (!config->isFileIgnored(localPath) && config->hasAllowedExtension(localPath)) {
+            openFiles.erase(localPath);
             // Use contents of file on disk.
-            updates.updatedFiles.push_back(make_shared<core::File>(
-                move(localPath), readFile(localPath, *config->opts.fs), core::File::Type::Normal));
+            auto fileType = core::File::Type::Normal;
+            auto fileContents = readFile(localPath, *config->opts.fs);
+            edit->updates.push_back(make_shared<core::File>(move(localPath), move(fileContents), fileType, v));
         }
     }
+    return edit;
 }
 
-void LSPPreprocessor::canonicalizeEdits(u4 v, unique_ptr<WatchmanQueryResponse> queryResponse,
-                                        LSPFileUpdates &updates) const {
-    updates.versionStart = v;
-    updates.versionEnd = v;
-    for (auto file : queryResponse->files) {
+unique_ptr<SorbetWorkspaceEditParams>
+LSPPreprocessor::canonicalizeEdits(uint32_t v, unique_ptr<WatchmanQueryResponse> queryResponse) const {
+    auto edit = make_unique<SorbetWorkspaceEditParams>();
+    edit->epoch = v;
+    for (auto &file : queryResponse->files) {
         // Don't append rootPath if it is empty.
         string localPath = !config->rootPath.empty() ? absl::StrCat(config->rootPath, "/", file) : file;
-        // Editor contents supercede file system updates.
-        if (!config->isFileIgnored(localPath) && !openFiles.contains(localPath)) {
-            updates.updatedFiles.push_back(make_shared<core::File>(
-                move(localPath), readFile(localPath, *config->opts.fs), core::File::Type::Normal));
+        // Editor contents supersede file system updates.
+        if (!config->isFileIgnored(localPath) && config->hasAllowedExtension(localPath) &&
+            !openFiles.contains(localPath)) {
+            auto fileType = core::File::Type::Normal;
+            auto fileContents = readFile(localPath, *config->opts.fs);
+            edit->updates.push_back(make_shared<core::File>(move(localPath), move(fileContents), fileType, v));
         }
     }
+    return edit;
 }
-
-void LSPPreprocessor::mergeEdits(LSPFileUpdates &to, LSPFileUpdates &from) {
-    ENFORCE(sanityCheckUpdate(ttgs.getGlobalState(), to));
-    ENFORCE(sanityCheckUpdate(ttgs.getGlobalState(), from));
-
-    // fromId must happen *after* toId.
-    ENFORCE(ttgs.comesBefore(to.versionEnd, from.versionEnd));
-    // 'from' has newer updates, so merge into from and then move into to.
-    UnorderedSet<int> encounteredFiles;
-    for (auto &index : from.updatedFileIndexes) {
-        encounteredFiles.insert(index.file.id());
+vector<string_view> LSPPreprocessor::openFilePaths() const {
+    vector<string_view> paths;
+    paths.reserve(openFiles.size());
+    for (auto const &[path, file] : openFiles) {
+        paths.emplace_back(path);
     }
-    int i = -1;
-    for (auto &index : to.updatedFileIndexes) {
-        i++;
-        if (!encounteredFiles.contains(index.file.id())) {
-            encounteredFiles.insert(index.file.id());
-            from.updatedFileIndexes.push_back(move(index));
-            from.updatedFiles.push_back(move(to.updatedFiles[i]));
-            from.updatedFileHashes.push_back(move(to.updatedFileHashes[i]));
-        }
-    }
-    to.updatedFiles = move(from.updatedFiles);
-    to.updatedFileIndexes = move(from.updatedFileIndexes);
-    to.updatedFileHashes = move(from.updatedFileHashes);
-    to.hasNewFiles = to.hasNewFiles || from.hasNewFiles;
-    to.canTakeFastPath = ttgs.canTakeFastPath(to.versionStart - 1, to);
-    // `to` now includes the contents of `from`.
-    to.versionEnd = from.versionEnd;
-    // No need to update versionStart, as to comes before from.
-    ENFORCE(ttgs.comesBefore(to.versionStart, from.versionStart));
-    if (to.canTakeFastPath) {
-        prodCategoryCounterInc("lsp.merge_edits", "fast_path");
-        to.updatedGS = nullopt;
-    } else if (from.updatedGS.has_value()) {
-        // `from` has all file updates from `to` and `from` so its GS can be re-used if specified.
-        prodCategoryCounterInc("lsp.merge_edits", "slow_path_reuse_gs");
-        to.updatedGS = move(from.updatedGS.value());
-    } else {
-        // Roll forward again so initial GS has changes from this update prior to copying.
-        prodCategoryCounterInc("lsp.merge_edits", "slow_path_new_gs");
-        ttgs.travel(from.versionEnd);
-        to.updatedGS = getTypecheckingGS();
-    }
-    ENFORCE(sanityCheckUpdate(ttgs.getGlobalState(), to));
+    return paths;
 }
 
 } // namespace sorbet::realmain::lsp

@@ -148,6 +148,10 @@ class Sorbet::Private::GemLoader
       my_require 'sinatra/multi_route'
       my_require 'sinatra/contrib/version'
     end,
+    'sqreen' => proc do
+      ENV['SQREEN_DISABLE'] = 'true'
+      my_require 'sqreen'
+    end,
     'thin-attach_socket' => proc do
       my_require 'thin'
       my_require 'thin/attach_socket'
@@ -218,15 +222,63 @@ class Sorbet::Private::GemLoader
     'rack' => proc do
       my_require 'rack'
       [
-        Rack::Auth::Basic::Request,
-        Rack::Builder,
-        Rack::Deflater,
+        Rack::BodyProxy,
+        Rack::Cascade,
+        Rack::Chunked,
+        Rack::CommonLogger,
+        Rack::ConditionalGet,
+        Rack::Config,
+        Rack::ContentLength,
+        Rack::ContentType,
+        Rack::ETag,
+        Rack::Events,
         Rack::File,
+        Rack::Files,
+        Rack::Deflater,
+        Rack::Directory,
+        Rack::ForwardRequest,
+        Rack::Handler,
+        Rack::Head,
+        Rack::Lint,
+        Rack::Lock,
+        Rack::Logger,
+        Rack::MediaType,
+        Rack::MethodOverride,
         Rack::Mime,
-        Rack::MockRequest,
-        Rack::MockResponse,
-        Rack::Session::Cookie,
+        Rack::NullLogger,
+        Rack::Recursive,
+        Rack::Reloader,
+        Rack::RewindableInput,
+        Rack::Runtime,
+        Rack::Sendfile,
+        Rack::Server,
+        Rack::ShowExceptions,
+        Rack::ShowStatus,
         Rack::Static,
+        Rack::TempfileReaper,
+        Rack::URLMap,
+        Rack::Utils,
+        Rack::Multipart,
+        Rack::MockResponse,
+        Rack::Response,
+        Rack::Auth::Basic,
+        Rack::Auth::AbstractRequest,
+        Rack::Auth::AbstractHandler,
+        Rack::Auth::Digest::MD5,
+        Rack::Auth::Digest::Nonce,
+        Rack::Auth::Digest::Params,
+        Rack::Auth::Digest::Request,
+        Rack::Session::Cookie,
+        Rack::Session::Pool,
+        Rack::Session::Memcache,
+        Rack::Handler::CGI,
+        Rack::Handler::FastCGI,
+        Rack::Handler::WEBrick,
+        Rack::Handler::LSWS,
+        Rack::Handler::SCGI,
+        Rack::Handler::Thin,
+        Rack::Multipart::Generator,
+        Rack::Multipart::UploadedFile,
       ]
     end,
     'poncho' => proc do
@@ -298,7 +350,33 @@ class Sorbet::Private::GemLoader
     'i18n' => proc do
       my_require 'i18n'
       [
+        I18n::Backend,
+        I18n::Backend::Base,
+        I18n::Backend::InterpolationCompiler,
+        I18n::Backend::Cache,
+        I18n::Backend::CacheFile,
+        I18n::Backend::Cascade,
+        I18n::Backend::Chain,
+        I18n::Backend::Fallbacks,
+        I18n::Backend::Flatten,
+        I18n::Backend::Gettext,
+        I18n::Backend::KeyValue,
+        I18n::Backend::Memoize,
+        I18n::Backend::Metadata,
+        I18n::Backend::Pluralization,
+        I18n::Backend::Simple,
+        I18n::Backend::Transliterator,
+        I18n::Config,
+        I18n::Gettext,
+        I18n::Gettext::Helpers,
+        I18n::Locale,
+        I18n::Locale::Fallbacks,
+        I18n::Locale::Tag,
+        I18n::Locale::Tag::Parents,
         I18n::Locale::Tag::Rfc4646,
+        I18n::Locale::Tag::Simple,
+        I18n::Tests,
+        I18n::Middleware,
       ]
     end,
     'http-cookie' => proc do
@@ -334,7 +412,27 @@ class Sorbet::Private::GemLoader
     'coderay' => proc do
       my_require 'coderay'
       [
+        CodeRay::VERSION,
+        CodeRay::FileType,
+        CodeRay::Tokens,
+        CodeRay::TokensProxy,
+        CodeRay::TokenKinds,
         CodeRay::PluginHost,
+        CodeRay::Plugin,
+        CodeRay::Scanners,
+        CodeRay::Scanners::Scanner,
+        CodeRay::Scanners::Java::BuiltinTypes,
+        CodeRay::Scanners::Ruby::Patterns,
+        CodeRay::Scanners::Ruby::StringState,
+        CodeRay::Encoders,
+        CodeRay::Encoders::Encoder,
+        CodeRay::Encoders::HTML::Output,
+        CodeRay::Encoders::HTML::CSS,
+        CodeRay::Encoders::HTML::Numbering,
+        CodeRay::Styles,
+        CodeRay::Styles::Style,
+        CodeRay::Duo,
+        CodeRay::WordList,
       ]
     end,
     'byebug' => proc do
@@ -478,36 +576,259 @@ class Sorbet::Private::GemLoader
       my_require 'html_truncator'
     end,
     'actionpack' => proc do
-      my_require 'actionpack'
+      my_require 'action_pack'
+      my_require 'action_controller/railtie'
       [
         ActionController::Base,
-        ActionDispatch::SystemTestCase,
+        ActionController::API,
+        ActionController::Base,
+        ActionController::Metal,
+        ActionController::Middleware,
+        ActionController::Renderer,
+        ActionController::FormBuilder,
+        ActionController::TestCase,
+        ActionController::TemplateAssertions,
+        ActionController::ConditionalGet,
+        ActionController::ContentSecurityPolicy,
+        ActionController::Cookies,
+        ActionController::DataStreaming,
+        ActionController::DefaultHeaders,
+        ActionController::EtagWithTemplateDigest,
+        ActionController::EtagWithFlash,
+        ActionController::FeaturePolicy,
+        ActionController::Flash,
+        ActionController::ForceSSL,
+        ActionController::Head,
+        ActionController::Helpers,
+        ActionController::HttpAuthentication,
+        ActionController::BasicImplicitRender,
+        ActionController::ImplicitRender,
+        ActionController::Instrumentation,
+        ActionController::Logging,
+        ActionController::MimeResponds,
+        ActionController::ParamsWrapper,
+        ActionController::Redirecting,
+        ActionController::Renderers,
+        ActionController::Rendering,
+        ActionController::RequestForgeryProtection,
+        ActionController::Rescue,
+        ActionController::Streaming,
+        ActionController::StrongParameters,
+        ActionController::ParameterEncoding,
+        ActionController::Testing,
+        ActionController::UrlFor,
+        ActionDispatch::SystemTestCase
+      ]
+    end,
+    'actionview' => proc do
+      my_require 'action_view'
+      my_require 'action_view/railtie'
+      [
+        ActionView::Base,
+        ActionView::Context,
+        ActionView::Digestor,
+        ActionView::Helpers,
+        ActionView::LookupContext,
+        ActionView::Layouts,
+        ActionView::PathSet,
+        ActionView::RecordIdentifier,
+        ActionView::Rendering,
+        ActionView::RoutingUrlFor,
+        ActionView::Template,
+        ActionView::Template::Error,
+        ActionView::Template::RawFile,
+        ActionView::Template::Handlers,
+        ActionView::Template::HTML,
+        ActionView::Template::Inline,
+        ActionView::Template::Sources,
+        ActionView::Template::Text,
+        ActionView::Template::Types,
+        ActionView::UnboundTemplate,
+        ActionView::ViewPaths,
+        ActionView::TestCase,
+        ActionView::CacheExpiry,
+      ]
+    end,
+    'actiontext' => proc do
+      my_require 'action_text'
+      my_require 'action_text/engine'
+      [
+        ActionText::Attachable,
+        ActionText::Attachables::ContentAttachment,
+        ActionText::Attachables::MissingAttachable,
+        ActionText::Attachables::RemoteImage,
+        ActionText::AttachmentGallery,
+        ActionText::Attachment,
+        ActionText::Attachments::Caching,
+        ActionText::Attachments::Minification,
+        ActionText::Attachments::TrixConversion,
+        ActionText::Attribute,
+        ActionText::Content,
+        ActionText::Fragment,
+        ActionText::HtmlConversion,
+        ActionText::PlainTextConversion,
+        ActionText::Serialization,
+        ActionText::TrixAttachment,
+      ]
+    end,
+    'actionmailbox' => proc do
+      my_require 'action_mailbox'
+      my_require 'action_mailbox/engine'
+      [
+        ActionMailbox::Base,
+        ActionMailbox::Router,
+        ActionMailbox::TestCase,
+      ]
+    end,
+    'actioncable' => proc do
+      my_require 'action_cable'
+      my_require 'action_cable/engine'
+      [
+        ActionCable::Server,
+        ActionCable::Server::Base,
+        ActionCable::Server::Broadcasting,
+        ActionCable::Server::Connections,
+        ActionCable::Server::Configuration,
+        ActionCable::Server::Worker,
+        ActionCable::Connection,
+        ActionCable::Connection::Authorization,
+        ActionCable::Connection::Base,
+        ActionCable::Connection::ClientSocket,
+        ActionCable::Connection::Identification,
+        ActionCable::Connection::InternalChannel,
+        ActionCable::Connection::MessageBuffer,
+        ActionCable::Connection::Stream,
+        ActionCable::Connection::StreamEventLoop,
+        ActionCable::Connection::Subscriptions,
+        ActionCable::Connection::TaggedLoggerProxy,
+        ActionCable::Connection::TestCase,
+        ActionCable::Connection::WebSocket,
+        ActionCable::Channel,
+        ActionCable::Channel::Base,
+        ActionCable::Channel::Broadcasting,
+        ActionCable::Channel::Callbacks,
+        ActionCable::Channel::Naming,
+        ActionCable::Channel::PeriodicTimers,
+        ActionCable::Channel::Streams,
+        ActionCable::Channel::TestCase,
+        ActionCable::RemoteConnections,
+        ActionCable::SubscriptionAdapter,
+        ActionCable::SubscriptionAdapter::Base,
+        ActionCable::SubscriptionAdapter::Test,
+        ActionCable::SubscriptionAdapter::SubscriberMap,
+        ActionCable::SubscriptionAdapter::ChannelPrefix,
+        ActionCable::TestHelper,
+        ActionCable::TestCase,
       ]
     end,
     'actionmailer' => proc do
-      my_require 'actionmailer'
+      my_require 'action_mailer'
+      my_require 'action_mailer/railtie'
       [
         ActionMailer::Base,
         ActionMailer::MessageDelivery,
       ]
     end,
     'activejob' => proc do
-      my_require 'activejob'
+      my_require 'active_job'
+      my_require 'active_job/railtie'
       [
         ActiveJob::Base,
       ]
     end,
+    'activemodel' => proc do
+      my_require 'active_model'
+      my_require 'active_model/railtie'
+    end,
+    'activesupport' => proc do
+      my_require 'active_support'
+      [
+        ActiveSupport::Concern,
+        ActiveSupport::ActionableError,
+        ActiveSupport::CurrentAttributes,
+        ActiveSupport::Dependencies,
+        ActiveSupport::DescendantsTracker,
+        ActiveSupport::ExecutionWrapper,
+        ActiveSupport::Executor,
+        ActiveSupport::FileUpdateChecker,
+        ActiveSupport::EventedFileUpdateChecker,
+        ActiveSupport::LogSubscriber,
+        ActiveSupport::Notifications,
+        ActiveSupport::Reloader,
+        ActiveSupport::BacktraceCleaner,
+        ActiveSupport::ProxyObject,
+        ActiveSupport::Benchmarkable,
+        ActiveSupport::Cache,
+        ActiveSupport::Cache::FileStore,
+        ActiveSupport::Cache::MemoryStore,
+        ActiveSupport::Cache::NullStore,
+        ActiveSupport::Cache::Strategy::LocalCache,
+        ActiveSupport::Cache::Strategy::LocalCache::Middleware,
+        ActiveSupport::Callbacks,
+        ActiveSupport::Configurable,
+        ActiveSupport::Deprecation,
+        ActiveSupport::Digest,
+        ActiveSupport::Gzip,
+        ActiveSupport::Inflector,
+        ActiveSupport::JSON,
+        ActiveSupport::KeyGenerator,
+        ActiveSupport::MessageEncryptor,
+        ActiveSupport::MessageVerifier,
+        ActiveSupport::Multibyte,
+        ActiveSupport::Multibyte::Chars,
+        ActiveSupport::Multibyte::Unicode,
+        ActiveSupport::NumberHelper,
+        ActiveSupport::NumberHelper::NumberConverter,
+        ActiveSupport::NumberHelper::RoundingHelper,
+        ActiveSupport::NumberHelper::NumberToRoundedConverter,
+        ActiveSupport::NumberHelper::NumberToDelimitedConverter,
+        ActiveSupport::NumberHelper::NumberToHumanConverter,
+        ActiveSupport::NumberHelper::NumberToHumanSizeConverter,
+        ActiveSupport::NumberHelper::NumberToPhoneConverter,
+        ActiveSupport::NumberHelper::NumberToCurrencyConverter,
+        ActiveSupport::NumberHelper::NumberToPercentageConverter,
+        ActiveSupport::OptionMerger,
+        ActiveSupport::OrderedHash,
+        ActiveSupport::OrderedOptions,
+        ActiveSupport::StringInquirer,
+        ActiveSupport::TaggedLogging,
+        ActiveSupport::XmlMini,
+        ActiveSupport::ArrayInquirer,
+        ActiveSupport::Duration,
+        ActiveSupport::Duration::ISO8601Parser,
+        ActiveSupport::Duration::ISO8601Serializer,
+        ActiveSupport::TimeWithZone,
+        ActiveSupport::TimeZone,
+        ActiveSupport::Rescuable,
+        ActiveSupport::SafeBuffer,
+        ActiveSupport::TestCase,
+      ]
+    end,
     'activerecord' => proc do
-      my_require 'activerecord'
+      my_require 'active_record'
+      my_require 'active_record/railtie'
       [
         ActiveRecord::Schema,
         ActiveRecord::Migration::Current,
       ]
     end,
-    'actionview' => proc do
-      my_require 'actionview'
+    'activestorage' => proc do
+      my_require 'active_storage'
+      my_require 'active_storage/engine'
       [
-        ActionView::TestCase,
+        ActiveStorage::Attached,
+        ActiveStorage::Attached::Changes::CreateOne,
+        ActiveStorage::Attached::Changes::CreateMany,
+        ActiveStorage::Attached::Changes::CreateOneOfMany,
+        ActiveStorage::Attached::Changes::DeleteOne,
+        ActiveStorage::Attached::Changes::DeleteMany,
+        ActiveStorage::Service,
+        ActiveStorage::Service::Configurator,
+        ActiveStorage::Previewer,
+        ActiveStorage::Analyzer,
+        ActiveStorage::Transformers::Transformer,
+        ActiveStorage::Transformers::ImageProcessingTransformer,
+        ActiveStorage::Transformers::MiniMagickTransformer,
       ]
     end,
     'rdoc' => proc do
@@ -538,9 +859,331 @@ class Sorbet::Private::GemLoader
       my_require 'simplecov'
       my_require 'codecov'
     end,
+    'sparql' => proc do
+      my_require 'sparql'
+      [
+        SPARQL::Algebra,
+        SPARQL::Algebra::Aggregate,
+        SPARQL::Algebra::Evaluatable,
+        SPARQL::Algebra::Expression,
+        SPARQL::Algebra::Operator,
+        SPARQL::Algebra::Query,
+        SPARQL::Algebra::Update,
+        SPARQL::Client,
+        SPARQL::Grammar,
+        SPARQL::Grammar::Parser,
+        SPARQL::Grammar::Terminals,
+        SPARQL::Results,
+        SPARQL::VERSION,
+      ]
+    end,
+    'sparql-client' => proc do
+      my_require 'sparql/client'
+      [
+        SPARQL::Client::Query,
+        SPARQL::Client::Repository,
+        SPARQL::Client::Update,
+        SPARQL::Client::VERSION,
+      ]
+    end,
+    'selenium-webdriver' => proc do
+      my_require 'selenium/webdriver'
+      [
+        Selenium::WebDriver::Chrome,
+        Selenium::WebDriver::Chrome::Bridge,
+        Selenium::WebDriver::Chrome::Driver,
+        Selenium::WebDriver::Chrome::Profile,
+        Selenium::WebDriver::Chrome::Options,
+        Selenium::WebDriver::Chrome::Service,
+        Selenium::WebDriver::Edge,
+        Selenium::WebDriver::Firefox,
+        Selenium::WebDriver::Firefox::Extension,
+        Selenium::WebDriver::Firefox::ProfilesIni,
+        Selenium::WebDriver::Firefox::Profile,
+        Selenium::WebDriver::Firefox::Driver,
+        Selenium::WebDriver::Firefox::Options,
+        Selenium::WebDriver::Firefox::Service,
+        Selenium::WebDriver::IE,
+        Selenium::WebDriver::IE::Driver,
+        Selenium::WebDriver::IE::Options,
+        Selenium::WebDriver::IE::Service,
+        Selenium::WebDriver::Remote,
+        Selenium::WebDriver::Remote::Bridge,
+        Selenium::WebDriver::Remote::Driver,
+        Selenium::WebDriver::Remote::Response,
+        Selenium::WebDriver::Remote::Capabilities,
+        Selenium::WebDriver::Remote::Http::Common,
+        Selenium::WebDriver::Remote::Http::Default,
+        Selenium::WebDriver::Safari,
+        Selenium::WebDriver::Safari::Bridge,
+        Selenium::WebDriver::Safari::Driver,
+        Selenium::WebDriver::Safari::Options,
+        Selenium::WebDriver::Safari::Service,
+        Selenium::WebDriver::Support,
+      ]
+    end,
+    'friendly_id' => proc do
+      my_require 'friendly_id'
+      [
+        FriendlyId::History,
+        FriendlyId::Slug,
+        FriendlyId::SimpleI18n,
+        FriendlyId::Reserved,
+        FriendlyId::Scoped,
+        FriendlyId::Slugged,
+        FriendlyId::Finders,
+        FriendlyId::SequentiallySlugged
+      ]
+    end,
+    'rdf' => proc do
+      my_require 'rdf'
+      my_require 'rdf/ntriples'
+      [
+        RDF::Countable,
+        RDF::Durable,
+        RDF::Enumerable,
+        RDF::Indexable,
+        RDF::Mutable,
+        RDF::Queryable,
+        RDF::Readable,
+        RDF::TypeCheck,
+        RDF::Transactable,
+        RDF::Writable,
+        RDF::Graph,
+        RDF::IRI,
+        RDF::Literal,
+        RDF::Node,
+        RDF::Resource,
+        RDF::Statement,
+        RDF::URI,
+        RDF::Value,
+        RDF::Term,
+        RDF::List,
+        RDF::Format,
+        RDF::Reader,
+        RDF::ReaderError,
+        RDF::Writer,
+        RDF::WriterError,
+        RDF::NTriples,
+        RDF::NQuads,
+        RDF::Changeset,
+        RDF::Dataset,
+        RDF::Repository,
+        RDF::Transaction,
+        RDF::Query,
+        RDF::Query::Pattern,
+        RDF::Query::Solution,
+        RDF::Query::Solutions,
+        RDF::Query::Variable,
+        RDF::Query::HashPatternNormalizer,
+        RDF::Vocabulary,
+        RDF::StrictVocabulary,
+        RDF::Util,
+        RDF::Util::Aliasing,
+        RDF::Util::Cache,
+        RDF::Util::File,
+        RDF::Util::Logger,
+        RDF::Util::UUID,
+        RDF::Util::Coercions,
+      ]
+    end,
+    'rspec-core' => proc do
+      my_require 'rspec/core'
+      [
+        RSpec::SharedContext,
+        RSpec::Core::ExampleStatusPersister,
+        RSpec::Core::Profiler,
+        RSpec::Core::DidYouMean,
+        RSpec::Core::Formatters::DocumentationFormatter,
+        RSpec::Core::Formatters::HtmlFormatter,
+        RSpec::Core::Formatters::FallbackMessageFormatter,
+        RSpec::Core::Formatters::ProgressFormatter,
+        RSpec::Core::Formatters::ProfileFormatter,
+        RSpec::Core::Formatters::JsonFormatter,
+        RSpec::Core::Formatters::BisectDRbFormatter,
+        RSpec::Core::Formatters::ExceptionPresenter,
+        RSpec::Core::Formatters::FailureListFormatter,
+      ]
+    end,
+    'rspec-mocks' => proc do
+      my_require 'rspec/mocks'
+      [
+        RSpec::Mocks::AnyInstance,
+        RSpec::Mocks::ExpectChain,
+        RSpec::Mocks::StubChain,
+        RSpec::Mocks::MarshalExtension,
+        RSpec::Mocks::Matchers::HaveReceived,
+        RSpec::Mocks::Matchers::Receive,
+        RSpec::Mocks::Matchers::ReceiveMessageChain,
+        RSpec::Mocks::Matchers::ReceiveMessages,
+      ]
+    end,
+    'rspec-support' => proc do
+      my_require 'rspec/support'
+      [
+        RSpec::Support::Differ,
+      ]
+    end,
+    'rspec-expectations' => proc do
+      my_require 'rspec/expectations'
+      [
+        RSpec::Expectations::BlockSnippetExtractor,
+        RSpec::Expectations::FailureAggregator,
+        RSpec::Matchers::BuiltIn::BeAKindOf,
+        RSpec::Matchers::BuiltIn::BeAnInstanceOf,
+        RSpec::Matchers::BuiltIn::BeBetween,
+        RSpec::Matchers::BuiltIn::Be,
+        RSpec::Matchers::BuiltIn::BeComparedTo,
+        RSpec::Matchers::BuiltIn::BeFalsey,
+        RSpec::Matchers::BuiltIn::BeNil,
+        RSpec::Matchers::BuiltIn::BePredicate,
+        RSpec::Matchers::BuiltIn::BeTruthy,
+        RSpec::Matchers::BuiltIn::BeWithin,
+        RSpec::Matchers::BuiltIn::Change,
+        RSpec::Matchers::BuiltIn::Compound,
+        RSpec::Matchers::BuiltIn::ContainExactly,
+        RSpec::Matchers::BuiltIn::Cover,
+        RSpec::Matchers::BuiltIn::EndWith,
+        RSpec::Matchers::BuiltIn::Eq,
+        RSpec::Matchers::BuiltIn::Eql,
+        RSpec::Matchers::BuiltIn::Equal,
+        RSpec::Matchers::BuiltIn::Exist,
+        RSpec::Matchers::BuiltIn::Has,
+        RSpec::Matchers::BuiltIn::HaveAttributes,
+        RSpec::Matchers::BuiltIn::Include,
+        RSpec::Matchers::BuiltIn::All,
+        RSpec::Matchers::BuiltIn::Match,
+        RSpec::Matchers::BuiltIn::NegativeOperatorMatcher,
+        RSpec::Matchers::BuiltIn::OperatorMatcher,
+        RSpec::Matchers::BuiltIn::Output,
+        RSpec::Matchers::BuiltIn::PositiveOperatorMatcher,
+        RSpec::Matchers::BuiltIn::RaiseError,
+        RSpec::Matchers::BuiltIn::RespondTo,
+        RSpec::Matchers::BuiltIn::Satisfy,
+        RSpec::Matchers::BuiltIn::StartWith,
+        RSpec::Matchers::BuiltIn::ThrowSymbol,
+        RSpec::Matchers::BuiltIn::YieldControl,
+        RSpec::Matchers::BuiltIn::YieldSuccessiveArgs,
+        RSpec::Matchers::BuiltIn::YieldWithArgs,
+        RSpec::Matchers::BuiltIn::YieldWithNoArgs,
+      ]
+    end,
+    'kaminari-core' => proc do
+      my_require 'kaminari/core'
+    end,
+    'kaminari-activerecord' => proc do
+      my_require 'kaminari/activerecord'
+    end,
+    'kaminari-actionview' => proc do
+      my_require 'kaminari/actionview'
+    end,
+    'sxp' => proc do
+      my_require 'sxp'
+      [
+        SXP::Pair,
+        SXP::List,
+        SXP::Generator,
+        SXP::Reader,
+        SXP::Reader::Basic,
+        SXP::Reader::Extended,
+        SXP::Reader::Scheme,
+        SXP::Reader::CommonLisp,
+        SXP::Reader::SPARQL,
+      ]
+    end,
+    'ebnf' => proc do
+      my_require 'ebnf'
+      [
+        EBNF::Base,
+        EBNF::BNF,
+        EBNF::LL1,
+        EBNF::LL1::Lexer,
+        EBNF::LL1::Parser,
+        EBNF::LL1::Scanner,
+        EBNF::Parser,
+        EBNF::Rule,
+        EBNF::Writer,
+        EBNF::VERSION,
+      ]
+    end,
+    'doorkeeper' => proc do
+      my_require 'doorkeeper'
+      version = Bundler.load.specs['doorkeeper'][0].stub.version
+      if Gem::Requirement.create('>=5.4.0').satisfied_by?(version)
+        [
+          Doorkeeper::Errors,
+          Doorkeeper::OAuth,
+          Doorkeeper::Rake,
+          Doorkeeper::Request,
+          Doorkeeper::Server,
+          Doorkeeper::StaleRecordsCleaner,
+          Doorkeeper::Validations,
+          Doorkeeper::VERSION,
+          Doorkeeper::AccessGrantMixin,
+          Doorkeeper::AccessTokenMixin,
+          Doorkeeper::ApplicationMixin,
+          Doorkeeper::Helpers::Controller,
+          Doorkeeper::Request::Strategy,
+          Doorkeeper::Request::AuthorizationCode,
+          Doorkeeper::Request::ClientCredentials,
+          Doorkeeper::Request::Code,
+          Doorkeeper::Request::Password,
+          Doorkeeper::Request::RefreshToken,
+          Doorkeeper::Request::Token,
+          Doorkeeper::OAuth::BaseRequest,
+          Doorkeeper::OAuth::AuthorizationCodeRequest,
+          Doorkeeper::OAuth::BaseResponse,
+          Doorkeeper::OAuth::CodeResponse,
+          Doorkeeper::OAuth::Client,
+          Doorkeeper::OAuth::ClientCredentialsRequest,
+          Doorkeeper::OAuth::CodeRequest,
+          Doorkeeper::OAuth::ErrorResponse,
+          Doorkeeper::OAuth::Error,
+          Doorkeeper::OAuth::InvalidTokenResponse,
+          Doorkeeper::OAuth::InvalidRequestResponse,
+          Doorkeeper::OAuth::ForbiddenTokenResponse,
+          Doorkeeper::OAuth::NonStandard,
+          Doorkeeper::OAuth::PasswordAccessTokenRequest,
+          Doorkeeper::OAuth::PreAuthorization,
+          Doorkeeper::OAuth::RefreshTokenRequest,
+          Doorkeeper::OAuth::Scopes,
+          Doorkeeper::OAuth::Token,
+          Doorkeeper::OAuth::TokenIntrospection,
+          Doorkeeper::OAuth::TokenRequest,
+          Doorkeeper::OAuth::TokenResponse,
+          Doorkeeper::OAuth::Authorization::Code,
+          Doorkeeper::OAuth::Authorization::Context,
+          Doorkeeper::OAuth::Authorization::Token,
+          Doorkeeper::OAuth::Authorization::URIBuilder,
+          Doorkeeper::OAuth::Client::Credentials,
+          Doorkeeper::OAuth::ClientCredentials::Validator,
+          Doorkeeper::OAuth::ClientCredentials::Creator,
+          Doorkeeper::OAuth::ClientCredentials::Issuer,
+          Doorkeeper::OAuth::Helpers::ScopeChecker,
+          Doorkeeper::OAuth::Helpers::URIChecker,
+          Doorkeeper::OAuth::Helpers::UniqueToken,
+          Doorkeeper::OAuth::Hooks::Context,
+          Doorkeeper::Models::Accessible,
+          Doorkeeper::Models::Expirable,
+          Doorkeeper::Models::Orderable,
+          Doorkeeper::Models::Scopes,
+          Doorkeeper::Models::Reusable,
+          Doorkeeper::Models::ResourceOwnerable,
+          Doorkeeper::Models::Revocable,
+          Doorkeeper::Models::SecretStorable,
+          Doorkeeper::Orm::ActiveRecord,
+          Doorkeeper::Rails::Helpers,
+          Doorkeeper::Rails::Routes,
+          Doorkeeper::SecretStoring::Base,
+          Doorkeeper::SecretStoring::Plain,
+          Doorkeeper::SecretStoring::Sha256Hash,
+          Doorkeeper::SecretStoring::BCrypt,
+        ]
+      end
+    end,
   }
 
-  # This is so that the autoloader doesn't treat these as manditory requires
+  # This is so that the autoloader doesn't treat these as mandatory requires
   # before loading this file
   def self.my_require(gem)
     require gem # rubocop:disable PrisonGuard/NoDynamicRequire
@@ -559,30 +1202,50 @@ class Sorbet::Private::GemLoader
         puts "NameError: #{e}"
       end
     else
-      require gem # rubocop:disable PrisonGuard/NoDynamicRequire
+      begin
+        require gem # rubocop:disable PrisonGuard/NoDynamicRequire
+      rescue NameError => e
+        puts "NameError: #{e}"
+      end
     end
   end
 
   def self.require_all_gems
     require 'bundler/setup'
+    require 'bundler/lockfile_parser'
 
+    specs = []
     # Do not load gems in Gemfile where require is false
-    deps = Bundler.load.dependencies.reject { |dep| dep.autorequire && dep.autorequire.empty? }
-    specs = deps.flat_map do |dep|
-      begin
-        dep.to_specs
-      rescue Gem::MissingSpecError
-        []
+    gemfile_dependencies = Bundler.load.dependencies.
+      reject { |dep| dep.autorequire && dep.autorequire.empty? }
+    required_dependency_names = gemfile_dependencies.map(&:name)
+
+    lockfile_parser = Bundler::LockfileParser.new(File.read(Bundler.default_lockfile))
+    lockfile_parser.specs.each do |spec|
+      # Only include the spec for a gem and it's dependencies if it's autorequired.
+      if required_dependency_names.include?(spec.name)
+        specs << spec
+        specs << spec.dependencies
       end
-    end.to_set
+    end
+    specs.flatten!
+    specs.uniq! { |spec| spec.name }
+    specs = specs.to_set
 
     specs.sort_by(&:name).each do |gemspec|
       begin
         require_gem(gemspec.name)
-      rescue LoadError
+      rescue LoadError => e
+        puts "LoadError: #{e}"
+      rescue NameError => e
+        puts "NameError: #{e}"
       end
     end
-    Bundler.require
+    begin
+      Bundler.require
+    rescue NameError => e
+      puts "NameError: #{e}"
+    end
   end
 end
 # rubocop:enable PrisonGuard/AutogenLoaderPreamble

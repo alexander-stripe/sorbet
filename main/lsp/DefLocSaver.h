@@ -7,14 +7,14 @@ namespace sorbet::realmain::lsp {
 class DefLocSaver {
 public:
     // Handles loc and symbol requests for method definitions.
-    std::unique_ptr<ast::MethodDef> postTransformMethodDef(core::Context ctx,
-                                                           std::unique_ptr<ast::MethodDef> methodDef);
+    void postTransformMethodDef(core::Context ctx, ast::ExpressionPtr &methodDef);
     // Handles loc and symbol requests for instance variables.
-    std::unique_ptr<ast::UnresolvedIdent> postTransformUnresolvedIdent(core::Context ctx,
-                                                                       std::unique_ptr<ast::UnresolvedIdent> id);
+    void postTransformUnresolvedIdent(core::Context ctx, ast::ExpressionPtr &id);
 
     // Handles loc and symbol requests for constants.
-    std::unique_ptr<ast::ConstantLit> postTransformConstantLit(core::Context ctx,
-                                                               std::unique_ptr<ast::ConstantLit> lit);
+    void postTransformConstantLit(core::Context ctx, ast::ExpressionPtr &lit);
+
+    // Handles loc and symbol requests for ClassDef names.
+    void preTransformClassDef(core::Context ctx, ast::ExpressionPtr &lit);
 };
 }; // namespace sorbet::realmain::lsp

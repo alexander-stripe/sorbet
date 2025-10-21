@@ -32,7 +32,10 @@ cleanup() {
 }
 trap cleanup exit
 
-main/sorbet --silence-dev-message --lsp --disable-watchman --enable-all-experimental-lsp-features --dir "$(dirname "$recfile")" < "$in_pipe" > "$out_pipe" &
+main/sorbet --silence-dev-message \
+    --enable-experimental-requires-ancestor \
+    --lsp --disable-watchman --enable-all-experimental-lsp-features \
+    --dir "$(dirname "$recfile")" < "$in_pipe" > "$out_pipe" &
 
 # This should be
 # exec {IN_FD}>"$in_pipe"
@@ -49,7 +52,7 @@ while read -r line
 do
     if [[ "$line" == ${READ_PREFIX}* ]] ;
     then
-       payload=${line#$READ_PREFIX}
+       payload=${line#"$READ_PREFIX"}
        bytelen=${#payload}
         echo -e -n "Content-Length: ${bytelen}\r\n\r\n">&"$IN_FD"
         # Don't interpret escape characters in payload.
@@ -60,7 +63,7 @@ do
 
     elif [[ "$line" == ${WRITE_PREFIX}* ]] ;
     then
-        expected_payload=${line#$WRITE_PREFIX}
+        expected_payload=${line#"$WRITE_PREFIX"}
         read -r -u "$OUT_FD" header
         if [[ "$header" == "Content-Length: "* ]] ;
         then
@@ -76,8 +79,13 @@ do
             if [ "$IS_REGENERATING_REC_FILE" != true ]; then
                 if [[ "$payload" != "$expected_payload" ]];
                 then
-                    diff -u  <(echo "$expected_payload" | python -m json.tool)\
-                         <(echo "$payload" | python -m json.tool)
+                    if command -v python3 &> /dev/null; then
+                      python="python3"
+                    else
+                      python="python"
+                    fi
+                    diff -u  <(echo "$expected_payload" | "$python" -m json.tool)\
+                         <(echo "$payload" | "$python" -m json.tool)
                     exit 1
                 fi
             else

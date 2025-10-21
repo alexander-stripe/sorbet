@@ -59,6 +59,9 @@ class Sorbet::Private::RequireEverything
       # generate it without using the whole rails ecosystem.
       next if /db\/schema.rb$/.match(abs_path)
 
+      # Skip **/extconf.rb, as running it will emit build configuration artifacts
+      next if /\/extconf.rb$/.match(abs_path)
+
       begin
         my_require(abs_path, i+1, abs_paths.size)
       rescue LoadError, NoMethodError, SyntaxError
@@ -114,6 +117,8 @@ class Sorbet::Private::RequireEverything
       "--stop-after=parser",
       "--silence-dev-message",
       "--no-error-count",
+      "-e",
+      "''",
     ]) {|io| io.read}
     # This returns a hash with structure:
     # { files:
@@ -127,7 +132,8 @@ class Sorbet::Private::RequireEverything
     #   ]
     # }
     parsed = JSON.parse(output)
-    parsed['files']
+    parsed
+      .fetch('files', [])
       .reject{|file| ["Ignore", "Stdlib"].include?(file["strict"])}
       .map{|file| file["path"]}
       .select{|path| File.file?(path)} # Some files have https:// paths. We ignore those here.

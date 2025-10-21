@@ -8,33 +8,41 @@ module T::Types
 
     attr_reader :values
 
-    # TODO Ideally Hash would not be accepted but there are a lot of uses with prop enum.
-    sig {params(values: T.any(Array, Set, Hash, T::Range[T.untyped])).void}
     def initialize(values)
-      @values = values
+      case values
+      when Hash
+        @values = values
+      else
+        require "set" unless defined?(Set)
+        @values = values.to_set
+      end
     end
 
-    # @override Base
+    def build_type
+      nil
+    end
+
+    # overrides Base
     def valid?(obj)
       @values.member?(obj)
     end
 
-    # @override Base
+    # overrides Base
     private def subtype_of_single?(other)
       case other
       when Enum
-        (other.values - @values).empty?
+        (@values - other.values).empty?
       else
         false
       end
     end
 
-    # @override Base
+    # overrides Base
     def name
-      "T.enum([#{@values.map(&:inspect).join(', ')}])"
+      @name ||= "T.deprecated_enum([#{@values.map(&:inspect).sort.join(', ')}])"
     end
 
-    # @override Base
+    # overrides Base
     def describe_obj(obj)
       obj.inspect
     end

@@ -3,5 +3,7 @@
 class Foo
   extend T::Sig
   sig { returns(String) }
-  def foo; 1; end # error: Returning value that does not conform to method result type
+  def foo; 1; end # error: Expected `String` but found `Integer(1)` for method result type
 end
+
+T.reveal_type(Foo.new.foo) # error: `String`

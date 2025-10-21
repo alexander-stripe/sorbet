@@ -26,6 +26,22 @@ class Opus::Types::Test::Props::PropsTest < Critic::Unit::UnitTest
     assert_equal('red', m.foo['color'])
   end
 
+  it 'can validate prop value' do
+    MyProps.validate_prop_value :foo, {}
+
+    e = assert_raises(TypeError) do
+      MyProps.validate_prop_value :foo, 'nope'
+    end
+    assert_equal(
+      "Parameter 'foo': Can't set Opus::Types::Test::Props::PropsTest::MyProps.foo to \"nope\" (instance of String) - need a T::Hash[T.any(String, Symbol), Object]",
+      e.message.split("\n").first,
+    )
+
+    assert_raises(RuntimeError) do
+      MyProps.validate_prop_value :nope, 'does not matter'
+    end
+  end
+
   module BaseProps
     include T::Props
 
@@ -56,6 +72,30 @@ class Opus::Types::Test::Props::PropsTest < Critic::Unit::UnitTest
   class InheritedOverrideSubProps < OverrideSubProps
   end
 
+  class HasPropGetOverride < T::Props::Decorator
+    attr_reader :field_accesses
+
+    def prop_get(instance, prop, *)
+      @field_accesses ||= []
+      @field_accesses << prop
+      super
+    end
+  end
+
+  class UsesPropGetOverride
+    include T::Props
+
+    def self.decorator_class
+      HasPropGetOverride
+    end
+
+    prop :foo, T.nilable(String)
+  end
+
+  class AddsPropsToClassWithPropGetOverride < UsesPropGetOverride
+    include BaseProps
+  end
+
   describe 'when subclassing' do
     it 'inherits properties' do
       d = SubProps.new
@@ -81,6 +121,47 @@ class Opus::Types::Test::Props::PropsTest < Critic::Unit::UnitTest
     it 'allows inheriting overridden props' do
       assert(InheritedOverrideSubProps.props.include?(:prop2))
     end
+
+    it 'allows hooking prop_get' do
+      d = UsesPropGetOverride.new
+      d.foo = 'bar'
+      d.foo
+
+      assert_equal(
+        [:foo],
+        UsesPropGetOverride.decorator.field_accesses,
+      )
+
+      d = AddsPropsToClassWithPropGetOverride.new
+      d.prop1 = 'bar'
+      d.prop1
+      assert_equal("I can't let you see that", d.shadowed)
+
+      assert_equal(
+        [:prop1],
+        AddsPropsToClassWithPropGetOverride.decorator.field_accesses,
+      )
+    end
+  end
+
+  describe 'ifunset' do
+    before do
+      @doc = SubProps.new
+    end
+
+    it 'is used by getter' do
+      assert_equal(42, @doc.prop2)
+    end
+
+    it 'is used by decorator#prop_get' do
+      assert_equal(42, @doc.class.decorator.prop_get(@doc, :prop2))
+    end
+
+    # This distinction seems subtle and, given that it has no relationship
+    # to the method names, pretty confusing. But code relies on it.
+    it 'is not used by decorator#get' do
+      assert_nil(@doc.class.decorator.get(@doc, :prop2))
+    end
   end
 
   class TestRedactedProps
@@ -91,7 +172,37 @@ class Opus::Types::Test::Props::PropsTest < Critic::Unit::UnitTest
     prop :secret, String, redaction: [:truncate, 4], sensitivity: []
   end
 
+  describe 'redacted props with no redaction handler' do
+    it 'raises when fetching redacted values' do
+      assert_raises(RuntimeError) do
+        d = TestRedactedProps.new
+        d.str = '12345'
+
+        # this will raise an error without a redaction handler
+        d.str_redacted
+      end
+    end
+  end
+
   describe 'redacted props' do
+    before do
+      T::Configuration.redaction_handler = lambda do |value, redaction|
+        opts = Array(redaction)
+        case opts[0]
+        when :redact_digits
+          value.gsub(/\d/, '*')
+        when :truncate
+          T::Utils.string_truncate_middle(value, opts[1], 0)
+        else
+          value
+        end
+      end
+    end
+
+    after do
+      T::Configuration.redaction_handler = nil
+    end
+
     it 'gets and sets normally' do
       d = TestRedactedProps.new
       d.class.decorator.prop_set(d, :str, '12345')
@@ -130,8 +241,8 @@ class Opus::Types::Test::Props::PropsTest < Critic::Unit::UnitTest
   class TestForeignProps
     include T::Props
 
-    prop :foreign1, String, foreign: -> {MyTestModel}
-    prop :foreign2, T.nilable(String), foreign: -> {MyTestModel}
+    prop :foreign1, String, foreign: -> { MyTestModel }
+    prop :foreign2, T.nilable(String), foreign: -> { MyTestModel }
   end
 
   describe 'foreign props' do
@@ -152,5 +263,245 @@ class Opus::Types::Test::Props::PropsTest < Critic::Unit::UnitTest
       assert(test_model)
       assert_equal(obj.foreign2, test_model.id)
     end
+
+    it 'disallows non-proc arguments' do
+      T::Configuration.expects(:soft_assert_handler).with do |msg, _|
+        msg.include?('Please use a Proc that returns a model class instead')
+      end.times(1)
+
+      Class.new(TestForeignProps) do
+        prop :foreign3, String, foreign: MyTestModel
+      end
+    end
+  end
+
+  class MyCustomType
+    extend T::Props::CustomType
+
+    attr_accessor :value
+
+    def initialize(value)
+      @value = value
+    end
+
+    def self.deserialize(value)
+      result = new
+      result.value = value.clone.freeze
+      result
+    end
+
+    def self.serialize(instance)
+      instance.value
+    end
+  end
+
+  class TestCustomProps
+    include T::Props
+
+    prop :custom, MyCustomType
+    prop :nilable_custom, T.nilable(MyCustomType)
+    prop :collection_custom, T::Array[MyCustomType]
+  end
+
+  describe 'custom types' do
+    before do
+      @obj = TestCustomProps.new
+    end
+
+    it 'work when plain' do
+      @obj.custom = MyCustomType.new("foo")
+      assert_equal("foo", @obj.custom.value)
+    end
+
+    it 'work when nilable' do
+      @obj.nilable_custom = nil
+      assert_nil(@obj.nilable_custom)
+
+      @obj.nilable_custom = MyCustomType.new("foo")
+      assert_equal("foo", @obj.nilable_custom.value)
+    end
+
+    it 'work as collection element' do
+      @obj.collection_custom = []
+      assert_empty(@obj.collection_custom)
+
+      @obj.collection_custom = [MyCustomType.new("foo")]
+      assert_equal(["foo"], @obj.collection_custom.map(&:value))
+    end
+  end
+
+  class TestUntyped
+    include T::Props
+
+    prop :untyped, T.untyped
+  end
+
+  describe 'untyped' do
+    it 'has working accessors' do
+      obj = TestUntyped.new
+      obj.untyped = nil
+      assert_nil(obj.untyped)
+      obj.untyped = 'foo'
+      assert_equal('foo', obj.untyped)
+    end
+  end
+
+  class TypeValidating
+    include T::Props
+    include T::Props::TypeValidation
+  end
+
+  describe 'type validation' do
+    it 'bans plain Object' do
+      assert_raises(T::Props::TypeValidation::UnderspecifiedType) do
+        Class.new(TypeValidating) do
+          prop :object, Object
+        end
+      end
+    end
+
+    it 'allows with DEPRECATED_underspecified_type' do
+      c = Class.new(TypeValidating) do
+        prop :object, Object, DEPRECATED_underspecified_type: true
+      end
+      o = c.new
+      o.object = 1
+      assert_equal(1, o.object)
+    end
+
+    it 'allows T.all' do
+      c = Class.new(TypeValidating) do
+        prop :deprecated_intersection, T.all(Object, T.deprecated_enum(["foo"]))
+      end
+      o = c.new
+      o.deprecated_intersection = "foo"
+      assert_equal("foo", o.deprecated_intersection)
+    end
+  end
+
+  describe 'override checking' do
+    class OverrideProps
+      include T::Props
+      prop :a, String
+    end
+
+    it 'allows overriding with override => true' do
+      class OverrideProps2 < OverrideProps
+        prop :a, Integer, override: true
+      end
+    end
+
+    it 'errors if a prop has override => true but does not exist' do
+      error = assert_raises(ArgumentError) do
+        class OverrideProps3 < OverrideProps
+          prop :b, Integer, override: true
+        end
+      end
+
+      assert(error.message.include?("You marked the getter for prop :b as `override`, but the method `b` doesn't exist to be overridden."))
+    end
+
+    module ManualGetter
+      extend T::Sig
+
+      sig { overridable.returns(Integer) }
+      def a; 0; end
+    end
+
+    module ManualSetter
+      extend T::Sig
+      extend T::Helpers
+
+      sig { overridable.params(a: Integer).returns(Integer) }
+      def a=(a); 0; end
+    end
+
+    it 'allows overriding normal methods' do
+      class OverrideProps4 < T::Struct
+        include ManualGetter
+        include ManualSetter
+
+        prop :a, Integer, override: true
+      end
+    end
+
+    it 'allows overriding only one half' do
+      class OverrideProps5 < T::Struct
+        include ManualGetter
+
+        prop :a, Integer, override: :reader
+      end
+    end
+
+    it 'permits {allow_incompatible: true}' do
+      class OverrideProps6 < T::Struct
+        include ManualSetter
+
+        prop :a, Integer, override: {writer: {allow_incompatible: true}}
+      end
+    end
+
+    it 'accepts override: false' do
+      class OverrideNothing < T::Struct
+        prop :a, Integer, override: false
+      end
+    end
+
+    # This comes up a few times in Stripe-internal code
+    it 'allows overriding sibling props' do
+      class M
+        include T::Props
+        prop :foo, T.nilable(String)
+        prop :foo, String, override: true
+      end
+    end
+
+    it 'errors on duplicate prop definitions' do
+      err = assert_raises(ArgumentError) do
+        module A
+          include T::Props
+
+          prop :a, Integer
+          prop :a, Integer
+        end
+      end
+
+      assert(err.message.include?("Attempted to redefine prop"))
+    end
+
+    it 'allows overriding private methods' do
+      module A
+        extend T::Sig
+        extend T::Helpers
+
+        abstract!
+
+        sig { abstract.returns(Integer) }
+        private def foo; end
+      end
+
+      class B < T::Struct
+        include A
+        const :foo, Integer, override: true
+      end
+    end
+  end
+
+  it 'disallows overriding a private method defined in the same scope' do
+    err = assert_raises(ArgumentError) do
+      class LocalPrivateOverride < T::Struct
+        extend T::Sig
+        extend T::Helpers
+
+        abstract!
+
+        sig { abstract.returns(Integer) }
+        private def foo; end
+
+        const :foo, Integer, override: true
+      end
+    end
+
+    assert(err.message.include?("doesn't exist to be overridden"))
   end
 end

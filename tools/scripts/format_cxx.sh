@@ -2,22 +2,36 @@
 
 set -e
 
-if [ "$1" = -t ]; then
-    mode="test"
-else
-    mode="fix"
-fi
+mode="fix"
+
+while getopts 't' opt; do
+    case "$opt" in
+        t)
+            mode="test"
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+shift $((OPTIND - 1))
 
 cd "$(dirname "$0")/../.."
 
-bazel build //tools:clang-format &> /dev/null
+./bazel build --config=dbg //tools:clang-format &> /dev/null
 
-# shellcheck disable=SC2207
-cxx_src=(
-    $(git ls-files -c -m -o --exclude-standard -- '*.cxx' '*.cc' '*.h' | \
-          grep -v ^third_party/
+if [ "$#" -ne 0 ]; then
+    cxx_src=("$@")
+else
+    # shellcheck disable=SC2207
+    cxx_src=(
+        $(git ls-files -c -m -o --exclude-standard -- '*.cxx' '*.cc' '*.h' '*.c' | \
+              grep -v ^third_party/
+        )
     )
-)
+fi
+
 misformatted=()
 
 cleanup() {
@@ -49,15 +63,25 @@ fi
 
 if [ "$mode" = "fix" ]; then
     echo "Formatted the following files:" >&2
+    for src in "${misformatted[@]}"; do
+        echo "$src" >&2
+    done
+
+    if [ "${EMIT_SYNCBACK:-}" != "" ]; then
+        echo '### BEGIN SYNCBACK ###'
+        for file in "${misformatted[@]}"; do
+            echo "$file"
+        done
+        echo '### END SYNCBACK ###'
+    fi
 else
-    echo -ne "\\e[1;31m" >&2
-    echo "The following files are misformatted!" >&2
-    echo -ne "\\e[0m" >&2
-    echo -e "Run \\e[97;1;42m ./tools/scripts/format_cxx.sh \\e[0m to format." >&2
+    echo "Some c++ files need to be formatted!"
+    for src in "${misformatted[@]}"; do
+        echo "* $src"
+    done
+    echo ""
+    echo "Run \`./tools/scripts/format_cxx.sh\` to format them"
 fi
 
-for src in "${misformatted[@]}"; do
-    echo "$src" >&2
-done
 
 exit 1

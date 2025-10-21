@@ -4,11 +4,15 @@
 #include "ast/ast.h"
 #include "core/Context.h"
 
+namespace sorbet::core {
+class LazyNameSubstitution;
+};
+
 namespace sorbet::ast {
 class Substitute {
 public:
-    static std::unique_ptr<Expression> run(core::MutableContext ctx, const core::GlobalSubstitution &subst,
-                                           std::unique_ptr<Expression> what);
+    static ParsedFile run(core::Context ctx, const core::NameSubstitution &subst, ParsedFile what);
+    static ParsedFile run(core::Context ctx, core::LazyNameSubstitution &subst, ParsedFile what);
 };
 } // namespace sorbet::ast
 #endif // SORBET_SUBSTITUTE_H

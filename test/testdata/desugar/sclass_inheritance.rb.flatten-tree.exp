@@ -1,10 +1,5 @@
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
-    <emptyTree>
-
-    <emptyTree>
-
+  class <emptyTree><<C <root>>> < (::<todo sym>)
     def main(<blk>)
       begin
         <self>.puts(::A.newer())
@@ -13,29 +8,17 @@ begin
       end
     end
 
+    <emptyTree>
+
+    <emptyTree>
+
+    <emptyTree>
+
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
       begin
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::MM)
-          <emptyTree>
-        end
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::A)
-          <emptyTree>
-        end
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::B)
-          <emptyTree>
-        end
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::C)
-          ::Sorbet::Private::Static.keep_for_ide(::A)
-          <emptyTree>
-        end
+        <runtime method definition of main>
         <self>.main()
         <emptyTree>
       end
@@ -47,59 +30,52 @@ begin
     end
   end
   class ::A<<C A>> < (::<todo sym>)
-    def self.<static-init>(<blk>)
-      begin
-        <emptyTree>
-        ::Sorbet::Private::Static.keep_for_ide(::MM)
-        <emptyTree>
-      end
-    end
-  end
-  class <singleton class><<Class:A>> < (::MM)
     <emptyTree>
-
-    <emptyTree>
-
-    def newer(<blk>)
-      ::<Magic>.<self-new>(<self>)
-    end
 
     def self.<static-init>(<blk>)
       <emptyTree>
     end
   end
-  class ::B<<C B>> < (::<todo sym>)
-    <emptyTree>
-
-    <emptyTree>
-
-    def self.newer(<blk>)
-      ::<Magic>.<self-new>(<self>)
+  class <singleton class><<Class:A>> < (::MM)
+    def newer(<blk>)
+      <self>.new()
     end
 
-    def self.<static-init>(<blk>)
-      ::Sorbet::Private::Static.keep_for_ide(::MM)
-    end
-  end
-  class ::C<<C C>> < (::A)
     def self.<static-init>(<blk>)
       begin
-        <emptyTree>
+        <self>.include(::MM)
+        <runtime method definition of newer>
         <emptyTree>
       end
     end
   end
+  class ::B<<C B>> < (::<todo sym>)
+    def self.newer(<blk>)
+      <self>.new()
+    end
+
+    def self.<static-init>(<blk>)
+      begin
+        <self>.extend(::MM)
+        <runtime method definition of self.newer>
+        <emptyTree>
+      end
+    end
+  end
+  class ::C<<C C>> < (::A)
+    <emptyTree>
+
+    def self.<static-init>(<blk>)
+      <emptyTree>
+    end
+  end
   class <singleton class><<Class:C>> < ()
-    <emptyTree>
-
-    <emptyTree>
-
     def newerer(<blk>)
       <self>.newer()
     end
 
     def self.<static-init>(<blk>)
-      <emptyTree>
+      <runtime method definition of newerer>
     end
   end
   <emptyTree>

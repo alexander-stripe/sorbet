@@ -7,19 +7,27 @@ module T::Types
 
     def initialize; end
 
-    # @override Base
+    def build_type
+      nil
+    end
+
+    # overrides Base
     def name
       "T.untyped"
     end
 
-    # @override Base
+    # overrides Base
     def valid?(obj)
       true
     end
 
-    # @override Base
+    # overrides Base
     private def subtype_of_single?(other)
       true
+    end
+
+    module Private
+      INSTANCE = Untyped.new.freeze
     end
   end
 end

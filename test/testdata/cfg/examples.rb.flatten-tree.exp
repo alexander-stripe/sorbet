@@ -1,33 +1,12 @@
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
+  class <emptyTree><<C <root>>> < (::<todo sym>)
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
-      begin
-        <emptyTree>
-        ::Sorbet::Private::Static.keep_for_ide(::Examples)
-        <emptyTree>
-      end
+      <emptyTree>
     end
   end
   class ::Examples<<C Examples>> < (::<todo sym>)
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
     def i_like_ifs(<blk>)
       if true
         return 1
@@ -116,7 +95,17 @@ begin
     end
 
     def self.<static-init>(<blk>)
-      <emptyTree>
+      begin
+        <runtime method definition of i_like_ifs>
+        <runtime method definition of i_like_exps>
+        <runtime method definition of return_in_one_branch1>
+        <runtime method definition of return_in_one_branch2>
+        <runtime method definition of variables>
+        <runtime method definition of variables_and_loop>
+        <runtime method definition of variables_loop_if>
+        <runtime method definition of take_arguments>
+        <emptyTree>
+      end
     end
   end
   <emptyTree>

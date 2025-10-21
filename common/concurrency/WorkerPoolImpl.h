@@ -1,20 +1,18 @@
 #ifndef SORBET_WORKERPOOL_IMPL_H
 #define SORBET_WORKERPOOL_IMPL_H
 #include "blockingconcurrentqueue.h"
-#include "common/common.h"
 #include "common/concurrency/WorkerPool.h"
 #include "common/os/os.h"
 #include "spdlog/spdlog.h"
 #include <memory>
 #include <vector>
-namespace spd = spdlog;
 namespace sorbet {
 class WorkerPoolImpl : public WorkerPool {
-    int size;
+    int _size;
     // Tune queue for small size
     struct ConcurrentQueueCustomTraits {
         // General-purpose size type. std::size_t is strongly recommended.
-        typedef std::size_t size_t;
+        using size_t = std::size_t;
 
         // The type used for the enqueue and dequeue indices. Must be at least as
         // large as size_t. Should be significantly larger than the number of elements
@@ -26,7 +24,7 @@ class WorkerPoolImpl : public WorkerPool {
         // prevent a race condition no matter the usage of the queue. Note that
         // whether the queue is lock-free with a 64-int type depends on the whether
         // std::atomic<std::uint64_t> is lock-free, which is platform-specific.
-        typedef std::size_t index_t;
+        using index_t = std::size_t;
 
         // Internally, all elements are enqueued and dequeued from multi-element
         // blocks; this is the smallest controllable unit. If you expect few elements
@@ -65,7 +63,7 @@ class WorkerPoolImpl : public WorkerPool {
         // Enqueue operations that would cause this limit to be surpassed will fail. Note
         // that this limit is enforced at the block level (for performance reasons), i.e.
         // it's rounded up to the nearest block size.
-        static const size_t MAX_SUBQUEUE_SIZE = 4;
+        static const size_t MAX_SUBQUEUE_SIZE = 16;
 
         // Memory allocation can be customized if needed.
         // malloc should return nullptr on failure, and handle alignment like std::malloc.
@@ -76,20 +74,22 @@ class WorkerPoolImpl : public WorkerPool {
             return std::free(ptr);
         }
     };
-    typedef std::function<bool()> Task_; // return value indicates if the worker should continie gathering jobs
-    typedef moodycamel::BlockingConcurrentQueue<Task_, ConcurrentQueueCustomTraits> Queue;
+    using Task_ = std::function<bool()>; // return value indicates if the worker should continie gathering jobs
+    using Queue = moodycamel::BlockingConcurrentQueue<Task_, ConcurrentQueueCustomTraits>;
     // ORDER IS IMPORTANT. threads must be killed before Queues.
     std::vector<std::unique_ptr<Queue>> threadQueues;
     std::vector<std::unique_ptr<Joinable>> threads;
-    spd::logger &logger;
+    spdlog::logger &logger;
 
     void multiplexJob_(Task_ t);
 
 public:
-    WorkerPoolImpl(int size, spd::logger &logger);
+    WorkerPoolImpl(int size, spdlog::logger &logger);
     ~WorkerPoolImpl();
 
     void multiplexJob(std::string_view taskName, Task t) override;
+    void multiplexJobWait(std::string_view taskName, Task t) override;
+    int size() override;
 };
 };     // namespace sorbet
 #endif // SORBET_WORKERPOOL_IMPL_H

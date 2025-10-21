@@ -1,13 +1,20 @@
 # typed: true
 
-# TODO(jez) These show up as IdentResponse's; currently unhandled
-# __ENCODING__
-# __LINE__
-# __FILE__
-
-# TODO(jez) These show up as ConstantResponse's; currently unhandled
-# BEGIN
-# END
+# Most partially typed keywords show up as SendResponse internally, so we tap
+# into method name completion to service keywords. There are some, though, that
+# don't come back as a SendResponse:
+#
+#   IdentResponse:
+#     __ENCODING__
+#     __LINE__
+#     __FILE__
+#   ConstantResponse:
+#     BEGIN
+#     END
+#
+# Rather than also tap into ident / const responses to service keyword
+# completion for those keywords, we just drop them on the floor (which is fine,
+# because these keywords are comparably rare).
 
 # `alias_method` is not a keyword
 alia # error: does not exist
@@ -37,7 +44,7 @@ defined # error: does not exist
 d # error: does not exist
 #^ completion: def, defined?, do, ...
 
-# `else` is more common--be sureit comes before `ensure`
+# `else` is more common--be sure it comes before `ensure`
 els # error: does not exist
 #  ^ completion: else, elsif
 
@@ -127,7 +134,7 @@ class A; end
 A.new.the # error: does not exist
 #        ^ completion: then
 
-# undefMethod comes before undef because undef is a method on Kernel
-# but undefMethod is a method on Module (Module < Object < Kernel)
+# undef_method comes before undef because undef is a method on Kernel
+# but undef_method is a method on Module (Module < Object < Kernel)
 unde # error: does not exist
-#   ^ completion: undefMethod, undef
+#   ^ completion: undef_method, undef

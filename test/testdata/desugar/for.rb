@@ -1,9 +1,8 @@
 # typed: strict
 
 class A
-    def self.each
-  # ^^^^^^^^^^^^^ error-with-dupes: Method `each` uses `yield` but does not mention a block parameter
-  # ^^^^^^^^^^^^^ error: This function does not have a `sig`
+    def self.each(&blk)
+  # ^^^^^^^^^^^^^^^^^^^ error: The method `each` does not have a `sig`
         yield 1,2,3,4,5
         yield 6,7,8,9,0
     end
@@ -11,7 +10,7 @@ end
 
 class E
     def self.e=(e) # error: does not have a `sig`
-        @e = e; # error: Use of undeclared variable `@e`
+        @e = e; # error: The singleton class instance variable `@e` must be declared using `T.let` when specifying `# typed: strict`
     end
     def self.e # error: does not have a `sig`
         @e # error: Use of undeclared variable `@e`
@@ -41,8 +40,8 @@ class Main
         puts "main"
         # You can put all sorts of things on the left
         for @a,@@b,$c,d,E.e in A do
-          # ^^ error: Use of undeclared variable `@a`
-             # ^^^ error: Use of undeclared variable `@@b`
+          # ^^ error: The singleton class instance variable `@a` must be declared using `T.let` when specifying `# typed: strict`
+          #    ^^^ error: The class variable `@@b` must be declared using `T.let` when specifying `# typed: strict`
             puts @a.inspect
             puts @@b.inspect
             puts $c.inspect
@@ -51,6 +50,8 @@ class Main
         end
         A.each do |*forTemp|
             @a,@@b,$c,d,E.e = *forTemp
+          # ^^ error: The singleton class instance variable `@a` must be declared using `T.let` when specifying `# typed: strict`
+          #    ^^^ error: The class variable `@@b` must be declared using `T.let` when specifying `# typed: strict`
             puts @a.inspect
             puts @@b.inspect
             puts $c.inspect

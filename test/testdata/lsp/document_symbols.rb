@@ -36,7 +36,7 @@ module M
 
   sig(:final) {params(x: String).returns(String)}
   def bye(x)
-    # ^^^ hover: sig(:final) {params(x: String).returns(String)}
+    # ^^^ hover: sig(:final) { params(x: String).returns(String) }
     "goodbye, #{x}"
   end
 end
@@ -86,4 +86,20 @@ end
 class OuterModule
   class InnerClass; end
   module InnerModule; end
+end
+
+module Container; end
+module Container::Services; end
+
+module Container
+  class Services::TestService
+    extend T::Sig
+
+    def method1
+    end
+
+    sig { void }
+    def method2
+    end
+  end
 end

@@ -1,47 +1,20 @@
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
+  class <emptyTree><<C <root>>> < (::<todo sym>)
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
-      begin
-        <emptyTree>
-        ::Sorbet::Private::Static.keep_for_ide(::TestAttr)
-        <emptyTree>
-      end
+      <emptyTree>
     end
   end
   class ::TestAttr<<C TestAttr>> < (::<todo sym>)
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
     def initialize(<blk>)
       begin
-        @v1 = begin
-          ::Sorbet::Private::Static.keep_for_typechecking(::Integer)
-          T.let(0, Integer)
-        end
-        @v2 = begin
-          ::Sorbet::Private::Static.keep_for_typechecking(::String)
-          T.let("", String)
-        end
-        @v6 = begin
-          ::Sorbet::Private::Static.keep_for_typechecking(::String)
-          T.let("", String)
-        end
+        @v1 = <cast:let>(0, Integer, ::Integer)
+        @v2 = <cast:let>("", String, ::String)
+        @v6 = <cast:let>("", String, ::String)
+        @strv7 = <cast:let>(0.000000, Float, ::Float)
+        @strv8 = <cast:let>(0.000000, Float, ::Float)
+        @strv9 = <cast:let>(0.000000, Float, ::Float)
       end
     end
 
@@ -73,6 +46,22 @@ begin
       @v5 = v5
     end
 
+    def strv7(<blk>)
+      @strv7
+    end
+
+    def strv8=(strv8, <blk>)
+      @strv8 = strv8
+    end
+
+    def strv9(<blk>)
+      @strv9
+    end
+
+    def strv9=(strv9, <blk>)
+      @strv9 = strv9
+    end
+
     def self.<static-init>(<blk>)
       begin
         <self>.sig() do ||
@@ -82,18 +71,42 @@ begin
           <self>.returns(::Integer)
         end
         <self>.sig() do ||
-          <self>.params({:"v1" => ::Integer}).returns(::Integer)
+          <self>.params(:v1, ::Integer).returns(::Integer)
         end
         <self>.sig() do ||
           <self>.returns(::String)
         end
         <self>.sig() do ||
-          <self>.params({:"v2" => ::String}).returns(::String)
+          <self>.params(:v2, ::String).returns(::String)
         end
         <self>.sig() do ||
           <self>.returns(::String)
         end
-        ::Sorbet::Private::Static.keep_for_ide(::T::Sig)
+        <self>.sig() do ||
+          <self>.returns(::Float)
+        end
+        <self>.sig() do ||
+          <self>.params(:strv8, ::Float).returns(::Float)
+        end
+        <self>.sig() do ||
+          <self>.returns(::Float)
+        end
+        <self>.sig() do ||
+          <self>.params(:strv9, ::Float).returns(::Float)
+        end
+        <self>.extend(::T::Sig)
+        <runtime method definition of initialize>
+        <runtime method definition of v1>
+        <runtime method definition of v1=>
+        <runtime method definition of v2>
+        <runtime method definition of v2=>
+        <runtime method definition of v3>
+        <runtime method definition of v4=>
+        <runtime method definition of v5=>
+        <runtime method definition of strv7>
+        <runtime method definition of strv8=>
+        <runtime method definition of strv9>
+        <runtime method definition of strv9=>
         <emptyTree>
       end
     end

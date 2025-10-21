@@ -3,32 +3,47 @@
 
 module T::Types
   class TypedSet < TypedEnumerable
-    attr_reader :type
-
     def underlying_class
-      Hash
+      Set
     end
 
-    # @override Base
+    # overrides Base
     def name
-      "T::Set[#{@type.name}]"
+      "T::Set[#{type.name}]"
     end
 
-    # @override Base
-    def valid?(obj)
+    # overrides Base
+    def recursively_valid?(obj)
+      # Re-implements non_forcing_is_a?
+      return false if Object.autoload?(:Set) # Set is meant to be autoloaded but not yet loaded, this value can't be a Set
+      return false unless Object.const_defined?(:Set) # Set is not loaded yet
       obj.is_a?(Set) && super
     end
 
-    def new(*args) # rubocop:disable PrisonGuard/BanBuiltinMethodOverride
-      Set.new(*T.unsafe(args))
+    # overrides Base
+    def valid?(obj)
+      # Re-implements non_forcing_is_a?
+      return false if Object.autoload?(:Set) # Set is meant to be autoloaded but not yet loaded, this value can't be a Set
+      return false unless Object.const_defined?(:Set) # Set is not loaded yet
+      obj.is_a?(Set)
+    end
+
+    def new(...)
+      # Fine for this to blow up, because hopefully if they're trying to make a
+      # Set, they don't mind putting (or already have put) a `require 'set'` in
+      # their program directly.
+      Set.new(...)
     end
 
     class Untyped < TypedSet
       def initialize
-        super(T.untyped)
+        super(T::Types::Untyped::Private::INSTANCE)
       end
 
       def valid?(obj)
+        # Re-implements non_forcing_is_a?
+        return false if Object.autoload?(:Set) # Set is meant to be autoloaded but not yet loaded, this value can't be a Set
+        return false unless Object.const_defined?(:Set) # Set is not loaded yet
         obj.is_a?(Set)
       end
     end

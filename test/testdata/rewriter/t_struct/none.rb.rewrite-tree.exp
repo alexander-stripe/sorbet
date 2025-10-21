@@ -1,15 +1,17 @@
-class <emptyTree><<C <root>>> < ()
+class <emptyTree><<C <root>>> < (::<todo sym>)
   class <emptyTree>::<C None><<C <todo sym>>> < (<emptyTree>::<C T>::<C Struct>)
     ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({}).void()
+      <self>.void()
     end
 
-    def initialize<<C <todo sym>>>(&<blk>)
-      <emptyTree>
+    def initialize<<todo method>>(&<blk>)
+      nil
     end
+
+    <runtime method definition of initialize>
   end
 
   <emptyTree>::<C None>.new()
 
-  <emptyTree>::<C None>.new({:"foo" => 3})
+  <emptyTree>::<C None>.new(:foo, 3)
 end

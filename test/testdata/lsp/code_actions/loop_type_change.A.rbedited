@@ -1,8 +1,8 @@
 # typed: true
-# exhaustive-apply-code-action: true
+# selective-apply-code-action: quickfix
 
 x = T.let(nil, T.nilable(Integer))
 
 1.times { x = 42 }
-            # ^^ error: Changing the type of a variable in a loop is not permitted
+            # ^^ error: Changing the type of a variable is not permitted in loops and blocks
             # ^^ apply-code-action: [A] Initialize as `T.nilable(Integer)`

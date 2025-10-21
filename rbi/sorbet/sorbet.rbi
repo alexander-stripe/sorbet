@@ -2,20 +2,29 @@
 module Sorbet::Private::Static
   sig do
     params(
-        expr: T.untyped,
+        arg0: T.untyped,
+        arg1: T.nilable(Symbol),
+        blk: T.proc.bind(T::Private::Methods::DeclBuilder).void
     )
     .void
   end
-  def self.keep_for_ide(expr)
+  def self.sig(arg0, arg1=nil, &blk)
   end
 
   sig do
-    params(
-        expr: T.untyped,
-    )
-    .void
+    type_parameters(:U)
+      .params(this: T.untyped, fun: T.all(T.type_parameter(:U), Symbol), kind: Symbol)
+      .returns(T.type_parameter(:U))
   end
-  def self.keep_for_typechecking(expr)
+  def self.keep_def(this, fun, kind)
+  end
+
+  sig do
+    type_parameters(:U)
+      .params(this: T.untyped, fun: T.all(T.type_parameter(:U), Symbol), kind: Symbol)
+      .returns(T.type_parameter(:U))
+  end
+  def self.keep_self_def(this, fun, kind)
   end
 
   # Used to implement Enumerable#to_h, which forwards here in C++.
@@ -30,9 +39,6 @@ module Sorbet::Private::Static
     .returns(T::Hash[T.type_parameter(:U), T.type_parameter(:V)])
   end
   def self.enumerable_to_h(*arg0); end
-end
-
-module Sorbet::Private::Static::StubModule
 end
 
 class Sorbet::Private::Static::ImplicitModuleSuperclass < BasicObject
@@ -63,12 +69,13 @@ class Sorbet::Private::Static::Shape < Hash
   Elem = type_member(:out)
 
   def merge(other); end
+  def to_hash(); end
 end
 
 class Sorbet::Private::Static::ENVClass
   extend T::Generic
   include Enumerable
-  Elem = type_member(:out, fixed: [String, T.nilable(String)])
+  Elem = type_member(:out) {{fixed: [String, String]}}
 
   sig do
     params(
@@ -114,6 +121,42 @@ class Sorbet::Private::Static::ENVClass
   sig {returns(T::Enumerator[Elem])}
   def delete_if(&blk); end
 
+  sig do
+    params(
+        blk: T.proc.params(name: String, value: String).returns(BasicObject),
+    )
+    .returns(Sorbet::Private::Static::ENVClass)
+  end
+  sig {returns(T::Enumerator[Elem])}
+  def each(&blk); end
+
+  sig do
+    params(
+        blk: T.proc.params(name: String).returns(BasicObject),
+    )
+    .returns(Sorbet::Private::Static::ENVClass)
+  end
+  sig {returns(T::Enumerator[Elem])}
+  def each_key(&blk); end
+
+  sig do
+    params(
+        blk: T.proc.params(name: String, value: String).returns(BasicObject),
+    )
+    .returns(Sorbet::Private::Static::ENVClass)
+  end
+  sig {returns(T::Enumerator[Elem])}
+  def each_pair(&blk); end
+
+  sig do
+    params(
+        blk: T.proc.params(value: String).returns(BasicObject),
+    )
+    .returns(Sorbet::Private::Static::ENVClass)
+  end
+  sig {returns(T::Enumerator[Elem])}
+  def each_value(&blk); end
+
   sig {returns(T::Boolean)}
   def empty?(); end
 
@@ -145,6 +188,48 @@ class Sorbet::Private::Static::ENVClass
     params(
         blk: T.proc.params(name: String, value: String).returns(BasicObject),
     )
+    .returns(T::Hash[String, String])
+  end
+  sig {returns(T::Enumerator[Elem])}
+  def filter(&blk); end
+
+  sig do
+    params(
+        blk: T.proc.params(name: String, value: String).returns(BasicObject),
+    )
+    .returns(T.nilable(Sorbet::Private::Static::ENVClass))
+  end
+  sig {returns(T::Enumerator[Elem])}
+  def filter!(&blk); end
+
+  sig do
+    params(
+        key: String
+    )
+    .returns(T::Boolean)
+  end
+  def has_key?(key); end
+
+  sig do
+    params(
+        value: String
+    )
+    .returns(T::Boolean)
+  end
+  def has_value?(value); end
+
+  sig do
+    params(
+        key: String
+    )
+    .returns(T::Boolean)
+  end
+  def include?(key); end
+
+  sig do
+    params(
+        blk: T.proc.params(name: String, value: String).returns(BasicObject),
+    )
     .returns(Sorbet::Private::Static::ENVClass)
   end
   sig {returns(T::Enumerator[Elem])}
@@ -170,6 +255,22 @@ class Sorbet::Private::Static::ENVClass
     returns(T::Array[String])
   end
   def keys; end
+
+  sig do
+    returns(Sorbet::Private::Static::ENVClass)
+  end
+  sig do
+    params(
+      hashes: T::Hash[String, T.nilable(String)]
+    ).returns(Sorbet::Private::Static::ENVClass)
+  end
+  sig do
+    params(
+      hashes: T::Hash[String, T.nilable(String)],
+      blk: T.proc.params(name: String, env_value: T.nilable(String), hash_value: T.nilable(String)).returns(T.nilable(String))
+    ).returns(Sorbet::Private::Static::ENVClass)
+  end
+  def merge!(*hashes, &blk); end
 
   sig {returns(Integer)}
   def length(); end
@@ -197,6 +298,49 @@ class Sorbet::Private::Static::ENVClass
 
   sig do
     params(
+        other: T.any(Sorbet::Private::Static::ENVClass, T::Hash[String, T.nilable(String)])
+    )
+    .returns(Sorbet::Private::Static::ENVClass)
+  end
+  def replace(other); end
+
+  sig do
+    params(
+        blk: T.proc.params(name: String, value: String).returns(BasicObject),
+    )
+    .returns(T::Hash[String, String])
+  end
+  sig {returns(T::Enumerator[Elem])}
+  def select(&blk); end
+
+  sig do
+    params(
+        blk: T.proc.params(name: String, value: String).returns(BasicObject),
+    )
+    .returns(T.nilable(Sorbet::Private::Static::ENVClass))
+  end
+  sig {returns(T::Enumerator[Elem])}
+  def select!(&blk); end
+
+  # Returns a Hash of the given ENV names and their corresponding values
+  #
+  # ```ruby
+  # ENV.slice('foo', 'baz') # => {"foo"=>"0", "baz"=>"2"}
+  # ENV.slice('baz', 'foo') # => {"baz"=>"2", "foo"=>"0"}
+  # ```
+  sig do
+    params(names: String)
+    .returns(T::Hash[String, String])
+  end
+  def slice(*names); end
+
+  sig do
+    returns(T::Hash[String, T.nilable(String)])
+  end
+  def to_hash; end
+
+  sig do
+    params(
         key: T::Hash[String, T.nilable(String)],
     )
     .returns(Sorbet::Private::Static::ENVClass)
@@ -209,13 +353,21 @@ class Sorbet::Private::Static::ENVClass
     .returns(T::Hash[String, T.nilable(String)])
   end
   def update(key, &blk); end
+
+  sig do
+    params(
+        value: String
+    )
+    .returns(T::Boolean)
+  end
+  def value?(value); end
 end
 # [`ENV`](https://docs.ruby-lang.org/en/2.6.0/ENV.html) is a hash-like accessor
 # for environment variables.
 ::ENV = T.let(T.unsafe(nil), Sorbet::Private::Static::ENVClass)
 
 # The magic type that sig {void} returns
-module Sorbet::Private::Static::Void
+class Sorbet::Private::Static::Void
 end
 
 class Sorbet::Private::Static::ReturnTypeInference
@@ -239,6 +391,7 @@ end
 ::Sorbet::Private::Static::IOLike = T.type_alias do
   T.any(
     IO,
-    StringIO
+    StringIO,
+    Tempfile
   )
 end

@@ -2,19 +2,25 @@
 #define SORBET_SYMBOLS_H
 
 #include "common/common.h"
+#include "core/ArityHash.h"
 #include "core/Loc.h"
 #include "core/Names.h"
+#include "core/Polarity.h"
 #include "core/SymbolRef.h"
 #include "core/Types.h"
+#include "core/packages/MangledName.h"
 #include <memory>
 #include <tuple>
 #include <vector>
 
+namespace sorbet {
+class Levenstein;
+}
+
 namespace sorbet::core {
-class Symbol;
+class ClassOrModule;
 class GlobalState;
-struct GlobalStateHash;
-class Type;
+struct LocalSymbolTableHashes;
 class MutableContext;
 class Context;
 class TypeAndOrigins;
@@ -27,120 +33,448 @@ class SerializerImpl;
 }
 class IntrinsicMethod {
 public:
-    virtual void apply(Context ctx, DispatchArgs args, const Type *thisType, DispatchResult &res) const = 0;
+    // A list of method names that this intrinsic dispatches to.
+    // Used to ensure that calls involving intrinsics are correctly typechecked on the fast path.
+    //
+    // If your intrinsic does not dispatch to another method, the default implementation returns an
+    // empty vector, so you can elide an implementation.
+    //
+    // If your intrinsic cannot declare the list of methods it might dispatch to (like
+    // `<call-with-splat>`, etc.), you will have to edit Substitute.cc.
+    virtual std::vector<NameRef> dispatchesTo() const;
+
+    virtual void apply(const GlobalState &gs, const DispatchArgs &args, DispatchResult &res) const = 0;
 };
 
-enum class Variance { CoVariant = 1, ContraVariant = -1, Invariant = 0 };
+enum class Visibility : uint8_t {
+    Public = 1,
+    Protected,
+    Private,
+};
 
-class Symbol final {
+class Method final {
+    friend class ClassOrModule;
+    friend class GlobalState;
+    friend class serialize::SerializerImpl;
+
+    // This is to allow updating `GlobalState::methods` in place with a new method,
+    // over top of an existing method
+    Method &operator=(Method &&) = default;
+
 public:
-    Symbol(const Symbol &) = delete;
-    Symbol() = default;
-    Symbol(Symbol &&) noexcept = default;
+    Method(const Method &) = delete;
+    Method &operator=(const Method &) = delete;
+    Method() = default;
+    Method(Method &&) noexcept = default;
+    class Flags {
+    public:
+        // Synthesized by C++ code in a Rewriter pass
+        bool isRewriterSynthesized : 1;
+        bool isProtected : 1;
+        bool isPrivate : 1;
+        bool isOverloaded : 1;
+        bool isAbstract : 1;
+        bool isGenericMethod : 1;
+        bool isOverridable : 1;
+        bool isFinal : 1;
+        bool isOverride : 1;
+        // It might have been nice to be able to separate out the kinds of incompatible overrides.
+        // This boolean silences all override-related errors.
+        bool allowIncompatibleOverrideAll : 1;
+        bool allowIncompatibleOverrideVisibility : 1;
+        bool isPackagePrivate : 1;
+
+        constexpr static uint16_t NUMBER_OF_FLAGS = 12;
+        constexpr static uint16_t VALID_BITS_MASK = (1 << NUMBER_OF_FLAGS) - 1;
+        Flags() noexcept
+            : isRewriterSynthesized(false), isProtected(false), isPrivate(false), isOverloaded(false),
+              isAbstract(false), isGenericMethod(false), isOverridable(false), isFinal(false), isOverride(false),
+              allowIncompatibleOverrideAll(false), allowIncompatibleOverrideVisibility(false), isPackagePrivate(false) {
+        }
+
+        uint16_t serialize() const {
+            static_assert(sizeof(Flags) == sizeof(uint16_t));
+            // Can replace this with std::bit_cast in C++20
+            auto rawBits = *reinterpret_cast<const uint16_t *>(this);
+
+            // We need to mask the valid bits since uninitialized memory isn't zeroed in C++.
+            return rawBits & VALID_BITS_MASK;
+        }
+    };
+    CheckSize(Flags, 2, 1);
+
+    Loc loc() const;
+    absl::Span<const Loc> locs() const;
+    void addLoc(const core::GlobalState &gs, core::Loc loc);
+    void removeLocsForFile(core::FileRef file);
+    uint32_t hash(const GlobalState &gs) const;
+    uint32_t methodShapeHash(const GlobalState &gs) const;
+    ArityHash methodArityHash(const GlobalState &gs) const;
+
+    inline void setMethodPublic() {
+        flags.isPrivate = false;
+        flags.isProtected = false;
+    }
+
+    void setMethodVisibility(Visibility visibility) {
+        switch (visibility) {
+            case Visibility::Public:
+                this->setMethodPublic();
+                break;
+            case Visibility::Protected:
+                this->flags.isProtected = true;
+                break;
+            case Visibility::Private:
+                this->flags.isPrivate = true;
+                break;
+        }
+    }
+
+    inline bool isMethodPublic() const {
+        return !flags.isProtected && !flags.isPrivate;
+    }
+
+    Visibility methodVisibility() const {
+        if (this->isMethodPublic()) {
+            return Visibility::Public;
+        } else if (this->flags.isProtected) {
+            return Visibility::Protected;
+        } else if (this->flags.isPrivate) {
+            return Visibility::Private;
+        } else {
+            Exception::raise("Expected method to have visibility");
+        }
+    }
+
+    bool hasSig() const {
+        return resultType != nullptr;
+    }
+
+    using ParametersStore = InlinedVector<ParamInfo, core::SymbolRef::EXPECTED_METHOD_PARAMS_COUNT>;
+
+    // if dealiasing fails here, then we return a bad alias method stub instead
+    MethodRef dealiasMethod(const GlobalState &gs, int depthLimit = 42) const;
+
+    // TODO(dmitry) perf: most calls to this method could be eliminated as part of perf work.
+    MethodRef ref(const GlobalState &gs) const;
+
+    Method deepCopy(const GlobalState &to) const;
+    void sanityCheck(const GlobalState &gs) const;
+    bool ignoreInHashing(const GlobalState &gs) const;
+    bool isPrintable(const GlobalState &gs) const;
+
+    // Equivalent to `getIntrinsic() != nullptr`, but potentially more efficient.
+    bool hasIntrinsic() const;
+    // All `IntrinsicMethod`s in sorbet should be statically allocated, which is
+    // why raw pointers are safe.
+    const IntrinsicMethod *getIntrinsic() const;
+
+    ClassOrModuleRef owner;
+    NameRef name;
+    ClassOrModuleRef rebind;
+    Flags flags;
+    // We store an offset into the intrinsic table used by calls.cc; the only
+    // wrinkle is that our offset here is the offset of the intrinsic + 1, so
+    // zero represents "no intrinsic".  This storage system assumes we will
+    // always have < 2^16 intrinsics, which ought to be enough for anybody.
+    const static uint16_t INVALID_INTRINSIC_OFFSET = 0;
+    const static uint16_t FIRST_VALID_INTRINSIC_OFFSET = 1;
+    uint16_t intrinsicOffset = INVALID_INTRINSIC_OFFSET;
+    TypePtr resultType;
+    ParametersStore parameters;
+
+    InlinedVector<TypeParameterRef, 4> &getOrCreateTypeParameters() {
+        if (typeParams) {
+            return *typeParams;
+        }
+        typeParams = std::make_unique<InlinedVector<TypeParameterRef, 4>>();
+        return *typeParams;
+    }
+
+    absl::Span<const TypeParameterRef> typeParameters() const {
+        if (typeParams) {
+            return *typeParams;
+        }
+        return {};
+    }
+
+    InlinedVector<TypeParameterRef, 4> &existingTypeParameters() {
+        ENFORCE(typeParams != nullptr);
+        return *typeParams;
+    }
+
+private:
+    SymbolRef::LOC_store locs_;
+    std::unique_ptr<InlinedVector<TypeParameterRef, 4>> typeParams;
+};
+CheckSize(Method, 136, 8);
+
+// Contains a field or a static field
+class Field final {
+    friend class GlobalState;
+    friend class serialize::SerializerImpl;
+
+    // This is to allow updating `GlobalState::fields` in place with a new field, over top of an existing field
+    Field &operator=(Field &&) = default;
+
+public:
+    Field(const Field &) = delete;
+    Field &operator=(const Field &) = delete;
+    Field() = default;
+    Field(Field &&) noexcept = default;
 
     class Flags {
     public:
-        static constexpr u4 NONE = 0;
-
-        // We're packing three different kinds of flags into separate ranges with the u4's below:
-        //
-        // 0x0000'0000
-        //   ├▶    ◀┤└─ Applies to all types of symbol
-        //   │      │
-        //   │      └─ For our current symbol type, what flags does it have?
-        //   │         (New flags grow up towards MSB)
-        //   │
-        //   └─ What type of symbol is this?
-        //      (New flags grow down towards LSB)
-        //
-
-        // --- What type of symbol is this? ---
-        static constexpr u4 CLASS_OR_MODULE = 0x8000'0000;
-        static constexpr u4 METHOD = 0x4000'0000;
-        static constexpr u4 FIELD = 0x2000'0000;
-        static constexpr u4 STATIC_FIELD = 0x1000'0000;
-        static constexpr u4 TYPE_ARGUMENT = 0x0800'0000;
-        static constexpr u4 TYPE_MEMBER = 0x0400'0000;
-
-        // --- Applies to all types of Symbols ---
-
-        // Synthesized by C++ code in a Rewriter pass
-        static constexpr u4 REWRITER_SYNTHESIZED = 0x0000'0001;
-
-        // --- For our current symbol type, what flags does it have?
-
-        // Class flags
-        static constexpr u4 CLASS_OR_MODULE_CLASS = 0x0000'0010;
-        static constexpr u4 CLASS_OR_MODULE_MODULE = 0x0000'0020;
-        static constexpr u4 CLASS_OR_MODULE_ABSTRACT = 0x0000'0040;
-        static constexpr u4 CLASS_OR_MODULE_INTERFACE = 0x0000'0080;
-        static constexpr u4 CLASS_OR_MODULE_LINEARIZATION_COMPUTED = 0x0000'0100;
-        static constexpr u4 CLASS_OR_MODULE_FINAL = 0x0000'0200;
-        static constexpr u4 CLASS_OR_MODULE_SEALED = 0x0000'0400;
-
-        // Method flags
-        static constexpr u4 METHOD_PROTECTED = 0x0000'0010;
-        static constexpr u4 METHOD_PRIVATE = 0x0000'0020;
-        static constexpr u4 METHOD_OVERLOADED = 0x0000'0040;
-        static constexpr u4 METHOD_ABSTRACT = 0x0000'0080;
-        static constexpr u4 METHOD_GENERIC = 0x0000'0100;
-        [[deprecated]] static constexpr u4 METHOD_GENERATED_SIG = 0x0000'0200;
-        static constexpr u4 METHOD_OVERRIDABLE = 0x0000'0400;
-        static constexpr u4 METHOD_FINAL = 0x0000'0800;
-        static constexpr u4 METHOD_OVERRIDE = 0x0000'1000;
-        [[deprecated]] static constexpr u4 METHOD_IMPLEMENTATION = 0x0000'2000;
-        static constexpr u4 METHOD_INCOMPATIBLE_OVERRIDE = 0x0000'4000;
-
-        // Type flags
-        static constexpr u4 TYPE_COVARIANT = 0x0000'0010;
-        static constexpr u4 TYPE_INVARIANT = 0x0000'0020;
-        static constexpr u4 TYPE_CONTRAVARIANT = 0x0000'0040;
-        static constexpr u4 TYPE_FIXED = 0x0000'0080;
+        bool isField : 1;
+        bool isStaticField : 1;
 
         // Static Field flags
-        static constexpr u4 STATIC_FIELD_TYPE_ALIAS = 0x0000'0010;
+        bool isStaticFieldTypeAlias : 1;
+        bool isStaticFieldPrivate : 1;
+
+        // Can only export a static field
+        bool isExported : 1;
+
+        constexpr static uint8_t NUMBER_OF_FLAGS = 5;
+        constexpr static uint8_t VALID_BITS_MASK = (1 << NUMBER_OF_FLAGS) - 1;
+
+        Flags() noexcept
+            : isField(false), isStaticField(false), isStaticFieldTypeAlias(false), isStaticFieldPrivate(false),
+              isExported(false) {}
+
+        uint8_t serialize() const {
+            static_assert(sizeof(Flags) == sizeof(uint8_t));
+            // Can replace this with std::bit_cast in C++20
+            auto rawBits = *reinterpret_cast<const uint8_t *>(this);
+            // We need to mask the valid bits since uninitialized memory isn't zeroed in C++.
+            return rawBits & VALID_BITS_MASK;
+        }
     };
+    CheckSize(Flags, 1, 1);
 
     Loc loc() const;
-    const InlinedVector<Loc, 2> &locs() const;
+    absl::Span<const Loc> locs() const;
     void addLoc(const core::GlobalState &gs, core::Loc loc);
+    void removeLocsForFile(core::FileRef file);
 
-    u4 hash(const GlobalState &gs) const;
-    u4 methodShapeHash(const GlobalState &gs) const;
-    std::vector<u4> methodArgumentHash(const GlobalState &gs) const;
+    bool isClassAlias() const;
+
+    uint32_t hash(const GlobalState &gs) const;
+    uint32_t fieldShapeHash(const GlobalState &gs) const;
+
+    void sanityCheck(const GlobalState &gs) const;
+
+    Field deepCopy(const GlobalState &to) const;
+
+    bool isPrintable(const GlobalState &gs) const;
+
+    FieldRef ref(const GlobalState &gs) const;
+
+    SymbolRef dealias(const GlobalState &gs, int depthLimit = 42) const;
+
+    NameRef name;
+    ClassOrModuleRef owner;
+    TypePtr resultType;
+
+private:
+    SymbolRef::LOC_store locs_;
+
+public:
+    Flags flags;
+};
+CheckSize(Field, 56, 8);
+
+class TypeParameter final {
+    friend class GlobalState;
+    friend class serialize::SerializerImpl;
+
+    // This is to allow updating `GlobalState::typeParameters` in place with a new type argument,
+    // over top of an existing method
+    TypeParameter &operator=(TypeParameter &&) = default;
+
+public:
+    TypeParameter(const TypeParameter &) = delete;
+    TypeParameter() = default;
+    TypeParameter(TypeParameter &&) noexcept = default;
+
+    class Flags {
+    public:
+        bool isTypeParameter : 1;
+        bool isTypeMember : 1;
+
+        // Type flags
+        bool isCovariant : 1;
+        bool isInvariant : 1;
+        bool isContravariant : 1;
+        bool isFixed : 1;
+
+        constexpr static uint8_t NUMBER_OF_FLAGS = 6;
+        constexpr static uint8_t VALID_BITS_MASK = (1 << NUMBER_OF_FLAGS) - 1;
+
+        Flags() noexcept
+            : isTypeParameter(false), isTypeMember(false), isCovariant(false), isInvariant(false),
+              isContravariant(false), isFixed(false) {}
+
+        uint8_t serialize() const {
+            static_assert(sizeof(Flags) == sizeof(uint8_t));
+            // Can replace this with std::bit_cast in C++20
+            auto rawBits = *reinterpret_cast<const uint8_t *>(this);
+            // Mask the valid bits since uninitialized bits can be any value.
+            return rawBits & VALID_BITS_MASK;
+        }
+
+        bool hasFlags(const Flags other) {
+            const auto otherSerialized = other.serialize();
+            return (this->serialize() & otherSerialized) == otherSerialized;
+        }
+    };
+    CheckSize(Flags, 1, 1);
+
+    Loc loc() const;
+    absl::Span<const Loc> locs() const;
+    void addLoc(const core::GlobalState &gs, core::Loc loc);
+    void removeLocsForFile(core::FileRef file);
+
+    uint32_t hash(const GlobalState &gs) const;
+
+    bool isPrintable(const GlobalState &gs) const;
+
+    SymbolRef ref(const GlobalState &gs) const;
+
+    Variance variance() const {
+        if (flags.isInvariant) {
+            return Variance::Invariant;
+        }
+        if (flags.isCovariant) {
+            return Variance::CoVariant;
+        }
+        if (flags.isContravariant) {
+            return Variance::ContraVariant;
+        }
+        Exception::raise("None of the variance-related flags are set. Call to variance() before resolver?");
+    }
+
+    SymbolRef dealias(const GlobalState &gs, int depthLimit = 42) const;
+
+    void sanityCheck(const GlobalState &gs) const;
+
+    TypeParameter deepCopy(const GlobalState &gs) const;
+
+    Flags flags;
+    // Method for TypeParameter, ClassOrModule for TypeMember.
+    SymbolRef owner;
+    NameRef name;
+
+    // For a TypeMember:
+    // - equivalent to `LambdaParam { definition = this->ref(gs), upperBound, lowerBound }`
+    // - the bounds will be todo until filled in by resolver
+    //
+    // For a TypeParameter:
+    // - equivalent to `TypeVar { sym = this->ref(gs) }`
+    // - the sym itself will be `todo` until an entire sig has finished type syntax parsing
+    TypePtr resultType;
+
+private:
+    SymbolRef::LOC_store locs_;
+};
+CheckSize(TypeParameter, 56, 8);
+
+class ClassOrModule final {
+public:
+    ClassOrModule(const ClassOrModule &) = delete;
+    ClassOrModule() = default;
+    ClassOrModule(ClassOrModule &&) noexcept = default;
+
+    class Flags {
+    public:
+        bool isClass : 1;
+        bool isModule : 1;
+        bool isAbstract : 1;
+        bool isInterface : 1;
+        bool isLinearizationComputed : 1;
+        bool isFinal : 1;
+        bool isSealed : 1;
+        bool isPrivate : 1;
+        bool isDeclared : 1;
+        bool isExported : 1;
+        bool isBehaviorDefining : 1;
+
+        constexpr static uint16_t NUMBER_OF_FLAGS = 11;
+        constexpr static uint16_t VALID_BITS_MASK = (1 << NUMBER_OF_FLAGS) - 1;
+
+        Flags() noexcept
+            : isClass(false), isModule(false), isAbstract(false), isInterface(false), isLinearizationComputed(false),
+              isFinal(false), isSealed(false), isPrivate(false), isDeclared(false), isExported(false),
+              isBehaviorDefining(false) {}
+
+        uint16_t serialize() const {
+            static_assert(sizeof(Flags) == sizeof(uint16_t));
+            // Can replace this with std::bit_cast in C++20
+            auto rawBits = *reinterpret_cast<const uint16_t *>(this);
+            // Mask the valid bits since uninitialized bits can be any value.
+            return rawBits & VALID_BITS_MASK;
+        }
+    };
+    CheckSize(Flags, 2, 1);
+
+    Loc loc() const;
+    absl::Span<const Loc> locs() const;
+    void addLoc(const core::GlobalState &gs, core::Loc loc);
+    void removeLocsForFile(core::FileRef file);
+
+    uint32_t hash(const GlobalState &gs, bool includeTypeMemberNames) const;
+    uint32_t classOrModuleShapeHash(const GlobalState &gs) const {
+        auto skipTypeMemberNames = true;
+        return hash(gs, skipTypeMemberNames);
+    }
 
     std::vector<TypePtr> selfTypeArgs(const GlobalState &gs) const;
 
     // selfType and externalType return the type of an instance of this Symbol
-    // (which must be isClassOrModule()), if instantiated without specific type
-    // parameters, as seen from inside or outside of the class, respectively.
+    // if instantiated without specific type parameters, as seen from inside or
+    // outside of the class, respectively.
     TypePtr selfType(const GlobalState &gs) const;
-    TypePtr externalType(const GlobalState &gs) const;
+    TypePtr externalType() const;
 
-    inline InlinedVector<SymbolRef, 4> &mixins() {
-        ENFORCE(isClassOrModule());
+    // !! THREAD UNSAFE !! operation that computes the external type of this symbol.
+    // Do not call this method from multi-threaded contexts (which, honestly, shouldn't
+    // have access to a mutable GlobalState and thus shouldn't be able to call it).
+    TypePtr unsafeComputeExternalType(GlobalState &gs);
+
+    inline InlinedVector<ClassOrModuleRef, 4> &mixins() {
         return mixins_;
     }
 
-    inline const InlinedVector<SymbolRef, 4> &mixins() const {
-        ENFORCE(isClassOrModule());
+    inline const InlinedVector<ClassOrModuleRef, 4> &mixins() const {
         return mixins_;
     }
 
-    void addMixin(SymbolRef sym) {
-        ENFORCE(isClassOrModule());
-        mixins_.emplace_back(sym);
-        unsetClassLinearizationComputed();
+    // Attempts to add the given mixin to the symbol. If the mixin is invalid because it is not a module, it returns
+    // `false` (but still adds the mixin for processing during linearization) and the caller should report an error.
+    [[nodiscard]] bool addMixin(const GlobalState &gs, ClassOrModuleRef sym,
+                                std::optional<uint16_t> index = std::nullopt);
+
+    // Add a placeholder for a mixin and return index in mixins()
+    uint16_t addMixinPlaceholder(const GlobalState &gs);
+
+    inline InlinedVector<TypeMemberRef, 4> &getOrCreateTypeMembers() {
+        if (typeParams) {
+            return *typeParams;
+        }
+        typeParams = std::make_unique<InlinedVector<TypeMemberRef, 4>>();
+        return *typeParams;
     }
 
-    inline InlinedVector<SymbolRef, 4> &typeMembers() {
-        ENFORCE(isClassOrModule());
-        return typeParams;
+    inline absl::Span<const TypeMemberRef> typeMembers() const {
+        if (typeParams) {
+            return *typeParams;
+        }
+        return {};
     }
 
-    inline const InlinedVector<SymbolRef, 4> &typeMembers() const {
-        ENFORCE(isClassOrModule());
-        return typeParams;
+    inline InlinedVector<TypeMemberRef, 4> &existingTypeMembers() {
+        ENFORCE(typeParams != nullptr);
+        return *typeParams;
     }
 
     // Return the number of type parameters that must be passed to instantiate
@@ -148,333 +482,70 @@ public:
     // members have fixed values.
     int typeArity(const GlobalState &gs) const;
 
-    inline InlinedVector<SymbolRef, 4> &typeArguments() {
-        ENFORCE(isMethod());
-        return typeParams;
-    }
-
-    inline const InlinedVector<SymbolRef, 4> &typeArguments() const {
-        ENFORCE(isMethod());
-        return typeParams;
-    }
-
-    bool derivesFrom(const GlobalState &gs, SymbolRef sym) const;
+    bool derivesFrom(const GlobalState &gs, ClassOrModuleRef sym) const;
 
     // TODO(dmitry) perf: most calls to this method could be eliminated as part of perf work.
-    SymbolRef ref(const GlobalState &gs) const;
-
-    inline bool isClassOrModule() const {
-        return (flags & Symbol::Flags::CLASS_OR_MODULE) != 0;
-    }
+    ClassOrModuleRef ref(const GlobalState &gs) const;
 
     bool isSingletonClass(const GlobalState &gs) const;
 
-    inline bool isStaticField() const {
-        return (flags & Symbol::Flags::STATIC_FIELD) != 0;
-    }
-
-    inline bool isField() const {
-        return (flags & Symbol::Flags::FIELD) != 0;
-    }
-
-    inline bool isMethod() const {
-        return (flags & Symbol::Flags::METHOD) != 0;
-    }
-
-    inline bool isTypeMember() const {
-        return (flags & Symbol::Flags::TYPE_MEMBER) != 0;
-    }
-
-    inline bool isTypeArgument() const {
-        return (flags & Symbol::Flags::TYPE_ARGUMENT) != 0;
-    }
-
-    inline bool isOverloaded() const {
-        ENFORCE(isMethod());
-        return (flags & Symbol::Flags::METHOD_OVERLOADED) != 0;
-    }
-
-    inline bool isAbstract() const {
-        ENFORCE(isMethod());
-        return (flags & Symbol::Flags::METHOD_ABSTRACT) != 0;
-    }
-
-    inline bool isIncompatibleOverride() const {
-        ENFORCE(isMethod());
-        return (flags & Symbol::Flags::METHOD_INCOMPATIBLE_OVERRIDE) != 0;
-    }
-
-    inline bool isGenericMethod() const {
-        ENFORCE(isMethod());
-        return (flags & Symbol::Flags::METHOD_GENERIC) != 0;
-    }
-
-    inline bool isOverridable() const {
-        ENFORCE(isMethod());
-        return (flags & Symbol::Flags::METHOD_OVERRIDABLE) != 0;
-    }
-
-    inline bool isOverride() const {
-        ENFORCE(isMethod());
-        return (flags & Symbol::Flags::METHOD_OVERRIDE) != 0;
-    }
-
-    inline bool isCovariant() const {
-        ENFORCE(isTypeArgument() || isTypeMember());
-        return (flags & Symbol::Flags::TYPE_COVARIANT) != 0;
-    }
-
-    inline bool isInvariant() const {
-        ENFORCE(isTypeArgument() || isTypeMember());
-        return (flags & Symbol::Flags::TYPE_INVARIANT) != 0;
-    }
-
-    inline bool isContravariant() const {
-        ENFORCE(isTypeArgument() || isTypeMember());
-        return (flags & Symbol::Flags::TYPE_CONTRAVARIANT) != 0;
-    }
-
-    inline bool isFixed() const {
-        ENFORCE(isTypeArgument() || isTypeMember());
-        return (flags & Symbol::Flags::TYPE_FIXED) != 0;
-    }
-
-    Variance variance() const {
-        if (isInvariant())
-            return Variance::Invariant;
-        if (isCovariant())
-            return Variance::CoVariant;
-        if (isContravariant())
-            return Variance::ContraVariant;
-        Exception::raise("Should not happen");
-    }
-
-    inline bool isPublic() const {
-        ENFORCE(isMethod());
-        return !isProtected() && !isPrivate();
-    }
-
-    inline bool isProtected() const {
-        ENFORCE(isMethod());
-        return (flags & Symbol::Flags::METHOD_PROTECTED) != 0;
-    }
-
-    inline bool isPrivate() const {
-        ENFORCE(isMethod());
-        return (flags & Symbol::Flags::METHOD_PRIVATE) != 0;
-    }
-
-    inline bool isClassOrModuleModule() const {
-        ENFORCE(isClassOrModule());
-        if (flags & Symbol::Flags::CLASS_OR_MODULE_MODULE)
+    inline bool isModule() const {
+        if (flags.isModule) {
             return true;
-        if (flags & Symbol::Flags::CLASS_OR_MODULE_CLASS)
+        }
+
+        if (flags.isClass) {
             return false;
-        Exception::raise("Should never happen");
+        }
+
+        Exception::raise("isModule() but neither flags.isModule nor flags.isClass. Call to isModule before resolver?");
     }
 
     inline bool isClassModuleSet() const {
-        ENFORCE(isClassOrModule());
-        return flags & (Symbol::Flags::CLASS_OR_MODULE_MODULE | Symbol::Flags::CLASS_OR_MODULE_CLASS);
+        return flags.isModule || flags.isClass;
     }
 
-    inline bool isClassOrModuleClass() const {
-        return !isClassOrModuleModule();
-    }
-
-    inline bool isClassOrModuleAbstract() const {
-        ENFORCE(isClassOrModule());
-        return (flags & Symbol::Flags::CLASS_OR_MODULE_ABSTRACT) != 0;
-    }
-
-    inline bool isClassOrModuleInterface() const {
-        ENFORCE(isClassOrModule());
-        return (flags & Symbol::Flags::CLASS_OR_MODULE_INTERFACE) != 0;
-    }
-
-    inline bool isClassOrModuleLinearizationComputed() const {
-        ENFORCE(isClassOrModule());
-        return (flags & Symbol::Flags::CLASS_OR_MODULE_LINEARIZATION_COMPUTED) != 0;
-    }
-
-    inline bool isClassOrModuleFinal() const {
-        ENFORCE(isClassOrModule());
-        return (flags & Symbol::Flags::CLASS_OR_MODULE_FINAL) != 0;
-    }
-
-    inline bool isClassOrModuleSealed() const {
-        ENFORCE(isClassOrModule());
-        return (flags & Symbol::Flags::CLASS_OR_MODULE_SEALED) != 0;
-    }
-
-    inline void setClassOrModule() {
-        ENFORCE(!isStaticField() && !isField() && !isMethod() && !isTypeArgument() && !isTypeMember());
-        flags |= Symbol::Flags::CLASS_OR_MODULE;
-    }
-
-    inline void setStaticField() {
-        ENFORCE(!isClassOrModule() && !isField() && !isMethod() && !isTypeArgument() && !isTypeMember());
-        flags |= Symbol::Flags::STATIC_FIELD;
-    }
-
-    inline void setField() {
-        ENFORCE(!isClassOrModule() && !isStaticField() && !isMethod() && !isTypeArgument() && !isTypeMember());
-        flags |= Symbol::Flags::FIELD;
-    }
-
-    inline void setMethod() {
-        ENFORCE(!isClassOrModule() && !isStaticField() && !isField() && !isTypeArgument() && !isTypeMember());
-        flags |= Symbol::Flags::METHOD;
-    }
-
-    inline void setTypeArgument() {
-        ENFORCE(!isClassOrModule() && !isStaticField() && !isField() && !isMethod() && !isTypeMember());
-        flags |= Symbol::Flags::TYPE_ARGUMENT;
-    }
-
-    inline void setTypeMember() {
-        ENFORCE(!isClassOrModule() && !isStaticField() && !isField() && !isMethod() && !isTypeArgument());
-        flags |= Symbol::Flags::TYPE_MEMBER;
+    inline bool isClass() const {
+        return !isModule();
     }
 
     inline void setIsModule(bool isModule) {
-        ENFORCE(isClassOrModule());
         if (isModule) {
-            ENFORCE((flags & Symbol::Flags::CLASS_OR_MODULE_CLASS) == 0);
-            flags |= Symbol::Flags::CLASS_OR_MODULE_MODULE;
+            ENFORCE(!flags.isClass);
+            flags.isModule = true;
         } else {
-            ENFORCE((flags & Symbol::Flags::CLASS_OR_MODULE_MODULE) == 0);
-            flags |= Symbol::Flags::CLASS_OR_MODULE_CLASS;
+            ENFORCE(!flags.isModule);
+            flags.isClass = true;
         }
     }
 
-    inline void setCovariant() {
-        ENFORCE(isTypeArgument() || isTypeMember());
-        ENFORCE(!isContravariant() && !isInvariant());
-        flags |= Symbol::Flags::TYPE_COVARIANT;
+    inline bool isDeclared() const {
+        return flags.isDeclared;
     }
 
-    inline void setContravariant() {
-        ENFORCE(isTypeArgument() || isTypeMember());
-        ENFORCE(!isCovariant() && !isInvariant());
-        flags |= Symbol::Flags::TYPE_CONTRAVARIANT;
+    inline void setDeclared() {
+        ENFORCE(isClassModuleSet());
+
+        if (!flags.isDeclared) {
+            flags.isDeclared = true;
+        }
     }
 
-    inline void setInvariant() {
-        ENFORCE(isTypeArgument() || isTypeMember());
-        ENFORCE(!isCovariant() && !isContravariant());
-        flags |= Symbol::Flags::TYPE_INVARIANT;
-    }
-
-    inline void setFixed() {
-        ENFORCE(isTypeArgument() || isTypeMember());
-        flags |= Symbol::Flags::TYPE_FIXED;
-    }
-
-    inline void setOverloaded() {
-        ENFORCE(isMethod());
-        flags |= Symbol::Flags::METHOD_OVERLOADED;
-    }
-
-    inline void setAbstract() {
-        ENFORCE(isMethod());
-        flags |= Symbol::Flags::METHOD_ABSTRACT;
-    }
-
-    inline void setIncompatibleOverride() {
-        ENFORCE(isMethod());
-        flags |= Symbol::Flags::METHOD_INCOMPATIBLE_OVERRIDE;
-    }
-
-    inline void setGenericMethod() {
-        ENFORCE(isMethod());
-        flags |= Symbol::Flags::METHOD_GENERIC;
-    }
-
-    inline void setOverridable() {
-        ENFORCE(isMethod());
-        flags |= Symbol::Flags::METHOD_OVERRIDABLE;
-    }
-
-    inline void setFinalMethod() {
-        ENFORCE(isMethod());
-        flags |= Symbol::Flags::METHOD_FINAL;
-    }
-
-    inline void setOverride() {
-        ENFORCE(isMethod());
-        flags |= Symbol::Flags::METHOD_OVERRIDE;
-    }
-
-    inline bool isFinalMethod() const {
-        ENFORCE(isMethod());
-        return (flags & Symbol::Flags::METHOD_FINAL) != 0;
-    }
-
-    inline void setPublic() {
-        ENFORCE(isMethod());
-        flags &= ~Symbol::Flags::METHOD_PRIVATE;
-        flags &= ~Symbol::Flags::METHOD_PROTECTED;
-    }
-
-    inline void setProtected() {
-        ENFORCE(isMethod());
-        flags |= Symbol::Flags::METHOD_PROTECTED;
-    }
-
-    inline void setPrivate() {
-        ENFORCE(isMethod());
-        flags |= Symbol::Flags::METHOD_PRIVATE;
-    }
-
-    inline void setClassAbstract() {
-        ENFORCE(isClassOrModule());
-        flags |= Symbol::Flags::CLASS_OR_MODULE_ABSTRACT;
-    }
-
-    inline void setClassInterface() {
-        ENFORCE(isClassOrModule());
-        flags |= Symbol::Flags::CLASS_OR_MODULE_INTERFACE;
-    }
-
-    inline void setClassLinearizationComputed() {
-        ENFORCE(isClassOrModule());
-        flags |= Symbol::Flags::CLASS_OR_MODULE_LINEARIZATION_COMPUTED;
-    }
-
-    inline void setClassFinal() {
-        ENFORCE(isClassOrModule());
-        flags |= Symbol::Flags::CLASS_OR_MODULE_FINAL;
-    }
-
-    inline void setClassSealed() {
-        ENFORCE(isClassOrModule());
-        flags |= Symbol::Flags::CLASS_OR_MODULE_SEALED;
-    }
-
-    inline void setTypeAlias() {
-        ENFORCE(isStaticField());
-        flags |= Symbol::Flags::STATIC_FIELD_TYPE_ALIAS;
-    }
-    inline bool isTypeAlias() const {
-        // We should only be able to set the type alias bit on static fields.
-        // But it's rather unweidly to ask "isStaticField() && isTypeAlias()" just to satisfy the ENFORCE.
-        // To make things nicer, we relax the ENFORCE here to also allow asking whether "some constant" is a type alias.
-        ENFORCE(isClassOrModule() || isStaticField() || isTypeMember());
-        return isStaticField() && (flags & Symbol::Flags::STATIC_FIELD_TYPE_ALIAS) != 0;
-    }
-
-    inline void setRewriterSynthesized() {
-        flags |= Symbol::Flags::REWRITER_SYNTHESIZED;
-    }
-    inline bool isRewriterSynthesized() const {
-        return (flags & Symbol::Flags::REWRITER_SYNTHESIZED) != 0;
+    inline void unsetClassOrModuleLinearizationComputed() {
+        flags.isLinearizationComputed = false;
     }
 
     SymbolRef findMember(const GlobalState &gs, NameRef name) const;
-    SymbolRef findMemberNoDealias(const GlobalState &gs, NameRef name) const;
+    MethodRef findMethod(const GlobalState &gs, NameRef name) const;
+    SymbolRef findMemberNoDealias(NameRef name) const;
+    MethodRef findMethodNoDealias(NameRef name) const;
     SymbolRef findMemberTransitive(const GlobalState &gs, NameRef name) const;
-    SymbolRef findConcreteMethodTransitive(const GlobalState &gs, NameRef name) const;
+    SymbolRef findMemberTransitiveNoDealias(const GlobalState &gs, NameRef name) const;
+    MethodRef findMethodTransitive(const GlobalState &gs, NameRef name) const;
+    // A version of findMemberTransitive that skips looking in the members of the current symbol,
+    // instead looking only in the members of any parent.
+    MethodRef findParentMethodTransitive(const GlobalState &gs, NameRef name) const;
+    MethodRef findConcreteMethodTransitive(const GlobalState &gs, NameRef name) const;
 
     /* transitively finds a member with the most similar name */
 
@@ -486,90 +557,111 @@ public:
 
     std::vector<FuzzySearchResult> findMemberFuzzyMatch(const GlobalState &gs, NameRef name, int betterThan = -1) const;
 
-    std::string toStringFullName(const GlobalState &gs) const;
-    std::string showFullName(const GlobalState &gs) const;
-
-    // Not printed when showing name table
-    bool isHiddenFromPrinting(const GlobalState &gs) const;
-
-    std::string showRaw(const GlobalState &gs) const {
-        bool showFull = false;
-        bool showRaw = true;
-        return toStringWithOptions(gs, 0, showFull, showRaw);
-    }
-    std::string toString(const GlobalState &gs) const {
-        bool showFull = false;
-        bool showRaw = false;
-        return toStringWithOptions(gs, 0, showFull, showRaw);
-    }
-    std::string toJSON(const GlobalState &gs, int tabs = 0, bool showFull = false) const;
-    // Renders the full name of this Symbol in a form suitable for user display.
-    std::string show(const GlobalState &gs) const;
+    // Returns true if the symbol or any of its children are not in the symbol table. False otherwise.
+    bool isPrintable(const GlobalState &gs) const;
 
     // Returns the singleton class for this class, lazily instantiating it if it
     // doesn't exist.
-    SymbolRef singletonClass(GlobalState &gs);
+    ClassOrModuleRef singletonClass(GlobalState &gs);
 
     // Returns the singleton class or noSymbol
-    SymbolRef lookupSingletonClass(const GlobalState &gs) const;
+    ClassOrModuleRef lookupSingletonClass(const GlobalState &gs) const;
 
     // Returns attached class or noSymbol if it does not exist
-    SymbolRef attachedClass(const GlobalState &gs) const;
+    ClassOrModuleRef attachedClass(const GlobalState &gs) const;
 
-    SymbolRef topAttachedClass(const GlobalState &gs) const;
+    ClassOrModuleRef topAttachedClass(const GlobalState &gs) const;
 
-    void recordSealedSubclass(MutableContext ctx, SymbolRef subclass);
-    const InlinedVector<Loc, 2> &sealedLocs(const GlobalState &gs) const;
-    TypePtr sealedSubclassesToUnion(const Context ctx) const;
+    void recordSealedSubclass(GlobalState &gs, ClassOrModuleRef subclass);
+
+    // Returns the locations that are allowed to subclass the sealed class.
+    absl::Span<const Loc> sealedLocs(const GlobalState &gs) const;
+
+    TypePtr sealedSubclassesToUnion(const GlobalState &gs) const;
+
+    bool hasSingleSealedSubclass(const GlobalState &gs) const;
+
+    // Record a required ancestor for this class of module
+    void recordRequiredAncestor(GlobalState &gs, ClassOrModuleRef ancestor, Loc loc);
+
+    // Associate a required ancestor with the loc it's required at
+    struct RequiredAncestor {
+        ClassOrModuleRef origin; // The class or module that required `symbol`
+        ClassOrModuleRef symbol; // The symbol required
+        Loc loc;                 // The location it was required at
+
+        RequiredAncestor(ClassOrModuleRef origin, ClassOrModuleRef symbol, Loc loc)
+            : origin(origin), symbol(symbol), loc(loc) {}
+    };
+
+    void computeRequiredAncestorLinearization(GlobalState &gs);
+
+    // Locally required ancestors by this class or module
+    std::vector<RequiredAncestor> requiredAncestors(const GlobalState &gs) const;
+
+    // All required ancestors by this class or module
+    std::vector<RequiredAncestor> requiredAncestorsTransitive(const GlobalState &gs) const;
 
     // if dealiasing fails here, then we return Untyped instead
-    SymbolRef dealias(const GlobalState &gs, int depthLimit = 42) const {
-        return dealiasWithDefault(gs, depthLimit, Symbols::untyped());
-    }
-    // if dealiasing fails here, then we return a bad alias method stub instead
-    SymbolRef dealiasMethod(const GlobalState &gs, int depthLimit = 42) const {
-        return dealiasWithDefault(gs, depthLimit, core::Symbols::Sorbet_Private_Static_badAliasMethodStub());
-    }
-
-    SymbolRef dealiasWithDefault(const GlobalState &gs, int depthLimit, SymbolRef def) const;
+    SymbolRef dealias(const GlobalState &gs, int depthLimit = 42) const;
 
     bool ignoreInHashing(const GlobalState &gs) const;
 
-    SymbolRef owner;
-    SymbolRef superClassOrRebind; // method arugments store rebind here
+    // A link to the corresponding spot in the `<PackageSpecRegistry>` hierarchy.
+    //
+    // Might correspond to an intermediate `<PackageSpecRegistry>` namespace (not a package), but at least
+    // will always correspond to the tightest possible namespace in the `<PackageSpecRegistry>` subtree.
+    //
+    // Only set if `gs.packageDB().enabled()`
+    //
+    // - Given ::<root>, contains ::<PackageSpecRegistry>
+    // - Given ::Opus::MyPkg, contains ::<PackageSpecRegistry>::Opus::MyPkg
+    // - Given ::Opus::MyPkg::Foo, contains ::<PackageSpecRegistry>::Opus::MyPkg::Foo
+    // - Given ::Opus::MyPkg::Foo::InnerPkg, contains ::<PackageSpecRegistry>::Opus::MyPkg::Foo::InnerPkg
+    // - Given ::Test, contains ::<PackageSpecRegistry>
+    // - Given ::Test::Opus::MyPkg, contains ::<PackageSpecRegistry>::Opus::MyPkg
+    //
+    // When set to `::<none>`, inherit whatever our owner has for `package`.
+    ClassOrModuleRef packageRegistryOwner = core::Symbols::PackageSpecRegistry();
 
-    inline SymbolRef superClass() const {
-        ENFORCE(isClassOrModule());
-        return superClassOrRebind;
+    // The package that this symbol belongs to.
+    //
+    // Only set if `gs.packageDB().enabled()`
+    //
+    // If `!package.exists()`, then this symbol is "unpackaged."
+    // This is the case for all definitions in Sorbet's payload.
+    //
+    // TODO(jez): If someone creates a `__package.rb` for something in the standard library after
+    // the payload has already loaded, we won't retroactively determine the package for those
+    // constants, which could cause problems. Probably we should ban that? Because e.g. we won't
+    // have checked the implementation of the payload RBI files against whatever constraints the
+    // __package.rb declares (e.g. imports).
+    //
+    // TODO(jez) Ban defining a package called `Test`
+    packages::MangledName package;
+
+    // The class or module that this class or module is nested inside of.
+    //
+    // Given `::A::B`, the owner is `::A`
+    // Given `::A`, the owner is `::<root>`
+    // Given `::<root>`, the owner is `::<root>`
+    ClassOrModuleRef owner;
+
+    ClassOrModuleRef superClass_;
+
+    inline ClassOrModuleRef superClass() const {
+        return superClass_;
     }
 
-    inline void setSuperClass(SymbolRef claz) {
-        ENFORCE(isClassOrModule());
-        superClassOrRebind = claz;
+    inline void setSuperClass(ClassOrModuleRef klass) {
+        superClass_ = klass;
     }
 
-    inline void setReBind(SymbolRef rebind) {
-        ENFORCE(isMethod());
-        superClassOrRebind = rebind;
-    }
-
-    SymbolRef rebind() const {
-        ENFORCE(isMethod());
-        return superClassOrRebind;
-    }
-
-    u4 flags = Flags::NONE;
-    u4 uniqueCounter = 1; // used as a counter inside the namer
-    NameRef name;         // todo: move out? it should not matter but it's important for name resolution
+    Flags flags;
+    NameRef name; // todo: move out? it should not matter but it's important for name resolution
     TypePtr resultType;
 
-    bool hasSig() const {
-        ENFORCE(isMethod());
-        return resultType != nullptr;
-    }
-
     UnorderedMap<NameRef, SymbolRef> members_;
-    std::vector<ArgInfo> arguments_;
 
     UnorderedMap<NameRef, SymbolRef> &members() {
         return members_;
@@ -578,36 +670,35 @@ public:
         return members_;
     };
 
-    std::vector<ArgInfo> &arguments() {
-        ENFORCE(isMethod());
-        return arguments_;
-    }
+    template <typename P>
+    std::vector<std::pair<NameRef, SymbolRef>> membersStableOrderSlowPredicate(const GlobalState &gs,
+                                                                               P predicate) const {
+        std::vector<std::pair<NameRef, SymbolRef>> result;
 
-    const std::vector<ArgInfo> &arguments() const {
-        ENFORCE(isMethod());
-        return arguments_;
+        for (const auto &e : this->members()) {
+            if (predicate(e.first, e.second)) {
+                result.emplace_back(e);
+            }
+        }
+
+        sortMembersStableOrder(gs, result);
+
+        return result;
     }
 
     std::vector<std::pair<NameRef, SymbolRef>> membersStableOrderSlow(const GlobalState &gs) const;
 
-    Symbol deepCopy(const GlobalState &to, bool keepGsId = false) const;
+    ClassOrModule deepCopy(const GlobalState &to, bool keepGsId = false) const;
     void sanityCheck(const GlobalState &gs) const;
-    SymbolRef enclosingMethod(const GlobalState &gs) const;
-
-    SymbolRef enclosingClass(const GlobalState &gs) const;
-
-    // All `IntrinsicMethod`s in sorbet should be statically-allocated, which is
-    // why raw pointers are safe.
-    const IntrinsicMethod *intrinsic = nullptr;
 
 private:
+    static void sortMembersStableOrder(const GlobalState &gs, std::vector<std::pair<NameRef, SymbolRef>> &out);
+
     friend class serialize::SerializerImpl;
     friend class GlobalState;
 
-    std::string toStringWithOptions(const GlobalState &gs, int tabs = 0, bool showFull = false,
-                                    bool showRaw = false) const;
-
-    FuzzySearchResult findMemberFuzzyMatchUTF8(const GlobalState &gs, NameRef name, int betterThan = -1) const;
+    FuzzySearchResult findMemberFuzzyMatchUTF8(const GlobalState &gs, NameRef name, Levenstein &levenstein,
+                                               int betterThan = -1) const;
     std::vector<FuzzySearchResult> findMemberFuzzyMatchConstant(const GlobalState &gs, NameRef name,
                                                                 int betterThan = -1) const;
 
@@ -620,23 +711,28 @@ private:
      *   implicit superclass (`class Foo` with no `< Parent`); Once we hit
      *   Resolver::finalize(), these will be rewritten to `Object()`.
      */
-    InlinedVector<SymbolRef, 4> mixins_;
+    InlinedVector<ClassOrModuleRef, 4> mixins_;
 
     /** For Class or module - ordered type members of the class,
-     * for method - ordered type generic type arguments of the class
      */
-    InlinedVector<SymbolRef, 4> typeParams;
-    InlinedVector<Loc, 2> locs_;
+    std::unique_ptr<InlinedVector<TypeMemberRef, 4>> typeParams;
+    SymbolRef::LOC_store locs_;
 
-    SymbolRef findMemberTransitiveInternal(const GlobalState &gs, NameRef name, u4 mask, u4 flags,
-                                           int maxDepth = 100) const;
+    // Record a required ancestor for this class of module in a magic property
+    void recordRequiredAncestorInternal(GlobalState &gs, RequiredAncestor &ancestor, NameRef prop);
 
-    inline void unsetClassLinearizationComputed() {
-        ENFORCE(isClassOrModule());
-        flags &= ~Symbol::Flags::CLASS_OR_MODULE_LINEARIZATION_COMPUTED;
-    }
+    // Read required ancestors for this class of module from a magic property
+    std::vector<RequiredAncestor> readRequiredAncestorsInternal(const GlobalState &gs, NameRef prop) const;
+
+    std::vector<RequiredAncestor> requiredAncestorsTransitiveInternal(GlobalState &gs,
+                                                                      std::vector<ClassOrModuleRef> &seen);
+
+    SymbolRef findMemberTransitiveInternal(const GlobalState &gs, NameRef name, int maxDepth, bool dealias) const;
+    SymbolRef findParentMemberTransitiveInternal(const GlobalState &gs, NameRef name, int maxDepth, bool dealias) const;
+
+    void addMixinAt(ClassOrModuleRef sym, std::optional<uint16_t> index);
 };
-// CheckSize(Symbol, 144, 8); // This is under too much churn to be worth checking
+CheckSize(ClassOrModule, 128, 8);
 
 } // namespace sorbet::core
 #endif // SORBET_SYMBOLS_H

@@ -12,9 +12,10 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//ast",
+        "//common/crypto_hashing",
         "//core",
         "@com_google_absl//absl/types:span",
-        "@lizard",
+        "@lz4",
     ],
 )
 
@@ -22,7 +23,6 @@ cc_test(
     name = "serialize_test",
     size = "small",
     srcs = glob(["test/*.cc"]) + ["pickler.h"],
-    copts = ["-Iexternal/gtest/include"],
     linkstatic = select({
         "//tools/config:linkshared": 0,
         "//conditions:default": 1,
@@ -30,7 +30,7 @@ cc_test(
     visibility = ["//tools:__pkg__"],
     deps = [
         ":serialize",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@doctest//doctest",
+        "@doctest//doctest:main",
     ],
 )

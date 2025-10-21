@@ -3,29 +3,32 @@
 
 module T::Types
   class TypedEnumerator < TypedEnumerable
-    attr_reader :type
-
     def underlying_class
       Enumerator
     end
 
-    # @override Base
+    # overrides Base
     def name
-      "T::Enumerator[#{@type.name}]"
+      "T::Enumerator[#{type.name}]"
     end
 
-    # @override Base
-    def valid?(obj)
+    # overrides Base
+    def recursively_valid?(obj)
       obj.is_a?(Enumerator) && super
     end
 
-    def new(*args, &blk) # rubocop:disable PrisonGuard/BanBuiltinMethodOverride
-      T.unsafe(Enumerator).new(*args, &blk)
+    # overrides Base
+    def valid?(obj)
+      obj.is_a?(Enumerator)
+    end
+
+    def new(...)
+      Enumerator.new(...)
     end
 
     class Untyped < TypedEnumerator
       def initialize
-        super(T.untyped)
+        super(T::Types::Untyped::Private::INSTANCE)
       end
 
       def valid?(obj)

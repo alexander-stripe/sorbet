@@ -8,7 +8,7 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       extend T::Helpers
       interface!
 
-      sig {abstract.returns(Object)}
+      sig { abstract.returns(Object) }
       def foo; end
     end
 
@@ -18,7 +18,7 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       interface!
       include base
 
-      sig {abstract.returns(Object)}
+      sig { abstract.returns(Object) }
       def bar; end
     end
 
@@ -31,7 +31,7 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       extend T::Helpers
       interface!
 
-      sig {abstract.returns(Object)}
+      sig { abstract.returns(Object) }
       def good; end
 
       def bad; end
@@ -50,10 +50,10 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       extend T::Helpers
       interface!
 
-      sig {abstract.returns(Object)}
+      sig { abstract.returns(Object) }
       def good; end
 
-      sig {returns(Object)}
+      sig { returns(Object) }
       def bad; end
     end
 
@@ -74,7 +74,7 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       interface!
       include mixin
 
-      sig {abstract.returns(Object)}
+      sig { abstract.returns(Object) }
       def good; end
     end
 
@@ -91,10 +91,10 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       extend T::Helpers
       interface!
 
-      sig {abstract.returns(Object)}
+      sig { abstract.returns(Object) }
       def good; end
 
-      sig {abstract.returns(Object)}
+      sig { abstract.returns(Object) }
       private def bad; end
     end
 
@@ -111,7 +111,7 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       extend T::Helpers
       interface!
 
-      sig {abstract.returns(Object)}
+      sig { abstract.returns(Object) }
       protected def bad; end
     end
 
@@ -128,7 +128,7 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       extend T::Helpers
       interface!
 
-      sig {abstract.void}
+      sig { abstract.void }
       def foo; end
     end
 
@@ -137,20 +137,20 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       extend T::Helpers
       include base
 
-      sig {override.void}
+      sig { override.void }
       def foo; end
     end
 
     T::Private::Abstract::Validate.validate_abstract_module(base)
   end
 
-  it "raises an error if a void method has an incompatible implementation" do
+  it "does not raise an error if a void method does not have a void implementation" do
     base = Module.new do
       extend T::Sig
       extend T::Helpers
       interface!
 
-      sig {abstract.void}
+      sig { abstract.void }
       def foo; end
     end
 
@@ -159,18 +159,17 @@ class Opus::Types::Test::InterfacesTest < Critic::Unit::UnitTest
       extend T::Helpers
       include base
 
-      sig {override.returns(Integer)}
-      def foo; 1; end
+      sig { override.returns(Integer) }
+      def foo
+        1
+      end
     end
 
     klass = Class.new do
       include mod
     end
 
-    err = assert_raises(RuntimeError) do
-      klass.new.foo
-    end
-    assert_includes(err.message, "Incompatible return type in implementation of method")
+    klass.new.foo
   end
 
 end

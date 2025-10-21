@@ -16,7 +16,12 @@ module T::Types
       end
     end
 
-    def valid?(obj)
+    # this will be redefined in certain subclasses
+    def recursively_valid?(obj)
+      valid?(obj)
+    end
+
+    define_method(:valid?) do |_obj|
       raise NotImplementedError
     end
 
@@ -28,8 +33,14 @@ module T::Types
       raise NotImplementedError
     end
 
+    # Force any lazy initialization that this type might need to do
+    # It's unusual to call this directly; you probably want to call it indirectly via `T::Utils.run_all_sig_blocks`.
+    define_method(:build_type) do
+      raise NotImplementedError
+    end
+
     # Equality is based on name, so be sure the name reflects all relevant state when implementing.
-    def name
+    define_method(:name) do
       raise NotImplementedError
     end
 
@@ -45,8 +56,18 @@ module T::Types
         t2 = t2.aliased_type
       end
 
+      if t2.is_a?(T::Types::Anything)
+        return true
+      end
+
       if t1.is_a?(T::Private::Types::TypeAlias)
         return t1.aliased_type.subtype_of?(t2)
+      end
+
+      if t1.is_a?(T::Types::TypeVariable) || t2.is_a?(T::Types::TypeVariable)
+        # Generics are erased at runtime. Let's treat them like `T.untyped` for
+        # the purpose of things like override checking.
+        return true
       end
 
       # pairs to cover: 1  (_, _)
@@ -62,27 +83,27 @@ module T::Types
       # Note: order of cases here matters!
       if t1.is_a?(T::Types::Union) # 7, 8, 9
         # this will be incorrect if/when we have Type members
-        return t1.types.all? {|t1_member| t1_member.subtype_of?(t2)}
+        return t1.types.all? { |t1_member| t1_member.subtype_of?(t2) }
       end
 
       if t2.is_a?(T::Types::Intersection) # 2, 5
         # this will be incorrect if/when we have Type members
-        return t2.types.all? {|t2_member| t1.subtype_of?(t2_member)}
+        return t2.types.all? { |t2_member| t1.subtype_of?(t2_member) }
       end
 
       if t2.is_a?(T::Types::Union)
         if t1.is_a?(T::Types::Intersection) # 6
           # dropping either of parts eagerly make subtype test be too strict.
           # we have to try both cases, when we normally try only one
-          return t2.types.any? {|t2_member| t1.subtype_of?(t2_member)} ||
-              t1.types.any? {|t1_member| t1_member.subtype_of?(t2)}
+          return t2.types.any? { |t2_member| t1.subtype_of?(t2_member) } ||
+              t1.types.any? { |t1_member| t1_member.subtype_of?(t2) }
         end
-        return t2.types.any? {|t2_member| t1.subtype_of?(t2_member)} # 3
+        return t2.types.any? { |t2_member| t1.subtype_of?(t2_member) } # 3
       end
 
       if t1.is_a?(T::Types::Intersection) # 4
         # this will be incorrect if/when we have Type members
-        return t1.types.any? {|t1_member| t1_member.subtype_of?(t2)}
+        return t1.types.any? { |t1_member| t1_member.subtype_of?(t2) }
       end
 
       # 1; Start with some special cases
@@ -114,8 +135,10 @@ module T::Types
         # Default inspect behavior of, eg; `#<Object:0x0...>` is ugly; just print the hash instead, which is more concise/readable.
         if obj.method(:inspect).owner == Kernel
           "type #{obj.class} with hash #{obj.hash}"
-        else
+        elsif T::Configuration.include_value_in_type_errors?
           "type #{obj.class} with value #{T::Utils.string_truncate_middle(obj.inspect, 30, 30)}"
+        else
+          "type #{obj.class}"
         end
       rescue StandardError, SystemStackError
         "type #{obj.class} with unprintable value"
@@ -126,8 +149,20 @@ module T::Types
       if valid?(obj)
         nil
       else
-        "Expected type #{self.name}, got #{describe_obj(obj)}"
+        error_message(obj)
       end
+    end
+
+    def error_message_for_obj_recursive(obj)
+      if recursively_valid?(obj)
+        nil
+      else
+        error_message(obj)
+      end
+    end
+
+    private def error_message(obj)
+      "Expected type #{self.name}, got #{describe_obj(obj)}"
     end
 
     def validate!(obj)
@@ -141,9 +176,15 @@ module T::Types
       name.hash
     end
 
+    # Type equivalence, defined by serializing the type to a string (with
+    # `#name`) and comparing the resulting strings for equality.
     def ==(other)
-      (T::Utils.resolve_alias(other).class == T::Utils.resolve_alias(self).class) &&
+      case other
+      when T::Types::Base
         other.name == self.name
+      else
+        false
+      end
     end
 
     alias_method :eql?, :==

@@ -2,8 +2,8 @@
 using namespace std;
 
 namespace sorbet::rbi {
-void polulateRBIsInto(unique_ptr<core::GlobalState> &gs) {
-    Exception::raise("Should never happen");
+void populateRBIsInto(core::GlobalState &gs) {
+    Exception::raise("Should never call populateRBIsInto with nopopulate.cc");
 }
 
 } // namespace sorbet::rbi

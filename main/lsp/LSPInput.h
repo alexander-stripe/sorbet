@@ -38,8 +38,6 @@ public:
 
 /**
  * Reads messages from a file descriptor (like stdin).
- *
- * Throws a FileReadException on error or EOF.
  */
 class LSPFDInput final : public LSPInput {
     // Contains unparsed strings containing a partial message read from file descriptor.
@@ -56,14 +54,12 @@ public:
 
 /**
  * Input is provided programmatically via the `write` method. Threadsafe.
- *
- * Throws a FileReadException when stream has been closed.
  */
 class LSPProgrammaticInput final : public LSPInput {
     absl::Mutex mtx;
     // Contains all available messages for processing.
-    std::deque<std::unique_ptr<LSPMessage>> available GUARDED_BY(mtx);
-    bool closed GUARDED_BY(mtx) = false;
+    std::deque<std::unique_ptr<LSPMessage>> available ABSL_GUARDED_BY(mtx);
+    bool closed ABSL_GUARDED_BY(mtx) = false;
 
 public:
     LSPProgrammaticInput() = default;

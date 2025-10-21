@@ -1,59 +1,69 @@
-#include "absl/base/casts.h"
 #include "common/common.h"
 #include "core/Context.h"
-#include "core/Hashing.h"
 #include "core/Names.h"
+#include "core/Symbols.h"
 #include "core/TypeConstraint.h"
 #include "core/Types.h"
 
 using namespace std;
 namespace sorbet::core {
 
-TypePtr Types::instantiate(Context ctx, const TypePtr &what, const InlinedVector<SymbolRef, 4> &params,
-                           const vector<TypePtr> &targs) {
-    ENFORCE(what.get());
-    auto t = what->_instantiate(ctx, params, targs);
-    if (t) {
-        return t;
-    }
-    return what;
-}
-
-TypePtr Types::instantiate(Context ctx, const TypePtr &what, const TypeConstraint &tc) {
+TypePtr Types::instantiateTypeVars(const GlobalState &gs, const TypePtr &what, const TypeConstraint &tc) {
     ENFORCE(tc.isSolved());
     if (tc.isEmpty()) {
         return what;
     }
-    ENFORCE(what.get());
-    auto t = what->_instantiate(ctx, tc);
+    ENFORCE(what != nullptr);
+    auto t = what._instantiateTypeVars(gs, tc);
     if (t) {
         return t;
     }
     return what;
 }
 
-TypePtr Types::approximate(Context ctx, const TypePtr &what, const TypeConstraint &tc) {
-    ENFORCE(what.get());
-    auto t = what->_approximate(ctx, tc);
+TypePtr Types::approximateTypeVars(const GlobalState &gs, const TypePtr &what, const TypeConstraint &tc) {
+    ENFORCE(what != nullptr);
+    auto t = what._approximateTypeVars(gs, tc, core::Polarity::Positive);
     if (t) {
         return t;
     }
     return what;
 }
 
-TypePtr TypeVar::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params, const vector<TypePtr> &targs) {
-    return nullptr;
-}
-
-TypePtr TypeVar::_instantiate(Context ctx, const TypeConstraint &tc) {
+TypePtr TypeVar::_instantiateTypeVars(const GlobalState &gs, const TypeConstraint &tc) const {
     return tc.getInstantiation(sym);
 }
 
-TypePtr TypeVar::_approximate(Context ctx, const TypeConstraint &tc) {
-    if (tc.hasUpperBound(sym)) {
-        auto bound = tc.findUpperBound(sym);
-        if (bound->isFullyDefined()) {
-            return bound;
+TypePtr TypeVar::_approximateTypeVars(const GlobalState &gs, const TypeConstraint &tc, core::Polarity polarity) const {
+    switch (polarity) {
+        case core::Polarity::Positive:
+        case core::Polarity::Neutral: {
+            if (tc.hasUpperBound(sym)) {
+                auto bound = tc.findUpperBound(sym);
+                if (bound.isFullyDefined()) {
+                    return bound;
+                }
+            } else if (tc.hasLowerBound(sym)) {
+                auto bound = tc.findLowerBound(sym);
+                if (bound.isFullyDefined() && !bound.isBottom()) {
+                    return bound;
+                }
+            }
+            break;
+        }
+        case core::Polarity::Negative: {
+            if (tc.hasLowerBound(sym)) {
+                auto bound = tc.findLowerBound(sym);
+                if (bound.isFullyDefined()) {
+                    return bound;
+                }
+            } else if (tc.hasUpperBound(sym)) {
+                auto bound = tc.findUpperBound(sym);
+                if (bound.isFullyDefined()) {
+                    return bound;
+                }
+            }
+            break;
         }
     }
     // TODO: in many languages this method is a huge adhoc heuristic
@@ -61,180 +71,162 @@ TypePtr TypeVar::_approximate(Context ctx, const TypeConstraint &tc) {
     return Types::top();
 }
 
-TypePtr ClassType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params, const vector<TypePtr> &targs) {
-    return nullptr;
-}
+namespace {
 
-TypePtr LiteralType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params,
-                                  const vector<TypePtr> &targs) {
-    return nullptr;
-}
+optional<vector<TypePtr>> instantiateLambdaParamsInElems(const vector<TypePtr> &elems, const GlobalState &gs,
+                                                         absl::Span<const TypeMemberRef> params,
+                                                         const vector<TypePtr> &targs) {
+    optional<vector<TypePtr>> newElems;
+    int i = -1;
+    for (auto &e : elems) {
+        ++i;
+        auto t = e._instantiateLambdaParams(gs, params, targs);
+        if (!newElems.has_value() && !t) {
+            continue;
+        }
 
-TypePtr TupleType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params, const vector<TypePtr> &targs) {
-    bool changed = false;
-    vector<TypePtr> newElems;
-    newElems.reserve(this->elems.size());
-    for (auto &a : this->elems) {
-        auto t = a->_instantiate(ctx, params, targs);
-        if (changed || t) {
-            changed = true;
-            if (!t) {
-                t = a;
+        if (!newElems.has_value()) {
+            // Oops, need to fixup all the elements that should be there.
+            newElems.emplace();
+            newElems->reserve(elems.size());
+            for (int j = 0; j < i; ++j) {
+                newElems->emplace_back(elems[j]);
             }
-            newElems.emplace_back(t);
-        } else {
-            newElems.emplace_back(nullptr);
         }
-    }
-    if (changed) {
-        int i = 0;
-        while (!newElems[i]) {
-            newElems[i] = this->elems[i];
-            i++;
+
+        if (!t) {
+            t = e;
         }
-        return TupleType::build(ctx, newElems);
+
+        ENFORCE(newElems->size() == i);
+        newElems->emplace_back(move(t));
     }
-    return nullptr;
+    return newElems;
 }
 
-TypePtr TupleType::_instantiate(Context ctx, const TypeConstraint &tc) {
-    bool changed = false;
-    vector<TypePtr> newElems;
-    newElems.reserve(this->elems.size());
-    for (auto &a : this->elems) {
-        auto t = a->_instantiate(ctx, tc);
-        if (changed || t) {
-            changed = true;
-            if (!t) {
-                t = a;
+optional<vector<TypePtr>> instantiateTypeVarsInElems(const vector<TypePtr> &elems, const GlobalState &gs,
+                                                     const TypeConstraint &tc) {
+    optional<vector<TypePtr>> newElems;
+    int i = -1;
+    for (auto &e : elems) {
+        ++i;
+        auto t = e._instantiateTypeVars(gs, tc);
+        if (!newElems.has_value() && !t) {
+            continue;
+        }
+
+        if (!newElems.has_value()) {
+            // Oops, need to fixup all the elements that should be there.
+            newElems.emplace();
+            newElems->reserve(elems.size());
+            for (int j = 0; j < i; ++j) {
+                newElems->emplace_back(elems[j]);
             }
-            newElems.emplace_back(t);
-        } else {
-            newElems.emplace_back(nullptr);
         }
-    }
-    if (changed) {
-        int i = 0;
-        while (!newElems[i]) {
-            newElems[i] = this->elems[i];
-            i++;
+
+        if (!t) {
+            t = e;
         }
-        return TupleType::build(ctx, newElems);
+
+        ENFORCE(newElems->size() == i);
+        newElems->emplace_back(move(t));
     }
-    return nullptr;
+    return newElems;
 }
 
-TypePtr TupleType::_approximate(Context ctx, const TypeConstraint &tc) {
-    bool changed = false;
-    vector<TypePtr> newElems;
-    newElems.reserve(this->elems.size());
-    for (auto &a : this->elems) {
-        auto t = a->_approximate(ctx, tc);
-        if (changed || t) {
-            changed = true;
-            if (!t) {
-                t = a;
+// Matches the 4 used in the vector backing ClassOrModuleRef::typeMembers()
+using PolaritiesStore = InlinedVector<core::Polarity, 4>;
+
+optional<vector<TypePtr>> approximateElems(const vector<TypePtr> &elems, const GlobalState &gs,
+                                           const TypeConstraint &tc, PolaritiesStore &polarities) {
+    optional<vector<TypePtr>> newElems;
+    int i = -1;
+    for (auto &e : elems) {
+        ++i;
+        auto t = e._approximateTypeVars(gs, tc, polarities[i]);
+        if (!newElems.has_value() && !t) {
+            continue;
+        }
+
+        if (!newElems.has_value()) {
+            // Oops, need to fixup all the elements that should be there.
+            newElems.emplace();
+            newElems->reserve(elems.size());
+            for (int j = 0; j < i; ++j) {
+                newElems->emplace_back(elems[j]);
             }
-            newElems.emplace_back(t);
-        } else {
-            newElems.emplace_back(nullptr);
         }
-    }
-    if (changed) {
-        int i = 0;
-        while (!newElems[i]) {
-            newElems[i] = this->elems[i];
-            i++;
+
+        if (!t) {
+            t = e;
         }
-        return TupleType::build(ctx, newElems);
+
+        ENFORCE(newElems->size() == i);
+        newElems->emplace_back(move(t));
     }
-    return nullptr;
+    return newElems;
+}
+
+} // anonymous namespace
+
+TypePtr TupleType::_instantiateLambdaParams(const GlobalState &gs, absl::Span<const TypeMemberRef> params,
+                                            const vector<TypePtr> &targs) const {
+    optional<vector<TypePtr>> newElems = instantiateLambdaParamsInElems(this->elems, gs, params, targs);
+    if (!newElems) {
+        return nullptr;
+    }
+    return make_type<TupleType>(move(*newElems));
+}
+
+TypePtr TupleType::_instantiateTypeVars(const GlobalState &gs, const TypeConstraint &tc) const {
+    optional<vector<TypePtr>> newElems = instantiateTypeVarsInElems(this->elems, gs, tc);
+    if (!newElems) {
+        return nullptr;
+    }
+    return make_type<TupleType>(move(*newElems));
+}
+
+TypePtr TupleType::_approximateTypeVars(const GlobalState &gs, const TypeConstraint &tc,
+                                        core::Polarity polarity) const {
+    PolaritiesStore polarities(this->elems.size(), polarity);
+    optional<vector<TypePtr>> newElems = approximateElems(this->elems, gs, tc, polarities);
+    if (!newElems) {
+        return nullptr;
+    }
+    return make_type<TupleType>(move(*newElems));
 };
 
-TypePtr ShapeType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params, const vector<TypePtr> &targs) {
-    bool changed = false;
-    vector<TypePtr> newValues;
-    newValues.reserve(this->values.size());
-    for (auto &a : this->values) {
-        auto t = a->_instantiate(ctx, params, targs);
-        if (changed || t) {
-            changed = true;
-            if (!t) {
-                t = a;
-            }
-            newValues.emplace_back(t);
-        } else {
-            newValues.emplace_back(nullptr);
-        }
+TypePtr ShapeType::_instantiateLambdaParams(const GlobalState &gs, absl::Span<const TypeMemberRef> params,
+                                            const vector<TypePtr> &targs) const {
+    optional<vector<TypePtr>> newValues = instantiateLambdaParamsInElems(this->values, gs, params, targs);
+    if (!newValues) {
+        return nullptr;
     }
-    if (changed) {
-        int i = 0;
-        while (!newValues[i]) {
-            newValues[i] = this->values[i];
-            i++;
-        }
-        return make_type<ShapeType>(Types::hashOfUntyped(), this->keys, newValues);
-    }
-    return nullptr;
+    return make_type<ShapeType>(this->keys, move(*newValues));
 }
 
-TypePtr ShapeType::_instantiate(Context ctx, const TypeConstraint &tc) {
-    bool changed = false;
-    vector<TypePtr> newValues;
-    newValues.reserve(this->values.size());
-    for (auto &a : this->values) {
-        auto t = a->_instantiate(ctx, tc);
-        if (changed || t) {
-            changed = true;
-            if (!t) {
-                t = a;
-            }
-            newValues.emplace_back(t);
-        } else {
-            newValues.emplace_back(nullptr);
-        }
+TypePtr ShapeType::_instantiateTypeVars(const GlobalState &gs, const TypeConstraint &tc) const {
+    optional<vector<TypePtr>> newValues = instantiateTypeVarsInElems(this->values, gs, tc);
+    if (!newValues) {
+        return nullptr;
     }
-    if (changed) {
-        int i = 0;
-        while (!newValues[i]) {
-            newValues[i] = this->values[i];
-            i++;
-        }
-        return make_type<ShapeType>(Types::hashOfUntyped(), this->keys, newValues);
-    }
-    return nullptr;
+    return make_type<ShapeType>(this->keys, move(*newValues));
 }
 
-TypePtr ShapeType::_approximate(Context ctx, const TypeConstraint &tc) {
-    bool changed = false;
-    vector<TypePtr> newValues;
-    newValues.reserve(this->values.size());
-    for (auto &a : this->values) {
-        auto t = a->_approximate(ctx, tc);
-        if (changed || t) {
-            changed = true;
-            if (!t) {
-                t = a;
-            }
-            newValues.emplace_back(t);
-        } else {
-            newValues.emplace_back(nullptr);
-        }
+TypePtr ShapeType::_approximateTypeVars(const GlobalState &gs, const TypeConstraint &tc,
+                                        core::Polarity polarity) const {
+    PolaritiesStore polarities(this->values.size(), polarity);
+    optional<vector<TypePtr>> newValues = approximateElems(this->values, gs, tc, polarities);
+    if (!newValues) {
+        return nullptr;
     }
-    if (changed) {
-        int i = 0;
-        while (!newValues[i]) {
-            newValues[i] = this->values[i];
-            i++;
-        }
-        return make_type<ShapeType>(Types::hashOfUntyped(), this->keys, newValues);
-    }
-    return nullptr;
+    return make_type<ShapeType>(this->keys, move(*newValues));
 }
 
-TypePtr OrType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params, const vector<TypePtr> &targs) {
-    auto left = this->left->_instantiate(ctx, params, targs);
-    auto right = this->right->_instantiate(ctx, params, targs);
+TypePtr OrType::_instantiateLambdaParams(const GlobalState &gs, absl::Span<const TypeMemberRef> params,
+                                         const vector<TypePtr> &targs) const {
+    auto left = this->left._instantiateLambdaParams(gs, params, targs);
+    auto right = this->right._instantiateLambdaParams(gs, params, targs);
     if (left || right) {
         if (!left) {
             left = this->left;
@@ -242,14 +234,14 @@ TypePtr OrType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &par
         if (!right) {
             right = this->right;
         }
-        return Types::any(ctx, left, right);
+        return Types::any(gs, left, right);
     }
     return nullptr;
 }
 
-TypePtr OrType::_instantiate(Context ctx, const TypeConstraint &tc) {
-    auto left = this->left->_instantiate(ctx, tc);
-    auto right = this->right->_instantiate(ctx, tc);
+TypePtr OrType::_instantiateTypeVars(const GlobalState &gs, const TypeConstraint &tc) const {
+    auto left = this->left._instantiateTypeVars(gs, tc);
+    auto right = this->right._instantiateTypeVars(gs, tc);
     if (left || right) {
         if (!left) {
             left = this->left;
@@ -257,14 +249,14 @@ TypePtr OrType::_instantiate(Context ctx, const TypeConstraint &tc) {
         if (!right) {
             right = this->right;
         }
-        return Types::any(ctx, left, right);
+        return Types::any(gs, left, right);
     }
     return nullptr;
 }
 
-TypePtr OrType::_approximate(Context ctx, const TypeConstraint &tc) {
-    auto left = this->left->_approximate(ctx, tc);
-    auto right = this->right->_approximate(ctx, tc);
+TypePtr OrType::_approximateTypeVars(const GlobalState &gs, const TypeConstraint &tc, core::Polarity polarity) const {
+    auto left = this->left._approximateTypeVars(gs, tc, polarity);
+    auto right = this->right._approximateTypeVars(gs, tc, polarity);
     if (left || right) {
         if (!left) {
             left = this->left;
@@ -272,14 +264,15 @@ TypePtr OrType::_approximate(Context ctx, const TypeConstraint &tc) {
         if (!right) {
             right = this->right;
         }
-        return Types::any(ctx, left, right);
+        return Types::any(gs, left, right);
     }
     return nullptr;
 }
 
-TypePtr AndType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params, const vector<TypePtr> &targs) {
-    auto left = this->left->_instantiate(ctx, params, targs);
-    auto right = this->right->_instantiate(ctx, params, targs);
+TypePtr AndType::_instantiateLambdaParams(const GlobalState &gs, absl::Span<const TypeMemberRef> params,
+                                          const vector<TypePtr> &targs) const {
+    auto left = this->left._instantiateLambdaParams(gs, params, targs);
+    auto right = this->right._instantiateLambdaParams(gs, params, targs);
     if (left || right) {
         if (!left) {
             left = this->left;
@@ -287,14 +280,14 @@ TypePtr AndType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &pa
         if (!right) {
             right = this->right;
         }
-        return Types::all(ctx, left, right);
+        return Types::all(gs, left, right);
     }
     return nullptr;
 }
 
-TypePtr AndType::_instantiate(Context ctx, const TypeConstraint &tc) {
-    auto left = this->left->_instantiate(ctx, tc);
-    auto right = this->right->_instantiate(ctx, tc);
+TypePtr AndType::_instantiateTypeVars(const GlobalState &gs, const TypeConstraint &tc) const {
+    auto left = this->left._instantiateTypeVars(gs, tc);
+    auto right = this->right._instantiateTypeVars(gs, tc);
     if (left || right) {
         if (!left) {
             left = this->left;
@@ -302,14 +295,14 @@ TypePtr AndType::_instantiate(Context ctx, const TypeConstraint &tc) {
         if (!right) {
             right = this->right;
         }
-        return Types::all(ctx, left, right);
+        return Types::all(gs, left, right);
     }
     return nullptr;
 }
 
-TypePtr AndType::_approximate(Context ctx, const TypeConstraint &tc) {
-    auto left = this->left->_approximate(ctx, tc);
-    auto right = this->right->_approximate(ctx, tc);
+TypePtr AndType::_approximateTypeVars(const GlobalState &gs, const TypeConstraint &tc, core::Polarity polarity) const {
+    auto left = this->left._approximateTypeVars(gs, tc, polarity);
+    auto right = this->right._approximateTypeVars(gs, tc, polarity);
     if (left || right) {
         if (!left) {
             left = this->left;
@@ -317,106 +310,52 @@ TypePtr AndType::_approximate(Context ctx, const TypeConstraint &tc) {
         if (!right) {
             right = this->right;
         }
-        return Types::all(ctx, left, right);
+        return Types::all(gs, left, right);
     }
     return nullptr;
 }
 
-TypePtr AppliedType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params,
-                                  const vector<TypePtr> &targs) {
-    bool changed = false;
-    vector<TypePtr> newTargs;
-    newTargs.reserve(this->targs.size());
-    // TODO: make it not allocate if returns nullptr
-    for (auto &a : this->targs) {
-        auto t = a->_instantiate(ctx, params, targs);
-        if (changed || t) {
-            changed = true;
-            if (!t) {
-                t = a;
-            }
-            newTargs.emplace_back(t);
-        } else {
-            newTargs.emplace_back(nullptr);
-        }
+TypePtr AppliedType::_instantiateLambdaParams(const GlobalState &gs, absl::Span<const TypeMemberRef> params,
+                                              const vector<TypePtr> &targs) const {
+    optional<vector<TypePtr>> newTargs = instantiateLambdaParamsInElems(this->targs, gs, params, targs);
+    if (!newTargs) {
+        return nullptr;
     }
-    if (changed) {
-        int i = 0;
-        while (!newTargs[i]) {
-            newTargs[i] = this->targs[i];
-            i++;
-        }
-        return make_type<AppliedType>(this->klass, newTargs);
-    }
-
-    return nullptr;
+    return make_type<AppliedType>(this->klass, move(*newTargs));
 }
 
-TypePtr AppliedType::_instantiate(Context ctx, const TypeConstraint &tc) {
-    bool changed = false;
-    vector<TypePtr> newTargs;
-    newTargs.reserve(this->targs.size());
-    // TODO: make it not allocate if returns nullptr
-    for (auto &a : this->targs) {
-        auto t = a->_instantiate(ctx, tc);
-        if (changed || t) {
-            changed = true;
-            if (!t) {
-                t = a;
-            }
-            newTargs.emplace_back(t);
-        } else {
-            newTargs.emplace_back(nullptr);
-        }
+TypePtr AppliedType::_instantiateTypeVars(const GlobalState &gs, const TypeConstraint &tc) const {
+    optional<vector<TypePtr>> newTargs = instantiateTypeVarsInElems(this->targs, gs, tc);
+    if (!newTargs) {
+        return nullptr;
     }
-    if (changed) {
-        int i = 0;
-        while (!newTargs[i]) {
-            newTargs[i] = this->targs[i];
-            i++;
-        }
-        return make_type<AppliedType>(this->klass, newTargs);
-    }
-
-    return nullptr;
+    return make_type<AppliedType>(this->klass, move(*newTargs));
 }
 
-TypePtr AppliedType::_approximate(Context ctx, const TypeConstraint &tc) {
-    bool changed = false;
-    vector<TypePtr> newTargs;
-    newTargs.reserve(this->targs.size());
-    // TODO: make it not allocate if returns nullptr
-    for (auto &a : this->targs) {
-        auto t = a->_approximate(ctx, tc);
-        if (changed || t) {
-            changed = true;
-            if (!t) {
-                t = a;
-            }
-            newTargs.emplace_back(t);
-        } else {
-            newTargs.emplace_back(nullptr);
+TypePtr AppliedType::_approximateTypeVars(const GlobalState &gs, const TypeConstraint &tc,
+                                          core::Polarity polarity) const {
+    PolaritiesStore polarities;
+    for (auto typeMember : this->klass.data(gs)->typeMembers()) {
+        switch (typeMember.data(gs)->variance()) {
+            case core::Variance::ContraVariant:
+                polarities.emplace_back(core::Polarities::negatePolarity(polarity));
+                break;
+            case core::Variance::Invariant:
+            case core::Variance::CoVariant:
+                polarities.emplace_back(polarity);
+                break;
         }
     }
-    if (changed) {
-        int i = 0;
-        while (!newTargs[i]) {
-            newTargs[i] = this->targs[i];
-            i++;
-        }
-        return make_type<AppliedType>(this->klass, newTargs);
+
+    optional<vector<TypePtr>> newTargs = approximateElems(this->targs, gs, tc, polarities);
+    if (!newTargs) {
+        return nullptr;
     }
-
-    return nullptr;
+    return make_type<AppliedType>(this->klass, move(*newTargs));
 }
 
-TypePtr SelfTypeParam::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params,
-                                    const vector<TypePtr> &targs) {
-    return nullptr;
-}
-
-TypePtr LambdaParam::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params,
-                                  const vector<TypePtr> &targs) {
+TypePtr LambdaParam::_instantiateLambdaParams(const GlobalState &gs, absl::Span<const TypeMemberRef> params,
+                                              const vector<TypePtr> &targs) const {
     ENFORCE(params.size() == targs.size());
     for (auto &el : params) {
         if (el == this->definition) {
@@ -426,38 +365,22 @@ TypePtr LambdaParam::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4>
     return nullptr;
 }
 
-TypePtr Type::_approximate(Context ctx, const TypeConstraint &tc) {
-    return nullptr;
-}
-
-TypePtr Type::_instantiate(Context ctx, const TypeConstraint &tc) {
-    return nullptr;
-}
-
-TypePtr SelfType::_instantiate(Context ctx, const InlinedVector<SymbolRef, 4> &params, const vector<TypePtr> &targs) {
-    return nullptr;
-}
-
-TypePtr Types::replaceSelfType(Context ctx, const TypePtr &what, const TypePtr &receiver) {
-    ENFORCE(what.get());
-    auto t = what->_replaceSelfType(ctx, receiver);
+TypePtr Types::replaceSelfType(const GlobalState &gs, const TypePtr &what, const TypePtr &receiver) {
+    ENFORCE(what != nullptr);
+    auto t = what._replaceSelfType(gs, receiver);
     if (t) {
         return t;
     }
     return what;
 }
 
-TypePtr SelfType::_replaceSelfType(Context ctx, const TypePtr &receiver) {
+TypePtr SelfType::_replaceSelfType(const GlobalState &gs, const TypePtr &receiver) const {
     return receiver;
 }
 
-TypePtr Type::_replaceSelfType(Context ctx, const TypePtr &receiver) {
-    return nullptr;
-}
-
-TypePtr OrType::_replaceSelfType(Context ctx, const TypePtr &receiver) {
-    auto left = this->left->_replaceSelfType(ctx, receiver);
-    auto right = this->right->_replaceSelfType(ctx, receiver);
+TypePtr OrType::_replaceSelfType(const GlobalState &gs, const TypePtr &receiver) const {
+    auto left = this->left._replaceSelfType(gs, receiver);
+    auto right = this->right._replaceSelfType(gs, receiver);
     if (left || right) {
         if (!left) {
             left = this->left;
@@ -465,14 +388,14 @@ TypePtr OrType::_replaceSelfType(Context ctx, const TypePtr &receiver) {
         if (!right) {
             right = this->right;
         }
-        return Types::any(ctx, left, right);
+        return Types::any(gs, left, right);
     }
     return nullptr;
 }
 
-TypePtr AndType::_replaceSelfType(Context ctx, const TypePtr &receiver) {
-    auto left = this->left->_replaceSelfType(ctx, receiver);
-    auto right = this->right->_replaceSelfType(ctx, receiver);
+TypePtr AndType::_replaceSelfType(const GlobalState &gs, const TypePtr &receiver) const {
+    auto left = this->left._replaceSelfType(gs, receiver);
+    auto right = this->right._replaceSelfType(gs, receiver);
     if (left || right) {
         if (!left) {
             left = this->left;
@@ -480,13 +403,9 @@ TypePtr AndType::_replaceSelfType(Context ctx, const TypePtr &receiver) {
         if (!right) {
             right = this->right;
         }
-        return Types::all(ctx, left, right);
+        return Types::all(gs, left, right);
     }
     return nullptr;
-}
-
-unsigned int Type::hash(const GlobalState &gs) const {
-    return _hash(this->toString(gs)); // TODO: make something better
 }
 
 } // namespace sorbet::core

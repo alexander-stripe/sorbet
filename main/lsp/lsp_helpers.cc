@@ -3,71 +3,55 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "common/FileOps.h"
-#include "common/sort.h"
-#include "lsp.h"
+#include "common/sort/sort.h"
+#include "main/lsp/LSPLoop.h"
+#include "main/lsp/json_types.h"
 
 using namespace std;
 
 namespace sorbet::realmain::lsp {
 
-vector<unique_ptr<Location>>
-LSPLoop::extractLocations(const core::GlobalState &gs,
-                          const vector<unique_ptr<core::lsp::QueryResponse>> &queryResponses,
-                          vector<unique_ptr<Location>> locations) const {
-    for (auto &q : queryResponses) {
-        core::Loc loc = q->getLoc();
-        if (loc.exists() && loc.file().exists()) {
-            auto fileIsTyped = loc.file().data(gs).strictLevel >= core::StrictLevel::True;
-            // If file is untyped, only support responses involving constants and definitions.
-            if (fileIsTyped || q->isConstant() || q->isField() || q->isDefinition()) {
-                addLocIfExists(gs, locations, loc);
-            }
-        }
-    }
-    // Dedupe locations
-    fast_sort(locations,
-              [](const unique_ptr<Location> &a, const unique_ptr<Location> &b) -> bool { return a->cmp(*b) < 0; });
-    locations.resize(std::distance(locations.begin(),
-                                   std::unique(locations.begin(), locations.end(),
-                                               [](const unique_ptr<Location> &a,
-                                                  const unique_ptr<Location> &b) -> bool { return a->cmp(*b) == 0; })));
-    return locations;
-}
-
 bool hideSymbol(const core::GlobalState &gs, core::SymbolRef sym) {
     if (!sym.exists() || sym == core::Symbols::root()) {
         return true;
     }
-    auto data = sym.data(gs);
-    if (data->isClassOrModule() && data->attachedClass(gs).exists()) {
+    if (!sym.owner(gs).exists()) {
         return true;
     }
-    if (data->isClassOrModule() && data->superClass() == core::Symbols::StubModule()) {
+    if (sym.isClassOrModule() && sym.asClassOrModuleRef().data(gs)->attachedClass(gs).exists()) {
         return true;
     }
-    // static-init for a class
-    if (data->name == core::Names::staticInit() ||
-        // <unresolved-ancestors> is a fake method created to ensure IDE takes slow path for class hierarchy changes
-        data->name == core::Names::unresolvedAncestors() || data->name == core::Names::Constants::AttachedClass()) {
+    if (sym.isClassOrModule() && sym.asClassOrModuleRef().data(gs)->superClass() == core::Symbols::StubModule()) {
         return true;
     }
-    // static-init for a file
-    if (data->name.data(gs)->kind == core::NameKind::UNIQUE &&
-        data->name.data(gs)->unique.original == core::Names::staticInit()) {
+    auto name = sym.name(gs);
+    // <unresolved-ancestors> is a fake method created to ensure IDE takes slow path for class hierarchy changes
+    if (name == core::Names::unresolvedAncestors() || name == core::Names::Constants::AttachedClass()) {
+        return true;
+    }
+    // TODO(jez) We probably want to get rid of anything with angle brackets (like what
+    // completion.cc does) but that can be in another change.
+    if (name == core::Names::beforeAngles()) {
+        return true;
+    }
+    // internal representation of enums as classes
+    if (sym.isClassOrModule() && sym.asClassOrModuleRef().data(gs)->name.isTEnumName(gs)) {
+        return true;
+    }
+    // static-init for a class or file
+    if (name.isAnyStaticInitName(gs)) {
         return true;
     }
     // <block>
-    if (data->name.data(gs)->kind == core::NameKind::UNIQUE &&
-        data->name.data(gs)->unique.original == core::Names::blockTemp()) {
+    if (name.kind() == core::NameKind::UNIQUE && name.dataUnique(gs)->original == core::Names::blockTemp()) {
         return true;
     }
-    return false;
-}
 
-bool hasSimilarName(const core::GlobalState &gs, core::NameRef name, string_view pattern) {
-    string_view view = name.data(gs)->shortName(gs);
-    auto fnd = view.find(pattern);
-    return fnd != string_view::npos;
+    if (name == core::Names::requiredAncestorsLin()) {
+        return true;
+    }
+
+    return false;
 }
 
 unique_ptr<MarkupContent> formatRubyMarkup(MarkupKind markupKind, string_view rubyMarkup,
@@ -86,205 +70,335 @@ unique_ptr<MarkupContent> formatRubyMarkup(MarkupKind markupKind, string_view ru
     return make_unique<MarkupContent>(markupKind, move(content));
 }
 
-// iff a sig has more than this many parameters, then print it as a multi-line sig.
-constexpr int MAX_PRETTY_SIG_ARGS = 4;
-// iff a `def` would be this wide or wider, expand it to be a multi-line def.
-constexpr int MAX_PRETTY_WIDTH = 80;
-
-string prettySigForMethod(const core::GlobalState &gs, core::SymbolRef method, core::TypePtr receiver,
-                          core::TypePtr retType, const core::TypeConstraint *constraint) {
-    ENFORCE(method.exists());
-    ENFORCE(method.data(gs)->dealias(gs) == method);
-    // handle this case anyways so that we don't crash in prod when this method is mis-used
-    if (!method.exists()) {
-        return "";
+string prettyTypeForConstant(const core::GlobalState &gs, core::SymbolRef constant) {
+    if (constant == core::Symbols::StubModule()) {
+        return "(unable to resolve constant)";
     }
 
-    if (!retType) {
-        retType = getResultType(gs, method.data(gs)->resultType, method, receiver, constraint);
-    }
-    string methodReturnType =
-        (retType == core::Types::void_()) ? "void" : absl::StrCat("returns(", retType->show(gs), ")");
-    vector<string> typeAndArgNames;
-
-    vector<string> flags;
-    const core::SymbolData &sym = method.data(gs);
-    string accessFlagString = "";
-    string sigCall = "sig";
-    if (sym->isMethod()) {
-        if (sym->isFinalMethod()) {
-            sigCall = "sig(:final)";
-        }
-        if (sym->isAbstract()) {
-            flags.emplace_back("abstract");
-        }
-        if (sym->isOverridable()) {
-            flags.emplace_back("overridable");
-        }
-        if (sym->isOverride()) {
-            flags.emplace_back("override");
-        }
-        if (sym->isPrivate()) {
-            accessFlagString = "private ";
-        }
-        if (sym->isProtected()) {
-            accessFlagString = "protected ";
-        }
-        for (auto &argSym : method.data(gs)->arguments()) {
-            // Don't display synthetic arguments (like blk).
-            if (!argSym.isSyntheticBlockArgument()) {
-                typeAndArgNames.emplace_back(
-                    absl::StrCat(argSym.argumentName(gs), ": ",
-                                 getResultType(gs, argSym.type, method, receiver, constraint)->show(gs)));
-            }
-        }
+    if (constant.isClassAlias(gs)) {
+        auto dealiased = constant.dealias(gs);
+        auto dealiasedShow =
+            dealiased == core::Symbols::StubModule() ? "(unable to resolve constant)" : dealiased.show(gs);
+        return fmt::format("{} = {}", constant.name(gs).show(gs), dealiasedShow);
     }
 
-    string flagString = "";
-    if (!flags.empty()) {
-        flagString = fmt::format("{}.", fmt::join(flags, "."));
-    }
-    string paramsString = "";
-    if (!typeAndArgNames.empty()) {
-        paramsString = fmt::format("params({}).", fmt::join(typeAndArgNames, ", "));
-    }
-
-    auto oneline =
-        fmt::format("{}{} {{{}{}{}}}", accessFlagString, sigCall, flagString, paramsString, methodReturnType);
-    if (oneline.size() <= MAX_PRETTY_WIDTH && typeAndArgNames.size() <= MAX_PRETTY_SIG_ARGS) {
-        return oneline;
+    core::TypePtr result;
+    if (constant.isClassOrModule()) {
+        auto targetClass = constant.asClassOrModuleRef();
+        if (!targetClass.data(gs)->attachedClass(gs).exists()) {
+            targetClass = targetClass.data(gs)->lookupSingletonClass(gs);
+        }
+        result = targetClass.data(gs)->externalType();
+    } else {
+        const auto &resultType = constant.resultType(gs);
+        result = resultType == nullptr ? core::Types::untyped(constant) : resultType;
     }
 
-    if (!flags.empty()) {
-        flagString = fmt::format("{}\n  .", fmt::join(flags, "\n  ."));
+    if (constant.isTypeAlias(gs)) {
+        return fmt::format("T.type_alias {{{}}}", result.show(gs));
+    } else {
+        return result.showWithMoreInfo(gs);
     }
-    if (!typeAndArgNames.empty()) {
-        paramsString = fmt::format("params(\n    {}\n  )\n  .", fmt::join(typeAndArgNames, ",\n    "));
-    }
-    return fmt::format("{}{} do\n  {}{}{}\nend", accessFlagString, sigCall, flagString, paramsString, methodReturnType);
 }
 
-string prettyDefForMethod(const core::GlobalState &gs, core::SymbolRef method) {
-    ENFORCE(method.exists());
-    // handle this case anyways so that we don't crash in prod when this method is mis-used
-    if (!method.exists()) {
-        return "";
-    }
-    auto methodData = method.data(gs);
-
-    auto methodNameRef = methodData->name;
-    ENFORCE(methodNameRef.exists());
-    string methodName = "???";
-    if (methodNameRef.exists()) {
-        methodName = methodNameRef.data(gs)->toString(gs);
-    }
-    string methodNamePrefix = "";
-    if (methodData->owner.exists() && methodData->owner.data(gs)->isClassOrModule() &&
-        methodData->owner.data(gs)->attachedClass(gs).exists()) {
-        methodNamePrefix = "self.";
-    }
-    vector<string> prettyArgs;
-    const auto &arguments = methodData->dealias(gs).data(gs)->arguments();
-    ENFORCE(!arguments.empty(), "Should have at least a block arg");
-    for (const auto &argSym : arguments) {
-        // Don't display synthetic arguments (like blk).
-        if (argSym.isSyntheticBlockArgument()) {
-            continue;
-        }
-        string prefix = "";
-        string suffix = "";
-        if (argSym.flags.isKeyword) {
-            if (argSym.flags.isRepeated) {
-                prefix = "**"; // variadic keyword args
-            } else if (argSym.flags.isDefault) {
-                suffix = ": …"; // optional keyword (has a default value)
-            } else {
-                suffix = ":"; // required keyword
-            }
-        } else if (argSym.flags.isRepeated) {
-            prefix = "*";
-        } else if (argSym.flags.isBlock) {
-            prefix = "&";
-        }
-        prettyArgs.emplace_back(fmt::format("{}{}{}", prefix, argSym.argumentName(gs), suffix));
-    }
-
-    string argListPrefix = "";
-    string argListSeparator = "";
-    string argListSuffix = "";
-    if (prettyArgs.size() > 0) {
-        argListPrefix = "(";
-        argListSeparator = ", ";
-        argListSuffix = ")";
-    }
-
-    auto result = fmt::format("def {}{}{}{}{}; end", methodNamePrefix, methodName, argListPrefix,
-                              fmt::join(prettyArgs, argListSeparator), argListSuffix);
-    if (prettyArgs.size() > 0 && result.length() >= MAX_PRETTY_WIDTH) {
-        argListPrefix = "(\n  ";
-        argListSeparator = ",\n  ";
-        argListSuffix = "\n)";
-        result = fmt::format("def {}{}{}{}{}\nend", methodNamePrefix, methodName, argListPrefix,
-                             fmt::join(prettyArgs, argListSeparator), argListSuffix);
-    }
-    return result;
-}
-
-string prettyTypeForMethod(const core::GlobalState &gs, core::SymbolRef method, core::TypePtr receiver,
-                           core::TypePtr retType, const core::TypeConstraint *constraint) {
-    return fmt::format("{}\n{}", prettySigForMethod(gs, method.data(gs)->dealias(gs), receiver, retType, constraint),
-                       prettyDefForMethod(gs, method));
-}
-
-core::TypePtr getResultType(const core::GlobalState &gs, core::TypePtr type, core::SymbolRef inWhat,
-                            core::TypePtr receiver, const core::TypeConstraint *constr) {
-    core::Context ctx(gs, inWhat);
-    auto resultType = type;
-    if (auto *proxy = core::cast_type<core::ProxyType>(receiver.get())) {
-        receiver = proxy->underlying();
-    }
-    if (auto *applied = core::cast_type<core::AppliedType>(receiver.get())) {
-        /* instantiate generic classes */
-        resultType = core::Types::resultTypeAsSeenFrom(ctx, resultType, inWhat.data(ctx)->enclosingClass(ctx),
-                                                       applied->klass, applied->targs);
-    }
-    if (!resultType) {
-        resultType = core::Types::untypedUntracked();
-    }
-    if (receiver) {
-        resultType = core::Types::replaceSelfType(ctx, resultType, receiver); // instantiate self types
-    }
-    if (constr) {
-        resultType = core::Types::instantiate(ctx, resultType, *constr); // instantiate generic methods
-    }
-    return resultType;
-}
-
-SymbolKind symbolRef2SymbolKind(const core::GlobalState &gs, core::SymbolRef symbol) {
-    auto sym = symbol.data(gs);
-    if (sym->isClassOrModule()) {
-        if (sym->isClassOrModuleModule()) {
+SymbolKind symbolRef2SymbolKind(const core::GlobalState &gs, core::SymbolRef symbol, bool isAttrBestEffortUIOnly) {
+    if (symbol.isClassOrModule()) {
+        auto klass = symbol.asClassOrModuleRef();
+        if (klass.data(gs)->isModule()) {
             return SymbolKind::Module;
         }
-        if (sym->isClassOrModuleClass()) {
+        if (klass.data(gs)->isClass()) {
             return SymbolKind::Class;
         }
-    } else if (sym->isMethod()) {
-        if (sym->name == core::Names::initialize()) {
+    } else if (symbol.isMethod()) {
+        auto method = symbol.asMethodRef();
+        if (method.data(gs)->name == core::Names::initialize()) {
             return SymbolKind::Constructor;
+        } else if (isAttrBestEffortUIOnly) {
+            return SymbolKind::Property;
         } else {
             return SymbolKind::Method;
         }
-    } else if (sym->isField()) {
+    } else if (symbol.isField(gs)) {
         return SymbolKind::Field;
-    } else if (sym->isStaticField()) {
+    } else if (symbol.isStaticField(gs)) {
         return SymbolKind::Constant;
-    } else if (sym->isTypeMember()) {
+    } else if (symbol.isTypeMember()) {
         return SymbolKind::TypeParameter;
-    } else if (sym->isTypeArgument()) {
+    } else if (symbol.isTypeParameter()) {
         return SymbolKind::TypeParameter;
     }
     return SymbolKind::Unknown;
+}
+
+namespace {
+
+struct AccessorInfo {
+    core::FieldRef fieldSymbol;
+    core::MethodRef readerSymbol;
+    core::MethodRef writerSymbol;
+};
+
+static const vector<core::NameRef> accessorNames = {
+    core::Names::prop(),        core::Names::tokenProp(),    core::Names::timestampedTokenProp(),
+    core::Names::createdProp(), core::Names::attrAccessor(),
+};
+
+static const vector<core::NameRef> writerNames = {
+    core::Names::attrWriter(),
+};
+
+static const vector<core::NameRef> readerNames = {
+    core::Names::const_(),
+    core::Names::merchantProp(),
+    core::Names::attrReader(),
+};
+
+bool definedByAccessorMethod(const core::GlobalState &gs, AccessorInfo &info) {
+    auto method = info.readerSymbol.exists() ? info.readerSymbol : info.writerSymbol;
+    ENFORCE(method.exists());
+
+    // Check definition site of method for `prop`, `const`, etc. The loc for the method should begin with
+    // `def|prop|const|...`.
+    auto methodSource = method.data(gs)->loc().source(gs);
+    if (!methodSource.has_value()) {
+        return false;
+    }
+    // Common case: ordinary `def`. Fast reject.
+    if (absl::StartsWith(methodSource.value(), "def")) {
+        return false;
+    }
+
+    if (absl::c_any_of(accessorNames, [&methodSource, &gs](auto name) -> bool {
+            return absl::StartsWith(methodSource.value(), name.toString(gs));
+        })) {
+        return true;
+    } else if (absl::c_any_of(writerNames, [&methodSource, &gs](auto name) -> bool {
+                   return absl::StartsWith(methodSource.value(), name.toString(gs));
+               })) {
+        return true;
+    } else if (absl::c_any_of(readerNames, [&methodSource, &gs](auto name) -> bool {
+                   return absl::StartsWith(methodSource.value(), name.toString(gs));
+               })) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+} // namespace
+
+void addOtherAccessorSymbols(const core::GlobalState &gs, core::SymbolRef symbol,
+                             core::lsp::Query::Symbol::STORAGE &symbols) {
+    AccessorInfo info;
+
+    core::SymbolRef owner = symbol.owner(gs);
+    if (!owner.exists() || !owner.isClassOrModule()) {
+        return;
+    }
+    core::ClassOrModuleRef ownerCls = owner.asClassOrModuleRef();
+
+    string_view baseName;
+
+    string symbolName = symbol.name(gs).toString(gs);
+    // Extract the base name from `symbol`.
+    if (absl::StartsWith(symbolName, "@")) {
+        if (!symbol.isField(gs)) {
+            return;
+        }
+        info.fieldSymbol = symbol.asFieldRef();
+        baseName = string_view(symbolName).substr(1);
+    } else if (absl::EndsWith(symbolName, "=")) {
+        if (!symbol.isMethod()) {
+            return;
+        }
+        info.writerSymbol = symbol.asMethodRef();
+        baseName = string_view(symbolName).substr(0, symbolName.length() - 1);
+    } else {
+        if (!symbol.isMethod()) {
+            return;
+        }
+        info.readerSymbol = symbol.asMethodRef();
+        baseName = symbolName;
+    }
+
+    // Find the other associated symbols.
+    if (!info.fieldSymbol.exists()) {
+        auto fieldNameStr = absl::StrCat("@", baseName);
+        auto fieldName = gs.lookupNameUTF8(fieldNameStr);
+        if (!fieldName.exists()) {
+            // Field is not optional.
+            return;
+        }
+        info.fieldSymbol = gs.lookupFieldSymbol(ownerCls, fieldName);
+    }
+
+    if (!info.readerSymbol.exists()) {
+        auto readerName = gs.lookupNameUTF8(baseName);
+        if (readerName.exists()) {
+            info.readerSymbol = gs.lookupMethodSymbol(ownerCls, readerName);
+        }
+    }
+
+    if (!info.writerSymbol.exists()) {
+        auto writerNameStr = absl::StrCat(baseName, "=");
+        auto writerName = gs.lookupNameUTF8(writerNameStr);
+        if (writerName.exists()) {
+            info.writerSymbol = gs.lookupMethodSymbol(ownerCls, writerName);
+        }
+    }
+
+    // If this is an accessor, we should have a field and _at least_ one of reader or writer.
+    if (!info.writerSymbol.exists() && !info.readerSymbol.exists()) {
+        return;
+    }
+
+    // Use reader or writer to determine what type of field accessor we are dealing with (if any).
+    if (definedByAccessorMethod(gs, info)) {
+        if (info.fieldSymbol.exists() && symbol != info.fieldSymbol) {
+            symbols.emplace_back(info.fieldSymbol);
+        }
+        if (info.readerSymbol.exists() && symbol != info.readerSymbol) {
+            symbols.emplace_back(info.readerSymbol);
+        }
+        if (info.writerSymbol.exists() && symbol != info.writerSymbol) {
+            symbols.emplace_back(info.writerSymbol);
+        }
+    }
+}
+
+namespace {
+
+// Checks if s is a subclass of root or contains root as a mixin, and updates visited and memoized vectors.
+bool isSubclassOrMixin(const core::GlobalState &gs, core::ClassOrModuleRef s, vector<bool> &memoized,
+                       vector<bool> &visited) {
+    // don't visit the same class twice
+    if (visited[s.id()] == true) {
+        return memoized[s.id()];
+    }
+    visited[s.id()] = true;
+
+    for (auto a : s.data(gs)->mixins()) {
+        if (memoized[a.id()]) {
+            memoized[s.id()] = true;
+            return true;
+        }
+    }
+    if (s.data(gs)->superClass().exists()) {
+        memoized[s.id()] = isSubclassOrMixin(gs, s.data(gs)->superClass(), memoized, visited);
+    }
+
+    return memoized[s.id()];
+}
+
+} // namespace
+
+// This is slow. See the comment in the header file.
+vector<core::ClassOrModuleRef> getSubclassesSlow(const core::GlobalState &gs, core::ClassOrModuleRef root,
+                                                 bool includeRoot) {
+    vector<bool> memoized(gs.classAndModulesUsed());
+    vector<bool> visited(gs.classAndModulesUsed());
+    memoized[root.id()] = true;
+    visited[root.id()] = true;
+
+    vector<core::ClassOrModuleRef> subclasses;
+    for (uint32_t i = 1; i < gs.classAndModulesUsed(); ++i) {
+        auto s = core::ClassOrModuleRef(gs, i);
+        if (!includeRoot && s == root) {
+            continue;
+        }
+        if (isSubclassOrMixin(gs, s, memoized, visited)) {
+            subclasses.emplace_back(s);
+        }
+    }
+    return subclasses;
+}
+
+// This is slow. See the comment in the header file.
+vector<core::ClassOrModuleRef> getSubclassesSlowMulti(const core::GlobalState &gs,
+                                                      absl::Span<const core::ClassOrModuleRef> roots) {
+    vector<bool> memoized(gs.classAndModulesUsed());
+    vector<bool> visited(gs.classAndModulesUsed());
+    for (auto root : roots) {
+        memoized[root.id()] = true;
+        visited[root.id()] = true;
+    }
+
+    vector<core::ClassOrModuleRef> subclasses;
+    for (uint32_t i = 1; i < gs.classAndModulesUsed(); ++i) {
+        auto s = core::ClassOrModuleRef(gs, i);
+        if (isSubclassOrMixin(gs, s, memoized, visited)) {
+            subclasses.emplace_back(s);
+        }
+    }
+    return subclasses;
+}
+
+unique_ptr<core::lsp::QueryResponse>
+skipLiteralIfPunnedKeywordArg(const core::GlobalState &gs,
+                              vector<unique_ptr<core::lsp::QueryResponse>> &queryResponses) {
+    auto &resp = queryResponses[0];
+    auto *litResp = resp->isLiteral();
+    if (litResp == nullptr || queryResponses.size() <= 1) {
+        return nullptr;
+    }
+    auto identResp = queryResponses[1]->isIdent();
+    if (identResp == nullptr || identResp->termLoc.adjust(gs, 0, -1) != litResp->termLoc) {
+        return nullptr;
+    }
+
+    return move(queryResponses[1]);
+}
+
+unique_ptr<core::lsp::QueryResponse>
+skipLiteralIfMethodDef(const core::GlobalState &gs, vector<unique_ptr<core::lsp::QueryResponse>> &queryResponses) {
+    if (auto punnedKwarg = skipLiteralIfPunnedKeywordArg(gs, queryResponses)) {
+        return punnedKwarg;
+    }
+
+    for (auto &r : queryResponses) {
+        if (r->isMethodDef()) {
+            return move(r);
+        } else if (!r->isLiteral()) {
+            break;
+        }
+    }
+
+    return move(queryResponses[0]);
+}
+
+unique_ptr<core::lsp::QueryResponse>
+getQueryResponseForFindAllReferences(const core::GlobalState &gs,
+                                     vector<unique_ptr<core::lsp::QueryResponse>> &queryResponses) {
+    // Find all references might show an Ident last if its a `prop`, and the Ident will be the
+    // synthetic local variable name of the method argument.
+    auto firstResp = queryResponses[0]->isIdent();
+    if (firstResp == nullptr) {
+        return skipLiteralIfMethodDef(gs, queryResponses);
+    }
+
+    for (auto resp = queryResponses.begin() + 1; resp != queryResponses.end(); ++resp) {
+        // If this query response has the same location as the first ident response, keep skipping
+        // up. Seeing a query response for the exact same loc suggests this was synthesized in
+        // rewriter.
+        if ((*resp)->getLoc() == firstResp->termLoc) {
+            continue;
+        }
+
+        // It's always okay to skip literals for Find All References
+        auto lit = (*resp)->isLiteral();
+        if (lit != nullptr) {
+            continue;
+        }
+
+        if ((*resp)->isMethodDef()) {
+            return move(*resp);
+        } else {
+            return skipLiteralIfMethodDef(gs, queryResponses);
+        }
+    }
+
+    return skipLiteralIfMethodDef(gs, queryResponses);
 }
 
 /**
@@ -301,14 +415,14 @@ optional<string> findDocumentation(string_view sourceCode, int beginIndex) {
     string_view preDefinition = sourceCode.substr(0, sourceCode.rfind('\n', beginIndex));
 
     // Get all the lines before it.
-    std::vector<string_view> all_lines = absl::StrSplit(preDefinition, '\n');
+    vector<string_view> all_lines = absl::StrSplit(preDefinition, '\n');
 
     // if there are no lines before the method definition, we're at the top of the file.
     if (all_lines.empty()) {
         return nullopt;
     }
 
-    std::vector<string_view> documentation_lines;
+    vector<string_view> documentation_lines;
 
     // Iterate from the last line, to the first line
     for (auto it = all_lines.rbegin(); it != all_lines.rend(); it++) {
@@ -325,33 +439,74 @@ optional<string> findDocumentation(string_view sourceCode, int beginIndex) {
         }
 
         // Handle multi-line sig block
-        else if (absl::StartsWith(line, "end")) {
-            // ASSUMPTION: We either hit the start of file, a `sig do` or an `end`
+        else if (absl::StartsWith(line, "}")) {
+            // ASSUMPTION: We either hit the start of file or a `sig {`.
+            //
+            // Note that this will not properly handle brace blocks where the
+            // closing brace is not on its own line, such as
+            // ```
+            // sig { params(foo: Foo)
+            //       .returns(Bar) }
+            // ```
             it++;
+            line = absl::StripAsciiWhitespace(*it);
             while (
                 // SOF
                 it != all_lines.rend()
                 // Start of sig block
-                && !absl::StartsWith(absl::StripAsciiWhitespace(*it), "sig do")
-                // Invalid end keyword
-                && !absl::StartsWith(absl::StripAsciiWhitespace(*it), "end")) {
+                && !(absl::StartsWith(line, "sig {") || absl::StartsWith(line, "sig(:final) {"))
+                // Invalid closing brace
+                && !absl::StartsWith(line, "}")) {
                 it++;
+                if (it != all_lines.rend()) {
+                    line = absl::StripAsciiWhitespace(*it);
+                }
+            };
+
+            // We have either
+            // 1) Reached the start of the file
+            // 2) Found a `sig {`
+            // 3) Found an invalid closing brace
+            if (it == all_lines.rend() || absl::StartsWith(line, "}")) {
+                break;
+            }
+
+            // Reached a sig block.
+            ENFORCE(absl::StartsWith(line, "sig {") || absl::StartsWith(line, "sig(:final) {"));
+        }
+
+        // Handle multi-line sig block
+        else if (absl::StartsWith(line, "end")) {
+            // ASSUMPTION: We either hit the start of file, a `sig do`/`sig(:final) do` or an `end`
+            it++;
+            line = absl::StripAsciiWhitespace(*it);
+            while (
+                // SOF
+                it != all_lines.rend()
+                // Start of sig block
+                && !(absl::StartsWith(line, "sig do") || absl::StartsWith(line, "sig(:final) do"))
+                // Invalid end keyword
+                && line != "end") {
+                it++;
+                if (it != all_lines.rend()) {
+                    line = absl::StripAsciiWhitespace(*it);
+                }
             };
 
             // We have either
             // 1) Reached the start of the file
             // 2) Found a `sig do`
             // 3) Found an invalid end keyword
-            if (it == all_lines.rend() || absl::StartsWith(absl::StripAsciiWhitespace(*it), "end")) {
+            if (it == all_lines.rend() || line == "end") {
                 break;
             }
 
             // Reached a sig block.
-            line = absl::StripAsciiWhitespace(*it);
-            ENFORCE(absl::StartsWith(line, "sig do"));
+            ENFORCE(absl::StartsWith(line, "sig do") || absl::StartsWith(line, "sig(:final) do"));
 
             // Stop looking if this is a single-line block e.g `sig do; <block>; end`
-            if (absl::StartsWith(line, "sig do;") && absl::EndsWith(line, "end")) {
+            if ((absl::StartsWith(line, "sig do;") || absl::StartsWith(line, "sig(:final) do;")) &&
+                absl::EndsWith(line, "end")) {
                 break;
             }
 
@@ -367,12 +522,12 @@ optional<string> findDocumentation(string_view sourceCode, int beginIndex) {
 
             string_view comment = line.substr(line.find('#') + skip_after_hash);
 
-            documentation_lines.push_back(comment);
+            documentation_lines.emplace_back(comment);
 
             // Account for yarddoc lines by inserting an extra newline right before
             // the yarddoc line (note that we are reverse iterating)
             if (absl::StartsWith(comment, "@")) {
-                documentation_lines.push_back(string_view(""));
+                documentation_lines.emplace_back("");
             }
         }
 
@@ -383,11 +538,14 @@ optional<string> findDocumentation(string_view sourceCode, int beginIndex) {
     }
 
     string documentation = absl::StrJoin(documentation_lines.rbegin(), documentation_lines.rend(), "\n");
-    documentation = absl::StripTrailingAsciiWhitespace(documentation);
+    string_view stripped = absl::StripTrailingAsciiWhitespace(documentation);
+    if (stripped.size() != documentation.size()) {
+        documentation.resize(stripped.size());
+    }
 
-    if (documentation.empty())
+    if (documentation.empty()) {
         return nullopt;
-    else {
+    } else {
         return documentation;
     }
 }

@@ -1,7 +1,10 @@
 #include "common/common.h"
-#include "common/Exception.h"
+#include "absl/strings/escaping.h"
 #include "common/FileOps.h"
-#include "common/sort.h"
+#include "common/concurrency/ConcurrentQueue.h"
+#include "common/concurrency/WorkerPool.h"
+#include "common/exception/Exception.h"
+#include "common/sort/sort.h"
 #include "os/os.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include <array>
@@ -12,7 +15,10 @@
 #include <dirent.h>
 #include <exception>
 #include <memory>
+#include <variant>
 #include <vector>
+
+#include <sys/stat.h>
 
 using namespace std;
 
@@ -27,13 +33,13 @@ shared_ptr<spdlog::logger> makeFatalLogger() {
 } // namespace
 shared_ptr<spdlog::logger> sorbet::fatalLogger = makeFatalLogger();
 
-bool sorbet::FileOps::exists(string_view filename) {
+bool sorbet::FileOps::exists(const string &filename) {
     struct stat buffer;
-    return (stat((string(filename)).c_str(), &buffer) == 0);
+    return (stat(filename.c_str(), &buffer) == 0);
 }
 
-string sorbet::FileOps::read(string_view filename) {
-    FILE *fp = std::fopen((string(filename)).c_str(), "rb");
+string sorbet::FileOps::read(const string &filename) {
+    FILE *fp = std::fopen(filename.c_str(), "rb");
     if (fp) {
         fseek(fp, 0, SEEK_END);
         auto sz = ftell(fp);
@@ -43,53 +49,81 @@ string sorbet::FileOps::read(string_view filename) {
         fclose(fp);
         if (readBytes != contents.size()) {
             // Error reading file?
-            throw sorbet::FileNotFoundException();
+            auto msg = fmt::format("Error reading file: `{}`: {}", filename, errno);
+            throw sorbet::FileNotFoundException(msg);
         }
         return contents;
     }
-    throw sorbet::FileNotFoundException();
+    auto msg = fmt::format("Cannot open file `{}`", filename);
+    throw sorbet::FileNotFoundException(msg);
 }
 
-void sorbet::FileOps::write(string_view filename, const vector<sorbet::u1> &data) {
-    FILE *fp = std::fopen(string(filename).c_str(), "wb");
+void sorbet::FileOps::write(const string &filename, const vector<uint8_t> &data) {
+    FILE *fp = std::fopen(filename.c_str(), "wb");
     if (fp) {
-        fwrite(data.data(), sizeof(sorbet::u1), data.size(), fp);
+        fwrite(data.data(), sizeof(uint8_t), data.size(), fp);
         fclose(fp);
         return;
     }
-    throw sorbet::FileNotFoundException();
+    auto msg = fmt::format("Cannot open file `{}` for writing", filename);
+    throw sorbet::FileNotFoundException(msg);
 }
 
-bool sorbet::FileOps::dirExists(string_view path) {
+bool sorbet::FileOps::dirExists(const string &path) {
     struct stat buffer;
-    return stat((string(path)).c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode);
+    return stat(path.c_str(), &buffer) == 0 && S_ISDIR(buffer.st_mode);
 }
 
-void sorbet::FileOps::createDir(string_view path) {
-    auto err = mkdir(string(path).c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+void sorbet::FileOps::createDir(const string &path) {
+    auto err = mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     if (err) {
-        throw sorbet::CreateDirException(fmt::format("Error in createDir('{}'): {}", path, errno));
+        auto msg = fmt::format("Error in createDir('{}'): {}", path, errno);
+        throw sorbet::CreateDirException(msg);
     }
 }
 
-void sorbet::FileOps::removeFile(string_view path) {
-    auto err = remove(string(path).c_str());
+bool sorbet::FileOps::ensureDir(const string &path) {
+    auto err = mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     if (err) {
-        throw sorbet::RemoveFileException(fmt::format("Error in removeFile('{}'): {}", path, errno));
+        if (errno == EEXIST) {
+            return false;
+        }
+
+        auto msg = fmt::format("Error in createDir('{}'): {}", path, errno);
+        throw sorbet::CreateDirException(msg);
+    }
+
+    return true;
+}
+
+void sorbet::FileOps::removeDir(const string &path) {
+    auto err = rmdir(path.c_str());
+    if (err) {
+        auto msg = fmt::format("Error in removeDir('{}'): {}", path, errno);
+        throw sorbet::RemoveDirException(msg);
     }
 }
 
-void sorbet::FileOps::write(string_view filename, string_view text) {
-    FILE *fp = std::fopen(string(filename).c_str(), "w");
+void sorbet::FileOps::removeFile(const string &path) {
+    auto err = remove(path.c_str());
+    if (err) {
+        auto msg = fmt::format("Error in removeFile('{}'): {}", path, errno);
+        throw sorbet::RemoveFileException(msg);
+    }
+}
+
+void sorbet::FileOps::write(const string &filename, string_view text) {
+    FILE *fp = std::fopen(filename.c_str(), "w");
     if (fp) {
         fwrite(text.data(), sizeof(char), text.size(), fp);
         fclose(fp);
         return;
     }
-    throw sorbet::FileNotFoundException();
+    auto msg = fmt::format("Cannot open file `{}` for writing", filename);
+    throw sorbet::FileNotFoundException(msg);
 }
 
-bool sorbet::FileOps::writeIfDifferent(string_view filename, string_view text) {
+bool sorbet::FileOps::writeIfDifferent(const string &filename, string_view text) {
     if (!exists(filename) || text != read(filename)) {
         write(filename, text);
         return true;
@@ -97,14 +131,15 @@ bool sorbet::FileOps::writeIfDifferent(string_view filename, string_view text) {
     return false;
 }
 
-void sorbet::FileOps::append(string_view filename, string_view text) {
-    FILE *fp = std::fopen(string(filename).c_str(), "a");
+void sorbet::FileOps::append(const string &filename, string_view text) {
+    FILE *fp = std::fopen(filename.c_str(), "a");
     if (fp) {
         fwrite(text.data(), sizeof(char), text.size(), fp);
         fclose(fp);
         return;
     }
-    throw sorbet::FileNotFoundException();
+    auto msg = fmt::format("Cannot open file `{}` for writing", filename);
+    throw sorbet::FileNotFoundException(msg);
 }
 
 string_view sorbet::FileOps::getFileName(string_view path) {
@@ -120,7 +155,17 @@ string_view sorbet::FileOps::getExtension(string_view path) {
     return path.substr(found + 1);
 }
 
-int sorbet::FileOps::readFd(int fd, std::vector<char> &output, int timeoutMs) {
+bool sorbet::FileOps::hasAllowedExtension(string_view path, const UnorderedSet<string> &extensions) {
+    auto dotLocation = path.rfind('.');
+    if (dotLocation == string_view::npos) {
+        return false;
+    }
+
+    string_view ext = path.substr(dotLocation);
+    return extensions.contains(ext);
+}
+
+int sorbet::FileOps::readFd(int fd, absl::Span<char> output, int timeoutMs) {
     // Prepare to use select()
     fd_set set;
     FD_ZERO(&set);
@@ -153,11 +198,12 @@ sorbet::FileOps::ReadLineOutput sorbet::FileOps::readLineFromFd(int fd, string &
         // Edge case: Last time this was called, we read multiple lines.
         string line = buffer.substr(0, bufferFnd);
         buffer.erase(0, bufferFnd + 1);
-        return ReadLineOutput{ReadResult::Success, line};
+        return ReadLineOutput{ReadResult::Success, std::move(line)};
     }
 
     constexpr int BUFF_SIZE = 1024 * 8;
-    vector<char> buf(BUFF_SIZE);
+    char chars[BUFF_SIZE];
+    absl::Span<char> buf(chars);
 
     int result = FileOps::readFd(fd, buf, timeoutMs);
     if (result == 0) {
@@ -171,14 +217,14 @@ sorbet::FileOps::ReadLineOutput sorbet::FileOps::readLineFromFd(int fd, string &
     const auto fnd = std::find(buf.begin(), end, '\n');
     if (fnd != end) {
         buffer.append(buf.begin(), fnd);
-        string line = buffer;
+        string line = std::move(buffer);
         buffer.clear();
         if (fnd + 1 != end) {
             // If we read beyond the line, store extra stuff we read into the string buffer.
             // Skip over the newline.
             buffer.append(fnd + 1, end);
         }
-        return ReadLineOutput{ReadResult::Success, line};
+        return ReadLineOutput{ReadResult::Success, std::move(line)};
     } else {
         buffer.append(buf.begin(), end);
         return ReadLineOutput{ReadResult::Timeout};
@@ -226,59 +272,319 @@ bool sorbet::FileOps::isFileIgnored(string_view basePath, string_view filePath,
     return false;
 }
 
-void appendFilesInDir(string_view basePath, string_view path, const sorbet::UnorderedSet<string> &extensions,
-                      bool recursive, vector<string> &result, const std::vector<std::string> &absoluteIgnorePatterns,
-                      const std::vector<std::string> &relativeIgnorePatterns) {
-    DIR *dir;
-    struct dirent *entry;
+struct QuitToken {};
+using Job = variant<QuitToken, string>;
+// We record all classes of exceptions we can throw separately, rather than one single `SorbetException`.
+//
+// We do this for two reasons: one is that when looking for a `catch` handler, C++ will only look for
+// a handler matching the *static* type of the thrown exception, so when we rethrow the exceptions from
+// the workers on the main thread, we need the `throw` expressions to have the proper static types.
+//
+// "Why not use `dynamic_cast`?" you might ask: store a `SorbetException` here and then downcast as
+// necessary when rethrowing the exception.  The problem with that idea is that the originally thrown
+// exception would get copied into a `JobOutput` object as a `SorbetException`, and therefore the
+// dynamic type of the original exception would be lost.
+using JobOutput = variant<std::monostate, sorbet::FileNotFoundException, sorbet::FileNotDirException, vector<string>>;
 
-    if ((dir = opendir(string(path).c_str())) == nullptr) {
-        switch (errno) {
-            case ENOTDIR:
-                throw sorbet::FileNotDirException();
-            default:
-                // Mirrors other FileOps functions: Assume other errors are from FileNotFound.
-                throw sorbet::FileNotFoundException();
-        }
-    }
+void appendFilesInDir(string_view basePath, const string &path, const sorbet::UnorderedSet<string> &extensions,
+                      sorbet::WorkerPool &workers, bool recursive, vector<string> &allPaths,
+                      const vector<string> &absoluteIgnorePatterns, const vector<string> &relativeIgnorePatterns) {
+    auto numWorkers = max(workers.size(), 1);
+    auto jobq = make_shared<ConcurrentUnBoundedQueue<Job>>();
+    auto resultq = make_shared<BlockingBoundedQueue<JobOutput>>(numWorkers);
+    atomic<size_t> pendingJobs{0};
 
-    while ((entry = readdir(dir)) != nullptr) {
-        auto fullPath = fmt::format("{}/{}", path, entry->d_name);
-        if (sorbet::FileOps::isFileIgnored(basePath, fullPath, absoluteIgnorePatterns, relativeIgnorePatterns)) {
-            continue;
-        } else if (entry->d_type == DT_DIR) {
-            if (!recursive || strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-                continue;
+    // The invariant that the code below must maintain is pendingJobs must be
+    // at least as large as the number of items in jobq.  Therefore, once
+    // pendingJobs is 0, whatever thread observes that can be assured that there
+    // is no more work to be done and can initiate shutdown.
+    //
+    // In practice, all it takes to maintain this invariant is that pendingJobs
+    // must be incremented prior to pushing work onto jobq.
+    ++pendingJobs;
+    jobq->push(path, 1);
+
+    workers.multiplexJob("options.findFiles", [numWorkers, jobq, resultq, &pendingJobs, &basePath, &extensions,
+                                               &recursive, &absoluteIgnorePatterns, &relativeIgnorePatterns]() {
+        Job job;
+        vector<string> output;
+
+        try {
+            while (true) {
+                auto result = jobq->try_pop(job);
+                if (!result.gotItem()) {
+                    continue;
+                }
+                if (std::holds_alternative<QuitToken>(job)) {
+                    break;
+                }
+
+                auto *strvariant = std::get_if<string>(&job);
+                ENFORCE(strvariant != nullptr);
+                auto &path = *strvariant;
+
+                DIR *dir;
+                struct dirent *entry;
+
+                if ((dir = opendir(path.c_str())) == nullptr) {
+                    switch (errno) {
+                        case ENOTDIR: {
+                            throw sorbet::FileNotDirException();
+                        }
+                        default:
+                            // Mirrors other FileOps functions: Assume other errors are from FileNotFound.
+                            auto msg = fmt::format("Couldn't open directory `{}`", path);
+                            throw sorbet::FileNotFoundException(msg);
+                    }
+                }
+
+                while ((entry = readdir(dir)) != nullptr) {
+                    const auto namelen = strlen(entry->d_name);
+                    string_view nameview{entry->d_name, namelen};
+                    if (entry->d_type == DT_DIR) {
+                        if (!recursive) {
+                            continue;
+                        }
+                        if (nameview == "."sv || nameview == ".."sv) {
+                            continue;
+                        }
+                    } else {
+                        if (!sorbet::FileOps::hasAllowedExtension(nameview, extensions)) {
+                            continue;
+                        }
+                    }
+
+                    auto fullPath = fmt::format("{}/{}", path, nameview);
+                    if (sorbet::FileOps::isFileIgnored(basePath, fullPath, absoluteIgnorePatterns,
+                                                       relativeIgnorePatterns)) {
+                        continue;
+                    }
+
+                    if (entry->d_type == DT_DIR) {
+                        ++pendingJobs;
+                        jobq->push(move(fullPath), 1);
+                    } else {
+                        output.push_back(move(fullPath));
+                    }
+                }
+
+                closedir(dir);
+
+                // Now that we've finished with this directory, we can decrement.
+                auto remaining = --pendingJobs;
+                // If this thread is finished with the last job in the queue, then
+                // we can start signaling other threads that they need to quit.
+                if (remaining == 0) {
+                    // Maintain the invariant, even though we're all done.
+                    pendingJobs += numWorkers;
+                    for (auto i = 0; i < numWorkers; ++i) {
+                        jobq->push(QuitToken{}, 1);
+                    }
+                    break;
+                }
             }
-            appendFilesInDir(basePath, fullPath, extensions, recursive, result, absoluteIgnorePatterns,
-                             relativeIgnorePatterns);
-        } else {
-            auto dotLocation = fullPath.rfind('.');
-            // Note: Can't call substr with an index > string length, so explicitly check if a dot isn't found.
-            if (dotLocation != string::npos) {
-                auto ext = fullPath.substr(dotLocation);
-                if (extensions.find(ext) != extensions.end()) {
-                    result.emplace_back(fullPath);
+        } catch (sorbet::FileNotFoundException &e) {
+            resultq->push(e, 1);
+            pendingJobs += numWorkers;
+            for (auto i = 0; i < numWorkers; ++i) {
+                jobq->push(QuitToken{}, 1);
+            }
+            return;
+        } catch (sorbet::FileNotDirException &e) {
+            resultq->push(e, 1);
+            pendingJobs += numWorkers;
+            for (auto i = 0; i < numWorkers; ++i) {
+                jobq->push(QuitToken{}, 1);
+            }
+            return;
+        }
+
+        resultq->push(move(output), 1);
+    });
+
+    {
+        JobOutput threadResult;
+        optional<sorbet::FileNotFoundException> fileNotFound;
+        optional<sorbet::FileNotDirException> fileNotDir;
+        auto &logger = *spdlog::default_logger();
+        for (auto result = resultq->wait_pop_timed(threadResult, sorbet::WorkerPool::BLOCK_INTERVAL(), logger);
+             !result.done();
+             result = resultq->wait_pop_timed(threadResult, sorbet::WorkerPool::BLOCK_INTERVAL(), logger)) {
+            if (result.gotItem()) {
+                if (auto *paths = std::get_if<vector<string>>(&threadResult)) {
+                    allPaths.insert(allPaths.end(), make_move_iterator(paths->begin()),
+                                    make_move_iterator(paths->end()));
+                    continue;
+                }
+
+                if (auto *e = std::get_if<sorbet::FileNotFoundException>(&threadResult)) {
+                    if (!fileNotFound.has_value()) {
+                        fileNotFound = *e;
+                    }
+                } else if (auto *e = std::get_if<sorbet::FileNotDirException>(&threadResult)) {
+                    if (!fileNotDir.has_value()) {
+                        fileNotDir = *e;
+                    }
+                } else {
+                    ENFORCE(false, "should never get here!");
                 }
             }
         }
+
+        // If there was an error, don't raise it until after all the worker threads have finished,
+        // because they might be working on something, attempting to write to the pendingJobs
+        // variable stored on our stack, and then suddenly see that stack address gone because we've
+        // raised and jumped elsewhere.
+        if (fileNotFound.has_value()) {
+            throw fileNotFound.value();
+        } else if (fileNotDir.has_value()) {
+            throw fileNotDir.value();
+        }
     }
-    closedir(dir);
 }
 
-vector<string> sorbet::FileOps::listFilesInDir(string_view path, const UnorderedSet<string> &extensions, bool recursive,
-                                               const std::vector<std::string> &absoluteIgnorePatterns,
-                                               const std::vector<std::string> &relativeIgnorePatterns) {
+vector<string> sorbet::FileOps::listFilesInDir(string_view path, const UnorderedSet<string> &extensions,
+                                               WorkerPool &workerPool, bool recursive,
+                                               const vector<string> &absoluteIgnorePatterns,
+                                               const vector<string> &relativeIgnorePatterns) {
     vector<string> result;
-    appendFilesInDir(path, path, extensions, recursive, result, absoluteIgnorePatterns, relativeIgnorePatterns);
+    // Mini-optimization: appendFilesInDir needs to grab a c_str from path, so we pass in a string reference to avoid
+    // copying.
+    string pathStr(path);
+    appendFilesInDir(path, pathStr, extensions, workerPool, recursive, result, absoluteIgnorePatterns,
+                     relativeIgnorePatterns);
     fast_sort(result);
     return result;
+}
+
+vector<string> sorbet::FileOps::listSubdirs(const string &path) {
+    vector<string> result;
+
+    DIR *dir;
+    if ((dir = opendir(path.c_str())) == nullptr) {
+        switch (errno) {
+            case ENOTDIR:
+                throw sorbet::FileNotDirException();
+
+            default:
+                // Mirrors other FileOps functions: Assume other errors are from FileNotFound.
+                auto msg = fmt::format("Couldn't open directory `{}`", path);
+                throw sorbet::FileNotFoundException(msg);
+        }
+    }
+
+    struct dirent *entry = nullptr;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_type == DT_DIR) {
+            auto namelen = strlen(entry->d_name);
+            std::string_view name{entry->d_name, namelen};
+            if (name == "." || name == "..") {
+                continue;
+            }
+
+            result.emplace_back(name);
+        }
+    }
+
+    closedir(dir);
+    return result;
+}
+
+// https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
+uint32_t sorbet::nextPowerOfTwo(uint32_t v) {
+    // Avoid underflow in subtraction on next line.
+    if (v == 0) {
+        // 1 is the nearest power of 2 to 0 (2^0)
+        return 1;
+    }
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v++;
+    return v;
+}
+
+sorbet::ProcessStatus sorbet::processExists(pid_t pid) {
+    if (kill(pid, 0) == 0) {
+        return ProcessStatus::Running;
+    }
+
+    switch (errno) {
+        case EINVAL:
+            // This should be impossible, as we're using the signal value of `0`, which is well-defined.
+            return ProcessStatus::Unknown;
+
+        case EPERM:
+            // The process does exist, but we don't have permissions to send it signals.
+            return ProcessStatus::Running;
+
+        case ESRCH:
+            // No process exists with this pid.
+            return ProcessStatus::Missing;
+
+        default:
+            // We return `Unknown` here as the above three cases are the only ones called out in the man page for the
+            // kill syscall.
+            return ProcessStatus::Unknown;
+    }
+}
+
+vector<uint32_t> sorbet::findLineBreaks(string_view s) {
+    vector<uint32_t> res;
+    size_t next_pos = 0;
+    while (true) {
+        auto pos = s.find_first_of('\n', next_pos);
+        if (pos == string_view::npos) {
+            break;
+        }
+
+        res.emplace_back((int)pos);
+        next_pos = pos + 1;
+    }
+
+    res.emplace_back(s.size());
+    return res;
 }
 
 class SetTerminateHandler {
 public:
     static void on_terminate() {
+        auto eptr = current_exception();
+        if (eptr) {
+            try {
+                // Apparently this is the only way to convert a std::exception_ptr to std::exception
+                std::rethrow_exception(eptr);
+            } catch (const std::exception &e) {
+                sorbet::fatalLogger->error("Sorbet raised uncaught exception type=\"{}\" what=\"{}\"",
+                                           demangle(typeid(e).name()), absl::CEscape(e.what()));
+            } catch (const string &s) {
+                sorbet::fatalLogger->error("Sorbet raised uncaught exception type=string what=\"{}\"",
+                                           absl::CEscape(s));
+            } catch (const char *s) {
+                sorbet::fatalLogger->error("Sorbet raised uncaught exception type=\"char *\" what=\"{}\"",
+                                           absl::CEscape(s));
+            } catch (...) {
+                sorbet::fatalLogger->error("Sorbet raised uncaught exception type=<unknown> what=\"\"");
+            }
+        } else {
+            sorbet::fatalLogger->error("Sorbet raised uncaught exception type=<unknown> what=\"\"");
+        }
+
+        // Might print the backtrace twice if it's a SorbetException, because
+        // Exception::raise already prints the backtrace when the exception is raised. But
+        // SorbetException are caught at various places inside Sorbet, and so might not
+        // always terminate the process.
         sorbet::Exception::printBacktrace();
+
+        // "A std::terminate_handler shall terminate execution of the program without returning to
+        // the caller, otherwise the behavior is undefined."
+        //
+        // In libc++, the behavior is to print "terminate_handler unexpectedly returned" and then
+        // call abort()
+        abort();
     }
 
     SetTerminateHandler() {

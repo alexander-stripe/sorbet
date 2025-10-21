@@ -4,14 +4,30 @@ set -e
 
 cd "$(dirname "$0")/../.."
 
+
 if [ "$1" == "-t" ]; then
-  if ! bazel run //test/lint/buildifier:lint &> /dev/null; then
-    echo -ne "\\e[1;31m"
-    echo "☢️☢️  Some bazel files need to be reformatted! ☢️☢️"
-    echo "$OUTPUT"
-    echo -ne "\\e[0m"
-    echo -e "✨✨ Run \\e[97;1;42m ./tools/scripts/format_build_files.sh\\e[0m to fix them up.  ✨✨"
-    bazel run //test/lint/buildifier:diff
+
+  # quieter bazel output
+  bazel_args=(
+    "--ui_event_filters=-info,-stdout,-stderr"
+    "--noshow_progress"
+  )
+  if ! bazel run "${bazel_args[@]}" //test/lint/buildifier:lint &> /dev/null; then
+    echo "Some bazel files need to be formatted!"
+    echo "\`\`\`"
+    bazel run "${bazel_args[@]}" //test/lint/buildifier:diff 2> /dev/null || true
+    echo "\`\`\`"
+    echo -e "Run \`./tools/scripts/format_build_files.sh\` to format them."
+    echo
+    echo "To set up your editor to format on save, run:"
+    echo
+    echo "\`\`\`"
+    echo "bazel build @com_github_bazelbuild_buildtools//buildifier:buildifier"
+    echo "\`\`\`"
+    echo
+    echo "then copy the resulting binary out of bazel-bin/ onto your PATH, and configure your editor to run this executable on save."
+    echo
+    echo "(The bazel-bin/ PATH is not stable, and might get blown away for various reasons, so copying it out ensures that it's always available.)"
     exit 1
   fi
 else

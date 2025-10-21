@@ -28,3 +28,25 @@ pluto
 
 def paperino(x, y: nil, **kwargs); end
 paperino(2, 3, z: 4)
+
+class A
+  def self.make(foo:, bar:, qux:)
+  end
+end
+
+A.make(
+  foo: [1, 2, 3],
+  bar: "some long string",
+)
+
+def requires_multiple_keyword_args(x:, y:)
+end
+
+requires_multiple_keyword_args
+
+extend T::Sig
+sig { params(x: Integer, y: String).void }
+def requires_multiple_keyword_args_typed(x:, y:)
+end
+
+requires_multiple_keyword_args_typed

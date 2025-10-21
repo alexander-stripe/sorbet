@@ -5,8 +5,8 @@ class BigFoo; extend T::Sig
 
 # The docs for FOO_CONSTANT
   FOO_CONSTANT = 1
-# ^^^^^^^^^^^^ The docs for FOO_CONSTANT
-# ^^^^^^^^^^^^ Integer(1)
+# ^^^^^^^^^^^^ hover: The docs for FOO_CONSTANT
+# ^^^^^^^^^^^^ hover: Integer
 
   # Docs for Bar#static_variable
   @@static_variable = T.let('asdf', String)
@@ -33,7 +33,7 @@ class BigFoo; extend T::Sig
       a.bar(1)
    # ^ hover: null
     # ^ hover: BigFoo::LittleFoo1
-      # ^ hover: sig {params(num: Integer).returns(Integer)}
+      # ^ hover: sig { params(num: Integer).returns(Integer) }
     end
   end
 
@@ -42,7 +42,7 @@ class BigFoo; extend T::Sig
               # ^ hover: Integer
                    # ^ hover: String
     4 + num1 + num2.to_i + @@static_variable.length
-           # ^ hover: sig {params(arg0: Integer).returns(Integer)}
+           # ^ hover: sig { params(arg0: Integer).returns(Integer) }
                            # ^^^^^^^^^^^^^^^ hover: Docs for Bar#static_variable
                            # ^^^^^^^^^^^^^^^ hover: String
   end
@@ -58,7 +58,8 @@ class BigFoo; extend T::Sig
 
   sig {params(num: Integer).returns(String)}
   private def quux(num)
-            # ^ hover: private sig {params(num: Integer).returns(String)}
+    #         ^ hover: sig { params(num: Integer).returns(String) }
+    #         ^ hover: private def quux(num); end
     if num < 10
       s = 1
     else
@@ -69,7 +70,8 @@ class BigFoo; extend T::Sig
 
   sig {void}
   protected def protected_fun; end;
-              # ^ hover: protected sig {void}
+  #             ^ hover: sig { void }
+  #             ^ hover: protected def protected_fun; end
 
   sig { returns([Integer, String]) }
   def self.anotherFunc()
@@ -79,11 +81,18 @@ class BigFoo; extend T::Sig
   # Tests return markdown output
   sig {void}
   def tests_return_markdown
-    # ^^^^^^^^^^^^^^^^^^^^^ hover: ```ruby
-    # ^^^^^^^^^^^^^^^^^^^^^ hover: sig {void}
-    # ^^^^^^^^^^^^^^^^^^^^^ hover: ```
-    # ^^^^^^^^^^^^^^^^^^^^^ hover: ---
-    # ^^^^^^^^^^^^^^^^^^^^^ hover: Tests return markdown output
+    # ^^^^^^^^^^^^^^^^^^^^^ hover-line: 1 ```ruby
+    # ^^^^^^^^^^^^^^^^^^^^^ hover-line: 2 sig { void }
+    # ^^^^^^^^^^^^^^^^^^^^^ hover-line: 4 ```
+    # ^^^^^^^^^^^^^^^^^^^^^ hover-line: 6 ---
+    # ^^^^^^^^^^^^^^^^^^^^^ hover-line: 8 Tests return markdown output
+  end
+
+  sig {returns(T.attached_class)}
+  def self.factory
+    #      ^ hover: sig { returns(T.attached_class (of BigFoo)) }
+    #      ^ hover: def self.factory; end
+    new
   end
 end
 
@@ -92,20 +101,20 @@ end
 
 def main
   BigFoo.bar(10, "hello")
-        # ^ hover: sig {params(num1: Integer, num2: String).returns(Integer)}
+        # ^ hover: sig { params(num1: Integer, num2: String).returns(Integer) }
         # ^ hover: ```ruby
         # Checks that we're sending Markdown.
   BigFoo.baz
-        # ^ hover: sig {void}
+        # ^ hover: sig { void }
   l = BigFoo.anotherFunc
 # ^ hover: [Integer, String] (2-tuple)
 
   # Test primitive types
   n = nil
 # ^ hover: NilClass
-  t = true 
+  t = true
 # ^ hover: TrueClass
-  f = false 
+  f = false
 # ^ hover: FalseClass
   r = //
 # ^ hover: Regexp
@@ -116,7 +125,7 @@ def main
   fl = 1.0
 # ^ hover: Float(1.000000)
   sym = :test
-# ^ hover: Symbol(:"test")
+# ^ hover: Symbol(:test)
   Mod
 # ^ hover: T.class_of(Mod)
   rational = Rational(2, 3)
@@ -131,16 +140,32 @@ def main
 # ^ hover: T::Hash[T.untyped, T.untyped]
 
   boo = BigFoo::FOO_CONSTANT
-              # ^^^^^^^^^^^^ hover: Integer(1)
+              # ^^^^^^^^^^^^ hover: Integer
               # ^^^^^^^^^^^^ hover: The docs for FOO_CONSTANT
       # ^^^^^^ hover: T.class_of(BigFoo)
       # ^^^^^^ hover: The docs for BigFoo
 
-  # .new only works if we definte `initialize`
   foo = BigFoo.new
-             # ^^^ hover: (nothing)
+  #            ^^^ hover: sig { void }
+  #            ^^^ hover: private def initialize; end
+  BigFoo.new.itself
+  #            ^ hover: sig { returns(T.self_type) }
   hoo = BigFoo::LittleFoo1.new
-                         # ^^^ hover: sig {returns(BigFoo::LittleFoo1)}
+  #                        ^^^ hover-line: 2 # BigFoo::LittleFoo1#initialize:
+  #                        ^^^ hover-line: 3 sig { returns(T.untyped) }
+  #                        ^^^ hover-line: 4 private def initialize; end
+  #                        ^^^ hover-line: 6 # result type:
+  #                        ^^^ hover-line: 7 BigFoo::LittleFoo1
+
   raise "error message"
-# ^ hover: sig {params(arg0: String).returns(T.noreturn)}
+  # ^ hover-line: 2 # Kernel#raise (overload.2):
+  # ^ hover-line: 3 sig do
+  # ^ hover-line: 4   params(
+  # ^ hover-line: 5     arg0: T.any(T::Class[T.anything], Exception, String)
+  # ^ hover-line: 6   )
+  # ^ hover-line: 7   .returns(T.noreturn)
+  # ^ hover-line: 8 end
+  # ^ hover-line: 9 def raise (overload.2)(arg0=…); end
+  # ^ hover-line: 11 # result type:
+  # ^ hover-line: 12 T.noreturn
 end

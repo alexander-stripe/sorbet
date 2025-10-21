@@ -1,47 +1,52 @@
 ClassDef{
   kind = class
-  name = EmptyTree<<C <U <root>>>>
-  ancestors = []
+  name = EmptyTree
+  symbol = <C <U <root>>>
+  ancestors = [ConstantLit{
+      symbol = (class ::<todo sym>)
+      orig = nullptr
+    }]
   rhs = [
     ClassDef{
       kind = class
       name = UnresolvedConstantLit{
-        scope = EmptyTree
         cnst = <C <U A>>
-      }<<C <U <todo sym>>>>
+        scope = EmptyTree
+      }
+      symbol = <C <U <todo sym>>>
       ancestors = [ConstantLit{
+          symbol = (class ::<todo sym>)
           orig = nullptr
-          symbol = ::<todo sym>
         }]
       rhs = [
         MethodDef{
-          flags = 0
-          name = <U take_arguments><<C <U <todo sym>>>>
-          args = [UnresolvedIdent{
+          flags = {}
+          name = <U take_arguments><<U <todo method>>>
+          params = [UnresolvedIdent{
               kind = Local
               name = <U a>
-            }, OptionalArg{
+            }, OptionalParam{
               expr = UnresolvedIdent{
                 kind = Local
                 name = <U b>
               }
               default_ = Literal{ value = 1 }
-            }, RestArg{ expr = UnresolvedIdent{
+            }, RestParam{ expr = UnresolvedIdent{
               kind = Local
               name = <U c>
             } }, KeywordArg{ expr = UnresolvedIdent{
               kind = Local
               name = <U d>
-            } }, OptionalArg{
+            } }, OptionalParam{
               expr = KeywordArg{ expr = UnresolvedIdent{
                 kind = Local
                 name = <U e>
               } }
               default_ = Literal{ value = 2 }
-            }, RestArg{ expr = KeywordArg{ expr = UnresolvedIdent{
+            }, RestParam{ expr = KeywordArg{ expr = UnresolvedIdent{
               kind = Local
               name = <U f>
-            } } }, BlockArg{ expr = UnresolvedIdent{
+            } } }, BlockParam{ expr = UnresolvedIdent{
               kind = Local
               name = <U g>
             } }]
@@ -88,24 +93,23 @@ ClassDef{
               }
             ],
             expr = Send{
-              recv = Local{
-                localVariable = <U <self>>
-              }
+              flags = {privateOk}
+              recv = Self
               fun = <U proc>
               block = Block {
-                args = [
+                params = [
                   UnresolvedIdent{
                     kind = Local
                     name = <U a>
                   }
-                  OptionalArg{
+                  OptionalParam{
                     expr = UnresolvedIdent{
                       kind = Local
                       name = <U b>
                     }
                     default_ = Literal{ value = 1 }
                   }
-                  RestArg{ expr = UnresolvedIdent{
+                  RestParam{ expr = UnresolvedIdent{
                     kind = Local
                     name = <U c>
                   } }
@@ -113,18 +117,18 @@ ClassDef{
                     kind = Local
                     name = <U d>
                   } }
-                  OptionalArg{
+                  OptionalParam{
                     expr = KeywordArg{ expr = UnresolvedIdent{
                       kind = Local
                       name = <U e>
                     } }
                     default_ = Literal{ value = 2 }
                   }
-                  RestArg{ expr = KeywordArg{ expr = UnresolvedIdent{
+                  RestParam{ expr = KeywordArg{ expr = UnresolvedIdent{
                     kind = Local
                     name = <U f>
                   } } }
-                  BlockArg{ expr = UnresolvedIdent{
+                  BlockParam{ expr = UnresolvedIdent{
                     kind = Local
                     name = <U g>
                   } }
@@ -170,6 +174,7 @@ ClassDef{
                   ]
                 }
               }
+              pos_args = 0
               args = [
               ]
             }

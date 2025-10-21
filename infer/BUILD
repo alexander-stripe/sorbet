@@ -31,7 +31,6 @@ cc_test(
     srcs = glob([
         "test/*.cc",
     ]),
-    copts = ["-Iexternal/gtest/include"],
     linkstatic = select({
         "//tools/config:linkshared": 0,
         "//conditions:default": 1,
@@ -41,12 +40,12 @@ cc_test(
         "infer",
         "//ast/desugar",
         "//cfg",
-        "//flattener",
+        "//class_flatten",
         "//local_vars",
         "//namer",
         "//resolver",
         "//rewriter",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@doctest//doctest",
+        "@doctest//doctest:main",
     ],
 )

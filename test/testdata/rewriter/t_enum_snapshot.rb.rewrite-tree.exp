@@ -1,82 +1,98 @@
-class <emptyTree><<C <root>>> < ()
+class <emptyTree><<C <root>>> < (::<todo sym>)
   class <emptyTree>::<C MyEnum><<C <todo sym>>> < (<emptyTree>::<C T>::<C Enum>)
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.returns(::String)
+    end
+
+    def serialize<<todo method>>(&<blk>)
+      ::Kernel.raise("Sorbet rewriter pass partially unimplemented")
+    end
+
     <self>.extend(::T::Helpers)
 
     <self>.abstract!()
 
     <self>.sealed!()
 
-    class <emptyTree>::<C X$1><<C <todo sym>>> < (<emptyTree>::<C MyEnum>)
-      <self>.include(::Singleton)
-
-      <self>.final!()
+    <self>.enums() do ||
+      begin
+        class <emptyTree>::<C X$1><<C <todo sym>>> < (<emptyTree>::<C MyEnum>)
+        end
+        <emptyTree>::<C X> = <cast:<unchecked_let>>(<emptyTree>::<C X$1>.new(), <todo sym>, <emptyTree>::<C X$1>)
+        class <emptyTree>::<C Y$1><<C <todo sym>>> < (<emptyTree>::<C MyEnum>)
+        end
+        <emptyTree>::<C Y> = <cast:<unchecked_let>>(<emptyTree>::<C Y$1>.new("y"), <todo sym>, <emptyTree>::<C Y$1>)
+        class <emptyTree>::<C Z$1><<C <todo sym>>> < (<emptyTree>::<C MyEnum>)
+        end
+        <emptyTree>::<C Z> = <cast:<unchecked_let>>(<emptyTree>::<C Z$1>.new(), <todo sym>, <emptyTree>::<C Z$1>)
+        nil
+      end
     end
 
-    <emptyTree>::<C X> = ::T.let(<emptyTree>::<C X$1>.instance(), <emptyTree>::<C X$1>)
+    <self>.public()
 
-    class <emptyTree>::<C Y$1><<C <todo sym>>> < (<emptyTree>::<C MyEnum>)
-      <self>.include(::Singleton)
-
-      <self>.final!()
-    end
-
-    <emptyTree>::<C Y> = ::T.let(<emptyTree>::<C Y$1>.instance(), <emptyTree>::<C Y$1>)
-
-    class <emptyTree>::<C Z$1><<C <todo sym>>> < (<emptyTree>::<C MyEnum>)
-      <self>.include(::Singleton)
-
-      <self>.final!()
-    end
-
-    <emptyTree>::<C Z> = ::T.let(<emptyTree>::<C Z$1>.instance(), <emptyTree>::<C Z$1>)
+    <runtime method definition of serialize>
   end
 
   class <emptyTree>::<C NotAnEnum><<C <todo sym>>> < (::<todo sym>)
     <self>.enums() do ||
       begin
-        <emptyTree>::<C X> = ::<Magic>.<self-new>(<self>)
-        <emptyTree>::<C Y> = <emptyTree>::<C T>.let(::<Magic>.<self-new>(<self>), <self>)
+        <emptyTree>::<C X> = <self>.new()
+        <emptyTree>::<C Y> = <cast:let>(<self>.new(), <todo sym>, <self>)
       end
     end
   end
 
   class <emptyTree>::<C EnumsDoEnum><<C <todo sym>>> < (<emptyTree>::<C T>::<C Enum>)
+    def something_outside<<todo method>>(&<blk>)
+      <emptyTree>
+    end
+
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.returns(::String)
+    end
+
+    def serialize<<todo method>>(&<blk>)
+      ::Kernel.raise("Sorbet rewriter pass partially unimplemented")
+    end
+
     <self>.extend(::T::Helpers)
 
     <self>.abstract!()
 
     <self>.sealed!()
 
-    class <emptyTree>::<C X$1><<C <todo sym>>> < (<emptyTree>::<C EnumsDoEnum>)
-      <self>.include(::Singleton)
-
-      <self>.final!()
+    <self>.enums() do ||
+      begin
+        class <emptyTree>::<C X$1><<C <todo sym>>> < (<emptyTree>::<C EnumsDoEnum>)
+        end
+        <emptyTree>::<C X> = <cast:<unchecked_let>>(<emptyTree>::<C X$1>.new(), <todo sym>, <emptyTree>::<C X$1>)
+        class <emptyTree>::<C Y$1><<C <todo sym>>> < (<emptyTree>::<C EnumsDoEnum>)
+        end
+        <emptyTree>::<C Y> = <cast:<unchecked_let>>(<emptyTree>::<C Y$1>.new("y"), <todo sym>, <emptyTree>::<C Y$1>)
+        class <emptyTree>::<C Z$1><<C <todo sym>>> < (<emptyTree>::<C EnumsDoEnum>)
+        end
+        <emptyTree>::<C Z> = <cast:<unchecked_let>>(<emptyTree>::<C Z$1>.new(), <todo sym>, <emptyTree>::<C Z$1>)
+        nil
+      end
     end
 
-    <emptyTree>::<C X> = ::T.let(<emptyTree>::<C X$1>.instance(), <emptyTree>::<C X$1>)
+    <runtime method definition of something_outside>
 
-    class <emptyTree>::<C Y$1><<C <todo sym>>> < (<emptyTree>::<C EnumsDoEnum>)
-      <self>.include(::Singleton)
+    <self>.public()
 
-      <self>.final!()
-    end
-
-    <emptyTree>::<C Y> = ::T.let(<emptyTree>::<C Y$1>.instance(), <emptyTree>::<C Y$1>)
-
-    class <emptyTree>::<C Z$1><<C <todo sym>>> < (<emptyTree>::<C EnumsDoEnum>)
-      <self>.include(::Singleton)
-
-      <self>.final!()
-    end
-
-    <emptyTree>::<C Z> = ::T.let(<emptyTree>::<C Z$1>.instance(), <emptyTree>::<C Z$1>)
-
-    def something_outside<<C <todo sym>>>(&<blk>)
-      <emptyTree>
-    end
+    <runtime method definition of serialize>
   end
 
   class <emptyTree>::<C BadConsts><<C <todo sym>>> < (<emptyTree>::<C T>::<C Enum>)
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.returns(::String)
+    end
+
+    def serialize<<todo method>>(&<blk>)
+      ::Kernel.raise("Sorbet rewriter pass partially unimplemented")
+    end
+
     <self>.extend(::T::Helpers)
 
     <self>.abstract!()
@@ -84,35 +100,33 @@ class <emptyTree><<C <root>>> < ()
     <self>.sealed!()
 
     class <emptyTree>::<C Before$1><<C <todo sym>>> < (<emptyTree>::<C BadConsts>)
-      <self>.include(::Singleton)
-
-      <self>.final!()
     end
 
-    <emptyTree>::<C Before> = ::T.let(<emptyTree>::<C Before$1>.instance(), <emptyTree>::<C Before$1>)
+    <emptyTree>::<C Before> = <cast:<unchecked_let>>(<emptyTree>::<C Before$1>.new(), <todo sym>, <emptyTree>::<C Before$1>)
 
     <emptyTree>::<C StaticField1> = 1
 
-    class <emptyTree>::<C Inside$1><<C <todo sym>>> < (<emptyTree>::<C BadConsts>)
-      <self>.include(::Singleton)
-
-      <self>.final!()
+    <self>.enums() do ||
+      begin
+        class <emptyTree>::<C Inside$1><<C <todo sym>>> < (<emptyTree>::<C BadConsts>)
+        end
+        <emptyTree>::<C Inside> = <cast:<unchecked_let>>(<emptyTree>::<C Inside$1>.new(), <todo sym>, <emptyTree>::<C Inside$1>)
+        <emptyTree>::<C StaticField2> = 2
+        nil
+      end
     end
-
-    <emptyTree>::<C Inside> = ::T.let(<emptyTree>::<C Inside$1>.instance(), <emptyTree>::<C Inside$1>)
-
-    <emptyTree>::<C StaticField2> = 2
 
     class <emptyTree>::<C After$1><<C <todo sym>>> < (<emptyTree>::<C BadConsts>)
-      <self>.include(::Singleton)
-
-      <self>.final!()
     end
 
-    <emptyTree>::<C After> = ::T.let(<emptyTree>::<C After$1>.instance(), <emptyTree>::<C After$1>)
+    <emptyTree>::<C After> = <cast:<unchecked_let>>(<emptyTree>::<C After$1>.new(), <todo sym>, <emptyTree>::<C After$1>)
 
     <emptyTree>::<C StaticField3> = 3
 
-    <emptyTree>::<C StaticField4> = <emptyTree>::<C T>.let(1, <emptyTree>::<C Integer>)
+    <emptyTree>::<C StaticField4> = <cast:let>(1, <todo sym>, <emptyTree>::<C Integer>)
+
+    <self>.public()
+
+    <runtime method definition of serialize>
   end
 end

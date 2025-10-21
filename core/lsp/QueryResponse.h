@@ -10,27 +10,65 @@ class TypeConstraint;
 
 class SendResponse final {
 public:
-    SendResponse(core::Loc termLoc, std::shared_ptr<core::DispatchResult> dispatchResult, core::NameRef callerSideName,
-                 bool isPrivateOk, core::SymbolRef enclosingMethod)
-        : dispatchResult(std::move(dispatchResult)), callerSideName(callerSideName), termLoc(termLoc),
-          isPrivateOk(isPrivateOk), enclosingMethod(enclosingMethod){};
+    SendResponse(std::shared_ptr<core::DispatchResult> dispatchResult, InlinedVector<core::LocOffsets, 2> argLocOffsets,
+                 core::NameRef callerSideName, core::NameRef originalName, core::MethodRef enclosingMethod,
+                 bool isPrivateOk, uint16_t numPosArgs, core::FileRef file, core::LocOffsets termLocOffsets,
+                 core::LocOffsets receiverLocOffsets, core::LocOffsets funLocOffsets,
+                 core::LocOffsets locOffsetsWithoutBlock)
+        : dispatchResult(std::move(dispatchResult)), argLocOffsets(std::move(argLocOffsets)),
+          callerSideName(callerSideName), originalName(originalName), enclosingMethod(enclosingMethod),
+          isPrivateOk(isPrivateOk), numPosArgs(numPosArgs), file(file), termLocOffsets(termLocOffsets),
+          receiverLocOffsets(receiverLocOffsets), funLocOffsets(funLocOffsets),
+          locOffsetsWithoutBlock(locOffsetsWithoutBlock){};
     const std::shared_ptr<core::DispatchResult> dispatchResult;
+    const InlinedVector<core::LocOffsets, 2> argLocOffsets;
+    // The actual name we wind up invoking; in the case of `<Magic>` methods
+    // like `<call-with-splat>`, this is the name that would be invoked.
     const core::NameRef callerSideName;
-    const core::Loc termLoc;
+    // The method name from the send with none of the filtering involved in
+    // `callerSideName`.
+    const core::NameRef originalName;
+    const core::MethodRef enclosingMethod;
     const bool isPrivateOk;
-    const core::SymbolRef enclosingMethod;
+    const uint16_t numPosArgs;
+    const core::FileRef file;
+    const core::LocOffsets termLocOffsets;
+    const core::LocOffsets receiverLocOffsets;
+    const core::LocOffsets funLocOffsets;
+    const core::LocOffsets locOffsetsWithoutBlock;
+
+    core::Loc termLoc() const {
+        return core::Loc(file, termLocOffsets);
+    }
+    core::Loc receiverLoc() const {
+        return core::Loc(file, receiverLocOffsets);
+    }
+    core::Loc funLoc() const {
+        return core::Loc(file, funLocOffsets);
+    }
+    core::Loc locWithoutBlock() const {
+        return core::Loc(file, locOffsetsWithoutBlock);
+    }
+
+    const std::optional<core::Loc> getMethodNameLoc(const core::GlobalState &gs) const;
 };
+CheckSize(SendResponse, 96, 8);
 
 class IdentResponse final {
 public:
     IdentResponse(core::Loc termLoc, core::LocalVariable variable, core::TypeAndOrigins retType,
-                  core::SymbolRef enclosingMethod)
-        : termLoc(termLoc), variable(variable), retType(std::move(retType)), enclosingMethod(enclosingMethod){};
+                  core::MethodRef enclosingMethod, core::Loc enclosingMethodLoc)
+        : termLoc(termLoc), variable(variable), enclosingMethod(enclosingMethod),
+          enclosingMethodLoc(enclosingMethodLoc), retType(std::move(retType)) {}
     const core::Loc termLoc;
     const core::LocalVariable variable;
+    const core::MethodRef enclosingMethod;
+    // The loc of the MethodDef this ident was in.
+    // (not the declLoc, which can be found by way of the enclosingMethod's entry in the symbol table)
+    const core::Loc enclosingMethodLoc;
     const core::TypeAndOrigins retType;
-    const core::SymbolRef enclosingMethod;
 };
+CheckSize(IdentResponse, 72, 8);
 
 class LiteralResponse final {
 public:
@@ -38,36 +76,57 @@ public:
     const core::Loc termLoc;
     const core::TypeAndOrigins retType;
 };
+CheckSize(LiteralResponse, 48, 8);
+
+class KeywordArgResponse final {
+public:
+    KeywordArgResponse(Loc termLoc, const MethodRef owner, const ParamInfo &param)
+        : termLoc(termLoc), owner(owner), paramLoc(param.loc), paramName(param.name), paramType(param.type) {}
+    const Loc termLoc;
+    MethodRef owner;
+    Loc paramLoc;
+    NameRef paramName;
+    TypePtr paramType;
+};
+CheckSize(KeywordArgResponse, 40, 8);
 
 class ConstantResponse final {
 public:
-    ConstantResponse(core::SymbolRef symbol, core::Loc termLoc, core::NameRef name, core::TypeAndOrigins retType)
-        : symbol(symbol), termLoc(termLoc), name(name), retType(std::move(retType)){};
-    const core::SymbolRef symbol;
+    using Scopes = InlinedVector<core::SymbolRef, 1>;
+    ConstantResponse(core::SymbolRef symbolBeforeDealias, core::Loc termLoc, Scopes scopes, core::NameRef name,
+                     core::TypeAndOrigins retType, core::MethodRef enclosingMethod)
+        : symbolBeforeDealias(symbolBeforeDealias), termLoc(termLoc), scopes(scopes), name(name),
+          enclosingMethod(enclosingMethod), retType(std::move(retType)) {}
+    const core::SymbolRef symbolBeforeDealias;
     const core::Loc termLoc;
+    const Scopes scopes;
     const core::NameRef name;
+    const core::MethodRef enclosingMethod;
     const core::TypeAndOrigins retType;
 };
+CheckSize(ConstantResponse, 80, 8);
 
 class FieldResponse final {
 public:
-    FieldResponse(core::SymbolRef symbol, core::Loc termLoc, core::NameRef name, core::TypeAndOrigins retType)
+    FieldResponse(core::FieldRef symbol, core::Loc termLoc, core::NameRef name, core::TypeAndOrigins retType)
         : symbol(symbol), termLoc(termLoc), name(name), retType(std::move(retType)){};
-    const core::SymbolRef symbol;
+    const core::FieldRef symbol;
     const core::Loc termLoc;
     const core::NameRef name;
     const core::TypeAndOrigins retType;
 };
+CheckSize(FieldResponse, 56, 8);
 
-class DefinitionResponse final {
+class MethodDefResponse final {
 public:
-    DefinitionResponse(core::SymbolRef symbol, core::Loc termLoc, core::NameRef name, core::TypeAndOrigins retType)
+    MethodDefResponse(core::MethodRef symbol, core::Loc termLoc, core::NameRef name, core::TypeAndOrigins retType)
         : symbol(symbol), termLoc(termLoc), name(name), retType(std::move(retType)){};
-    const core::SymbolRef symbol;
+    const core::MethodRef symbol;
     const core::Loc termLoc;
     const core::NameRef name;
     const core::TypeAndOrigins retType;
 };
+CheckSize(MethodDefResponse, 56, 8);
 
 class EditResponse final {
 public:
@@ -75,10 +134,10 @@ public:
     const core::Loc loc;
     const std::string replacement;
 };
+CheckSize(EditResponse, 40, 8);
 
-typedef std::variant<SendResponse, IdentResponse, LiteralResponse, ConstantResponse, FieldResponse, DefinitionResponse,
-                     EditResponse>
-    QueryResponseVariant;
+using QueryResponseVariant = std::variant<SendResponse, IdentResponse, LiteralResponse, ConstantResponse, FieldResponse,
+                                          MethodDefResponse, EditResponse, KeywordArgResponse>;
 
 /**
  * Represents a response to a LSP query. Wraps a variant that contains one of several response types.
@@ -92,8 +151,13 @@ public:
      * Pushes the given query response on to the error queue.
      */
     static void pushQueryResponse(core::Context ctx, QueryResponseVariant rawResponse);
+    static void pushQueryResponse(const GlobalState &gs, FileRef file, QueryResponseVariant rawResponse);
 
     QueryResponse(QueryResponseVariant response);
+
+    const QueryResponseVariant &asResponse() const {
+        return this->response;
+    };
 
     /**
      * Returns nullptr unless this is a Send.
@@ -111,6 +175,11 @@ public:
     const LiteralResponse *isLiteral() const;
 
     /**
+     * Returns nullptr unless this is a KeywordArg.
+     */
+    const KeywordArgResponse *isKeywordArg() const;
+
+    /**
      * Returns nullptr unless this is a Constant.
      */
     const ConstantResponse *isConstant() const;
@@ -123,7 +192,7 @@ public:
     /**
      * Returns nullptr unless this is a Definition.
      */
-    const DefinitionResponse *isDefinition() const;
+    const MethodDefResponse *isMethodDef() const;
 
     /**
      * Returns nullptr unless this is an Edit.
@@ -140,12 +209,6 @@ public:
      * Returns the type of this expression's rval.
      */
     core::TypePtr getRetType() const;
-
-    /**
-     * Returns a reference to this response's TypeAndOrigins, if it has any.
-     * If response is of a type without TypeAndOrigins, it throws an exception.
-     */
-    const core::TypeAndOrigins &getTypeAndOrigins() const;
 };
 
 } // namespace sorbet::core::lsp

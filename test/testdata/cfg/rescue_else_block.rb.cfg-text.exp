@@ -1,0 +1,88 @@
+method ::Object#foo {
+
+bb0[firstDead=-1]():
+    <self>: Object = cast(<self>: NilClass, Object);
+    <exceptionValue>$3: T.nilable(Exception) = <get-current-exception>
+    <exceptionValue>$3 -> (T.nilable(Exception) ? bb3 : bb4)
+
+# backedges
+# - bb6
+# - bb7
+# - bb10
+# - bb11
+# - bb12
+bb1[firstDead=-1]():
+    <unconditional> -> bb1
+
+# backedges
+# - bb0
+# - bb4
+bb3[firstDead=-1](<returnMethodTemp>$2: T.nilable(Integer), <exceptionValue>$3: Exception):
+    <cfgAlias>$7: T.class_of(StandardError) = alias <C StandardError>
+    <isaCheckTemp>$8: T::Boolean = <cfgAlias>$7: T.class_of(StandardError).===(<exceptionValue>$3: Exception)
+    <isaCheckTemp>$8 -> (T::Boolean ? bb10 : bb11)
+
+# backedges
+# - bb0
+bb4[firstDead=-1]():
+    <returnMethodTemp>$2: Integer(1) = 1
+    <exceptionValue>$3: T.nilable(Exception) = <get-current-exception>
+    <exceptionValue>$3 -> (T.nilable(Exception) ? bb3 : bb5)
+
+# backedges
+# - bb4
+bb5[firstDead=-1]():
+    <ifTemp>$4: Integer(2) = 2
+    <ifTemp>$4 -> (Integer(2) ? bb6 : bb7)
+
+# backedges
+# - bb5
+bb6[firstDead=-1]():
+    <returnMethodTemp>$2: Integer(3) = 3
+    <gotoDeadTemp>$9 -> (NilClass ? bb1 : bb12)
+
+# backedges
+# - bb5
+bb7[firstDead=0]():
+    <returnMethodTemp>$2 = nil
+    <gotoDeadTemp>$9 -> (<nullptr> ? bb1 : bb12)
+
+# backedges
+# - bb3
+bb10[firstDead=-1](<returnMethodTemp>$2: T.nilable(Integer), <exceptionValue>$3: StandardError):
+    <exceptionValue>$3: NilClass = nil
+    <keepForCfgTemp>$5: T.untyped = <keep-alive> <exceptionValue>$3
+    <gotoDeadTemp>$9 -> (NilClass ? bb1 : bb12)
+
+# backedges
+# - bb3
+bb11[firstDead=-1](<returnMethodTemp>$2: T.nilable(Integer)):
+    <gotoDeadTemp>$9: TrueClass = true
+    <gotoDeadTemp>$9 -> (TrueClass ? bb1 : bb12)
+
+# backedges
+# - bb6
+# - bb7
+# - bb10
+# - bb11
+bb12[firstDead=1](<returnMethodTemp>$2: T.nilable(Integer)):
+    <finalReturn>: T.noreturn = return <returnMethodTemp>$2: T.nilable(Integer)
+    <unconditional> -> bb1
+
+}
+
+method ::<Class:<root>>#<static-init> {
+
+bb0[firstDead=3]():
+    <self>: T.class_of(<root>) = cast(<self>: NilClass, T.class_of(<root>));
+    <returnMethodTemp>$2: Symbol(:foo) = :foo
+    <finalReturn>: T.noreturn = return <returnMethodTemp>$2: Symbol(:foo)
+    <unconditional> -> bb1
+
+# backedges
+# - bb0
+bb1[firstDead=-1]():
+    <unconditional> -> bb1
+
+}
+

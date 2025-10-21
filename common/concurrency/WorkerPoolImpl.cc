@@ -1,10 +1,13 @@
 #include "common/concurrency/WorkerPoolImpl.h"
 #include "absl/strings/str_cat.h"
+#include "absl/synchronization/blocking_counter.h"
 #include "common/concurrency/WorkerPool.h"
+#include "common/enforce_no_timer/EnforceNoTimer.h"
+#include "common/os/os.h"
 
 using namespace std;
 namespace sorbet {
-unique_ptr<WorkerPool> WorkerPool::create(int size, spd::logger &logger) {
+unique_ptr<WorkerPool> WorkerPool::create(int size, spdlog::logger &logger) {
     return make_unique<WorkerPoolImpl>(size, logger);
 }
 
@@ -12,15 +15,15 @@ WorkerPool::~WorkerPool() {
     // see https://eli.thegreenplace.net/2010/11/13/pure-virtual-destructors-in-c
 }
 
-WorkerPoolImpl::WorkerPoolImpl(int size, spd::logger &logger) : size(size), logger(logger) {
-    logger.debug("Creating {} worker threads", size);
-    if (sorbet::emscripten_build) {
-        ENFORCE(size == 0);
-        this->size = 0;
+WorkerPoolImpl::WorkerPoolImpl(int size, spdlog::logger &logger) : _size(size), logger(logger) {
+    logger.trace("Creating {} worker threads", _size);
+    if constexpr (sorbet::emscripten_build) {
+        ENFORCE_NO_TIMER(size == 0);
+        this->_size = 0;
     } else {
-        bool pinThreads = (size > 0) && (size == thread::hardware_concurrency());
-        threadQueues.reserve(size);
-        for (int i = 0; i < size; i++) {
+        bool pinThreads = (_size > 0) && (_size == thread::hardware_concurrency());
+        threadQueues.reserve(_size);
+        for (int i = 0; i < _size; i++) {
             auto &last = threadQueues.emplace_back(make_unique<Queue>());
             auto *ptr = last.get();
             auto threadIdleName = absl::StrCat("idle", i + 1);
@@ -36,27 +39,43 @@ WorkerPoolImpl::WorkerPoolImpl(int size, spd::logger &logger) : size(size), logg
                         Task_ task;
                         setCurrentThreadName(threadIdleName);
                         ptr->wait_dequeue(task);
-                        logger.debug("Worker got task");
+                        logger.trace("Worker got task");
                         repeat = task();
                     }
                 },
                 pinToCore));
         }
     }
-    logger.debug("Worker threads created");
+    logger.trace("Worker threads created");
 }
 
 WorkerPoolImpl::~WorkerPoolImpl() {
     auto &logger = this->logger;
     multiplexJob_([&logger]() {
-        logger.debug("Killing worker thread");
+        logger.trace("Killing worker thread");
         return false;
     });
     // join will be called when destructing joinable;
 }
 
+void WorkerPoolImpl::multiplexJobWait(string_view taskName, WorkerPool::Task t) {
+    if (_size > 0) {
+        absl::BlockingCounter barrier(_size);
+        multiplexJob_([&barrier, t{move(t)}, taskName] {
+            setCurrentThreadName(taskName);
+            t();
+            barrier.DecrementCount();
+            return true;
+        });
+        barrier.Wait();
+    } else {
+        // main thread is the worker.
+        t();
+    }
+}
+
 void WorkerPoolImpl::multiplexJob(string_view taskName, WorkerPool::Task t) {
-    if (size > 0) {
+    if (_size > 0) {
         multiplexJob_([t{move(t)}, taskName] {
             setCurrentThreadName(taskName);
             t();
@@ -69,10 +88,15 @@ void WorkerPoolImpl::multiplexJob(string_view taskName, WorkerPool::Task t) {
 }
 
 void WorkerPoolImpl::multiplexJob_(WorkerPoolImpl::Task_ t) {
-    logger.debug("Multiplexing job");
-    for (int i = 0; i < size; i++) {
-        threadQueues[i]->enqueue(t);
+    logger.trace("Multiplexing job");
+    for (int i = 0; i < _size; i++) {
+        const bool enqueued = threadQueues[i]->enqueue(t);
+        ENFORCE_NO_TIMER(enqueued, "Failed to enqueue (did we surpass MAX_SUBQUEUE_SIZE items enqueued?)");
     }
+}
+
+int WorkerPoolImpl::size() {
+    return _size;
 }
 
 }; // namespace sorbet

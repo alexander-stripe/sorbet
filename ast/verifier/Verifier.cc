@@ -5,48 +5,43 @@ using namespace std;
 namespace sorbet::ast {
 
 class VerifierWalker {
-    u4 methodDepth = 0;
+    uint32_t methodDepth = 0;
 
 public:
-    unique_ptr<Expression> preTransformExpression(core::Context ctx, unique_ptr<Expression> original) {
-        if (!isa_tree<EmptyTree>(original.get())) {
-            ENFORCE(original->loc.exists(), "location is unset");
+    void preTransformExpressionPtr(core::Context ctx, const ExpressionPtr &original) {
+        if (!isa_tree<EmptyTree>(original)) {
+            ENFORCE(original.loc().exists(), "location is unset");
         }
 
-        original->_sanityCheck();
-
-        return original;
+        original._sanityCheck();
     }
 
-    unique_ptr<MethodDef> preTransformMethodDef(core::Context ctx, unique_ptr<MethodDef> original) {
+    void preTransformMethodDef(core::Context ctx, const MethodDef &original) {
         methodDepth++;
-        return original;
     }
 
-    unique_ptr<Expression> postTransformMethodDef(core::Context ctx, unique_ptr<MethodDef> original) {
+    void postTransformMethodDef(core::Context ctx, const MethodDef &original) {
         methodDepth--;
-        return original;
     }
 
-    unique_ptr<Expression> postTransformAssign(core::Context ctx, unique_ptr<Assign> original) {
-        if (ast::isa_tree<ast::UnresolvedConstantLit>(original->lhs.get())) {
+    void postTransformAssign(core::Context ctx, const Assign &assign) {
+        if (ast::isa_tree<ast::UnresolvedConstantLit>(assign.lhs)) {
             ENFORCE(methodDepth == 0, "Found constant definition inside method definition");
         }
-        return original;
     }
 
-    unique_ptr<Block> preTransformBlock(core::Context ctx, unique_ptr<Block> original) {
-        original->_sanityCheck();
-        return original;
+    void preTransformBlock(core::Context ctx, ExpressionPtr &original) {
+        original._sanityCheck();
     }
 };
 
-unique_ptr<Expression> Verifier::run(core::Context ctx, unique_ptr<Expression> node) {
-    if (!debug_mode) {
+ExpressionPtr Verifier::run(core::Context ctx, ExpressionPtr node) {
+    if constexpr (!debug_mode) {
         return node;
     }
     VerifierWalker vw;
-    return TreeMap::apply(ctx, vw, move(node));
+    ConstTreeWalk::apply(ctx, vw, node);
+    return node;
 }
 
 } // namespace sorbet::ast

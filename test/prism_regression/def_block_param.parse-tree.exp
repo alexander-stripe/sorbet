@@ -1,0 +1,26 @@
+Begin {
+  stmts = [
+    DefMethod {
+      name = <U foo>
+      params = Params {
+        params = [
+          BlockParam {
+            name = <U my_block_param>
+          }
+        ]
+      }
+      body = NULL
+    }
+    DefMethod {
+      name = <U foo>
+      params = Params {
+        params = [
+          BlockParam {
+            name = <P <U &> $2>
+          }
+        ]
+      }
+      body = NULL
+    }
+  ]
+}

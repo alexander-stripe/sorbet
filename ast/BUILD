@@ -13,7 +13,7 @@ cc_library(
         ],
     ),
     hdrs = [
-        "ArgParsing.h",
+        "ParamParsing.h",
         "ast.h",
     ],
     linkstatic = select({
@@ -24,5 +24,6 @@ cc_library(
     deps = [
         "//common",
         "//core",
+        "//core/hashing",
     ],
 )

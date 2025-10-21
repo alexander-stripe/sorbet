@@ -6,13 +6,17 @@ cc_library(
         "Dedenter.h",
         "Node.cc",
         "Node.h",
+        "NodeCopying.cc",
         "Node_gen.cc",
         "Node_gen.h",
+        "ParseResult.h",
         "Parser.cc",
         "diagnostics.cc",
+        "helper.h",
         "parser.h",
     ],
     hdrs = [
+        "ParseResult.h",
         "parser.h",
     ],
     linkstatic = select({
@@ -21,8 +25,10 @@ cc_library(
     }),
     visibility = ["//visibility:public"],
     deps = [
+        "//ast",
         "//core",
-        "//third_party/parser",
+        "//parser/parser",
+        "@com_google_absl//absl/algorithm:container",
     ],
 )
 
@@ -57,10 +63,10 @@ genrule(
     outs = [
         "diagnostics.cc",
     ],
-    cmd = "$(location //third_party/parser:generate_diagnostics) dclassStrings > $(location diagnostics.cc) && \
+    cmd = "$(location //parser/parser:generate_diagnostics) dclassStrings > $(location diagnostics.cc) && \
            $(location //tools:clang-format) -i $(location diagnostics.cc)",
     tools = [
-        "//third_party/parser:generate_diagnostics",
+        "//parser/parser:generate_diagnostics",
         "//tools:clang-format",
     ],
 )
@@ -71,7 +77,6 @@ cc_test(
     srcs = glob([
         "test/*.cc",
     ]),
-    copts = ["-Iexternal/gtest/include"],
     data = glob([
         "fixtures/*.rb",
         "fixtures/*.rb.exp",
@@ -83,7 +88,7 @@ cc_test(
     visibility = ["//tools:__pkg__"],
     deps = [
         ":parser",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@doctest//doctest",
+        "@doctest//doctest:main",
     ],
 )

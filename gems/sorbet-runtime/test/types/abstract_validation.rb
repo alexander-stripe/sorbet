@@ -7,32 +7,32 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
   end
 
   module AbstractMixin
-  extend T::Sig
-  extend T::Helpers
-  abstract!
+    extend T::Sig
+    extend T::Helpers
+    abstract!
 
-  sig {abstract.returns(Object)}
-  def foo; end
+    sig { abstract.returns(Object) }
+    def foo; end
 
-  sig {abstract.returns(Object)}
-  def bar; end
+    sig { abstract.returns(Object) }
+    def bar; end
 
-  sig {returns(Object)}
-  def concrete_standard; end
+    sig { returns(Object) }
+    def concrete_standard; end
 
-  def concrete_no_signature; end
+    def concrete_no_signature; end
   end
 
   class AbstractClass
-  extend T::Sig
-  extend T::Helpers
-  abstract!
+    extend T::Sig
+    extend T::Helpers
+    abstract!
 
-  sig {abstract.returns(Object)}
-  def self.foo; end
+    sig { abstract.returns(Object) }
+    def self.foo; end
 
-  sig {abstract.returns(Object)}
-  def bar; end
+    sig { abstract.returns(Object) }
+    def bar; end
   end
 
   it "raises an error when defining an abstract class method on a module" do
@@ -40,7 +40,7 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       extend T::Sig
       extend T::Helpers
       abstract!
-      sig {abstract.returns(Object)}
+      sig { abstract.returns(Object) }
       def self.foo; end
     end
 
@@ -75,10 +75,10 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       extend T::Sig
       extend T::Helpers
 
-      sig {returns(Object)}
+      sig { returns(Object) }
       def foo; end
 
-      sig {returns(Object)}
+      sig { returns(Object) }
       def bar; end
     end
 
@@ -111,10 +111,10 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       extend T::Helpers
       include AbstractMixin
 
-      sig {override.returns(Object)}
+      sig { override.returns(Object) }
       def foo; end
 
-      sig {override.returns(Object)}
+      sig { override.returns(Object) }
       def bar; end
     end
 
@@ -147,10 +147,10 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
         extend T::Helpers
         extend AbstractMixin
 
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def self.foo; end
 
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def self.bar; end
       end
 
@@ -214,7 +214,7 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
         extend T::Sig
         extend T::Helpers
         abstract!
-        sig {abstract.params(arg: T.untyped).returns(T.untyped)}
+        sig { abstract.params(arg: T.untyped).returns(T.untyped) }
         def foo(arg); end
       end
 
@@ -239,7 +239,7 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
         extend T::Sig
         extend T::Helpers
         abstract!
-        sig {abstract.returns(T.untyped)}
+        sig { abstract.returns(T.untyped) }
         def foo; end
       end
 
@@ -247,7 +247,7 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
         extend T::Sig
         extend T::Helpers
         abstract!
-        sig {abstract.returns(T.untyped)}
+        sig { abstract.returns(T.untyped) }
         def foo; end
       end
 
@@ -273,7 +273,7 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       assert_equal(:impl2, klass.new.foo)
     end
 
-    it "suceeds when the method is defined directly on the receiving class" do
+    it "succeeds when the method is defined directly on the receiving class" do
       mod = Module.new do
         extend T::Helpers
         abstract!
@@ -307,10 +307,10 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       klass = Class.new(AbstractClass) do
         extend T::Sig
         extend T::Helpers
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def self.foo; end
 
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def bar; end
       end
       klass.foo
@@ -321,7 +321,7 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       klass = Class.new(AbstractClass) do
         extend T::Sig
         extend T::Helpers
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def bar; end
       end
 
@@ -340,7 +340,7 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       klass = Class.new(AbstractClass) do
         extend T::Sig
         extend T::Helpers
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def self.foo; end
       end
 
@@ -370,11 +370,13 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       klass = Class.new(AbstractClass) do
         extend T::Sig
         extend T::Helpers
-        sig {override.returns(Object)}
+        sig { override.returns(Object) }
         def self.foo; end
 
-        sig {override.returns(Object)}
-        def bar; "baz"; end
+        sig { override.returns(Object) }
+        def bar
+          "baz"
+        end
       end
       assert_equal("baz", klass.new.bar)
     end
@@ -387,7 +389,7 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
         extend T::Sig
         extend T::Helpers
         interface!
-        sig {abstract.void}
+        sig { abstract.void }
         def foo; end
       end
       klass = Class.new(parent) do
@@ -404,15 +406,15 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
 
         tpl = type_template
 
-        sig {abstract.returns(tpl)}
+        sig { abstract.returns(tpl) }
         def load_one; end
       end
 
       child = Class.new(parent) do
         extend T::Sig
-        tpl = type_template(fixed: Integer)
+        tpl = type_template { {fixed: Integer} }
 
-        sig {override.returns(tpl)}
+        sig { override.returns(tpl) }
         def load_one
           0
         end
@@ -458,7 +460,7 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       extend T::Helpers
       abstract!
 
-      sig {abstract.params(args: Integer, opts: Integer).void}
+      sig { abstract.params(args: Integer, opts: Integer).void }
       def foo(*args, **opts); end
     end
 
@@ -491,5 +493,37 @@ class Opus::Types::Test::AbstractValidationTest < Critic::Unit::UnitTest
       err.message,
       "Your definition of `foo` must have `*args` to be compatible with the method it implements",
     )
+
+    parent = Class.new do
+      def initialize(foo:)
+        super()
+        @foo = foo
+      end
+    end
+
+    abstract = Class.new(parent) do
+      extend T::Sig
+      extend T::Helpers
+      abstract!
+    end
+
+    concrete = Class.new(abstract)
+    concrete.new(foo: 1)
+  end
+
+  it "calls super abstract! if such a method exists" do
+    mod = Module.new do
+      def abstract!
+        raise "Called abstract! in parent"
+      end
+    end
+    exn = assert_raises(RuntimeError) do
+      Class.new do
+        extend mod
+        extend T::Helpers
+        abstract!
+      end
+    end
+    assert_equal("Called abstract! in parent", exn.message)
   end
 end

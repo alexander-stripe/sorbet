@@ -4,35 +4,45 @@
 
 try-import .bazelrc.local
 startup --host_jvm_args=-Xmx3072m # we need at least 3G to reliably build, the default is to use 1/4 of memory, which makes flaky on 8G boxes
-common  --incompatible_package_name_is_a_function=false # https://github.com/protocolbuffers/protobuf/issues/5547
 
 # enable https://github.com/google/googletest/pull/1653
 common:build --define absl=1
 common:test --test_env=GTEST_INSTALL_FAILURE_SIGNAL_HANDLER=1
 
 ##
-##  Custom toolchain.
+##  Custom toolchain (bazel-contrib/toolchains_llvm).
 ##
-build --crosstool_top=@llvm_toolchain//:toolchain --copt=-D_LIBCPP_ENABLE_NODISCARD
+# Not needed after https://github.com/bazelbuild/bazel/issues/7260 is closed
+build --incompatible_enable_cc_toolchain_resolution
+# For macOS only, needed for Bazel versions before 7.
+# Without this, one can use `--linkopt='-undefined dynamic_lookup'`.
+# This feature is intentionally not supported on macOS.
+build --features=-supports_dynamic_linker
+# Not needed after https://github.com/grailbio/bazel-toolchain/pull/229.
+build --features=-libtool
 
 ##
 ##  Common build options across all build configurations
 ##
 
+# Enable strict_action_env flag to. For more information on this feature see
+# https://groups.google.com/forum/#!topic/bazel-discuss/_VmRfMyyHBk.
+# This will be the new default behavior at some point (and the flag was flipped
+# shortly in 0.21.0 - https://github.com/bazelbuild/bazel/issues/7026). Remove
+# this flag here once flipped in Bazel again.
+build --incompatible_strict_action_env
+
 # C / C++ Options
 # Don't depend on system compiler
 build --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
-
-
-# Developer laptops run skylake, devboxes run skylake-avx512
-# however some AWS instances in our fleet still run Sandy Bridge (Skylake predecessor)
-build --copt=-march=sandybridge
 
 build --copt=-fno-omit-frame-pointer
 
 build --copt=-fstack-protector
 
-build --copt=-Werror --copt=-Wimplicit-fallthrough
+build --copt=-Werror --copt=-Wimplicit-fallthrough --copt=-Wmissing-field-initializers
+
+build --copt=-D_LIBCPP_ENABLE_NODISCARD
 
 build --host_copt=-O1
 build --host_copt=-DFORCE_DEBUG
@@ -43,6 +53,16 @@ build --host_cxxopt=-Wno-pass-failed # host build doesn't have enough optimizati
 # <command line>:1:9: and <built-in>:355:9: so sadly we turn them all off
 build --copt=-Wno-macro-redefined
 
+build --host_cxxopt=-Wno-deprecated-anon-enum-enum-conversion
+build --host_cxxopt=-Wno-deprecated-enum-enum-conversion
+build --cxxopt=-Wno-deprecated-anon-enum-enum-conversion
+build --cxxopt=-Wno-deprecated-enum-enum-conversion
+build --cxxopt=-Wno-ambiguous-reversed-operator
+
+# TODO(jez) Something between Clang 12 and Clang 15 seems to have introduced a
+# warning saying _never_ use unqualified `std` calls...
+build --cxxopt=-Wno-unqualified-std-cast-call --host_cxxopt=-Wno-unqualified-std-cast-call
+
 ##
 ## debug configuration
 ##
@@ -50,49 +70,99 @@ build:dbg --copt=-O0
 build:dbg --compilation_mode=dbg
 build:dbg --config=debugsymbols
 
+build:rubydbg --copt=-DRUBY_DEBUG --copt=-DVM_CHECK_MODE=1 --copt=-DTRANSIENT_HEAP_CHECK_MODE --copt=-DRGENGC_CHECK_MODE --copt=-DENC_DEBUG
+
 build:coverage --config=forcedebug
 build:coverage --cxxopt=-Wno-pass-failed # coverage build fails vectorization
-test:coverage --spawn_strategy=standalone
+test:coverage --spawn_strategy=local
 
 build --define=versioned=false
 build:versioned --workspace_status_command=tools/buildstamp/get_workspace_status --stamp --define=versioned=true
+
+build:dbg-darwin --config=dbg --platforms=@//tools/platforms:darwin_x86_64
+build:dbg-linux --config=dbg --platforms=@//tools/platforms:linux_x86_64
 
 ##
 ## Configurations used for releases
 ##
 # release version: optimized, with debug symbols and version information
 build:release-common --define release=true
-build:release-common --define jemalloc=true
 build:release-common --compilation_mode=opt
-build:release-common --config=debugsymbols
-build:release-common --config=static-libs
+build:release-common --config=backtracesymbols
 build:release-common --config=versioned
+
+build:release-debug-common --config=forcedebug
+build:release-debug-common --config=debugsymbols
+build:release-debug-common --config=skipslowenforce
+
+# This mode has been added to allow tracking the symbols
+# which are to blame for usages of untyped code in a codebase.
+# This allows identifying what symbols would be the highest impact
+# to type.
+#
+# Earlier, we allowed for such statistic collection only in DEBUG mode
+# However, that was far too slow for our purposes. Thus, this mode allows
+# you to build in release mode and track these statistics.
+build:untyped-blame --copt=-DTRACK_UNTYPED_BLAME_MODE
 
 # harden: mark relocation sections read-only
 build:release-linux --linkopt=-Wl,-z,relro,-z,now
 build:release-linux --config=lto-linux --config=release-common
+build:release-linux --config=static-libs
+# Separate config for aarch64, so x86_64 can be differently optimized
+build:release-linux-aarch64 --linkopt=-Wl,-z,relro,-z,now
+build:release-linux-aarch64 --config=lto-linux --config=release-common
+build:release-linux-aarch64 --config=static-libs
 
-build:release-mac --config=release-common
+# It would be nice to move this back to release-common, but there is a build
+# failure when using clang 15 on macOS to build GNU make via rules_foreign_cc:
+# <https://github.com/bazelbuild/rules_foreign_cc/issues/1186>
+# We only use rules_foreign_cc for mimalloc and we only use mimalloc in release
+# builds, so I'm moving this here until we can figure out a better workaround,
+# or a fix lands upstream.
+build:release-linux --define mimalloc=true
+build:release-linux-aarch64 --define mimalloc=true
+
+# This is to turn on vector instructions where available.
+# We used to do this unconditionally, but Rosetta 2 doesn't translate all vector instructions well.
+#
+# If we ever start making universal x86-64 + aarch64 binaries for macOS, we
+# could think about re-enabling the vector instructions for x86-64.
+#
+# At Stripe: developer laptops run skylake, devboxes run skylake-avx512
+# however some AWS instances in our fleet still run Sandy Bridge (Skylake predecessor), as of 2018.
+build:release-linux           --copt=-march=sandybridge
+build:release-sanitized-linux --copt=-march=sandybridge
+build:release-linux-aarch64   --copt=-march=armv8.1a
+
+build:release-mac --config=release-common --config=shared-libs
+
+build:cross-to-darwin-x86_64 --platforms=@//tools/platforms:darwin_x86_64
+build:cross-to-darwin-x86_64 --extra_toolchains=@llvm_toolchain_15_0_7//:cc-toolchain-x86_64-darwin
+build:cross-to-darwin-x86_64 --copt=-stdlib=libc++ --linkopt=-lc++
+
+build:cross-to-darwin-arm64 --platforms=@//tools/platforms:darwin_arm64
+build:cross-to-darwin-arm64 --extra_toolchains=@llvm_toolchain_15_0_7//:cc-toolchain-aarch64-darwin
+build:cross-to-darwin-arm64 --copt=-stdlib=libc++ --linkopt=-lc++
 
 build:release-debug-linux --config=release-linux
-build:release-debug-linux --config=forcedebug
-build:release-debug-linux --config=dbg
+build:release-debug-linux --config=release-debug-common
+
+build:release-debug-linux-aarch64 --config=release-linux-aarch64
+build:release-debug-linux-aarch64 --config=release-debug-common
 
 build:release-debug-mac --config=release-mac
-build:release-debug-mac --config=forcedebug
-build:release-debug-mac --config=dbg
+build:release-debug-mac --config=release-debug-common
 
 build:release-sanitized-linux --copt=-O2
 build:release-sanitized-linux --config=sanitize-linux
 build:release-sanitized-linux --define jemalloc=false
-build:release-sanitized-linux --config=debugsymbols
-build:release-sanitized-linux --config=forcedebug
+build:release-sanitized-linux --config=release-debug-common
 
 build:release-sanitized-mac --copt=-O2
-build:release-sanitized-mac --config=forcedebug
-build:release-sanitized-mac --config=debugsymbols
 build:release-sanitized-mac --config=sanitize-mac
 build:release-sanitized-mac --define jemalloc=false
+build:release-sanitized-linux --config=release-debug-common
 
 ##
 ## Configuration used to to as much testing as possible in CI
@@ -107,32 +177,13 @@ test:test-sanitized-mac --test_env="UBSAN_OPTIONS=print_stacktrace=1"
 build:reduce-intermediate-file-size-base --copt=-g0 --linkopt=-g0 # used by buildfarm to have less debug information on disk
 build:reduce-intermediate-file-size-base --strip=always
 build:reduce-intermediate-file-size-base --copt=-fno-standalone-debug --linkopt=-fno-standalone-debug # used by buildfarm to have less debug information on disk
-build:reduce-intermediate-file-size-base --config=shared-libs
 
 # extend reduce-intermediate-file-size with -Os
-build:reduce-intermediate-file-size --copt=-Os --linkopt=-Os --config=reduce-intermediate-file-size-base
-
-build:buildfarm --config=reduce-intermediate-file-size
+build:buildfarm --copt=-Os --linkopt=-Os --config=reduce-intermediate-file-size-base
 test:buildfarm --test_output=errors
+
 build:buildfarm-sanitized-linux --config=test-sanitized-linux --config=buildfarm
-build:buildfarm-sanitized-mac --config=test-sanitized-mac --config=buildfarm
-
-build:travis --config=test-sanitized-linux
-test:travis --ram_utilization_factor=10
-test:travis --test_strategy=standalone
-test:travis --test_output=errors
-
-# this is a variant of buildfarm that doen't specify -Os or any sanitizer flags
-build:buildfarm-ruby --define jemalloc=false
-build:buildfarm-ruby --copt=-O2
-# this includes --spawn_strategy=standalone --genrule_strategy=standalone, which
-# seems to break the snapshot tests
-# build:buildfarm-ruby --config=dbg 
-build:buildfarm-ruby --nostamp
-build:buildfarm-ruby --define release=false
-build:buildfarm-ruby --config=forcedebug
-build:buildfarm-ruby --config=reduce-intermediate-file-size-base
-test:buildfarm-ruby --test_output=errors
+build:buildfarm-sanitized-mac --config=test-sanitized-mac --config=buildfarm --config=shared-libs
 
 ##
 ## Shared fragments of configuration
@@ -142,6 +193,13 @@ test:buildfarm-ruby --test_output=errors
 # Use this flag to set DEBUG_MODE even for --config=release.
 build:forcedebug --copt=-DFORCE_DEBUG
 
+# DEBUG_MODE controls whether ENFORCEs are enabled.  Some ENFORCEs are super
+# slow and/or don't pass on Stripe's codebase.  Long term we should definitely
+# make these checks pass and maybe even make them fast, but for now we provide
+# a way to skip slow debug checks (for example, when compiling debug release
+# builds)
+build:skipslowenforce --copt=-DSKIP_SLOW_ENFORCE
+
 # LTO build. Much longer compilation time. Smaller size and better perf.
 build:lto --copt=-flto=thin
 build:lto --linkopt=-flto=thin
@@ -149,17 +207,17 @@ build:lto --config=static-libs
 
 ## flags that substantially increase Clang&LLVMs ability to devirtualize calls
 build:lto-linux --linkopt=-Wl,--icf=all
+
+# Improves linking time on arm64 hosts
+build:lto-linux --linkopt=-Wl,--thinlto-jobs=all
 build:lto-linux --config=lto
 
 # By default, we make static builds, but we can also use dynamic linking if asked to.
 # Note that dynamic linking is not fully supported by some of our toolchains and thus it may not always work.
 build --define=linkshared=false
+
 build:shared-libs --define=linkshared=true --copt=-fPIC --linkopt=-fPIC
 
-# By default, we make dynamicly linked builds, while release builds are statically linked.
-# Note that dynamic linking is not fully supported by some of our toolchains and thus it may not always work.
-# Still, we try to use it by default as it has lower iteration time in dev
-build --define=linkshared=true --copt=-fPIC --linkopt=-fPIC
 build:static-libs --define=linkshared=false --copt=-fno-PIC --linkopt=-fno-PIC
 build:static-libs --linkopt=-fno-pie --copt=-fno-pie
 
@@ -183,10 +241,13 @@ build:ubsan --linkopt=-fsanitize=undefined --copt=-fno-sanitize-recover=undefine
 build:ubsan --define unsanitized=false
 build:ubsan --copt=-DHAS_SANITIZER
 
-# Bazel links C++ files with $CC, not $CXX, this breaks UBSan
-build:sanitize-linux --linkopt=external/llvm_toolchain/lib/clang/9.0.0/lib/linux/libclang_rt.asan_cxx-x86_64.a
-build:sanitize-linux --linkopt=external/llvm_toolchain/lib/clang/9.0.0/lib/linux/libclang_rt.ubsan_standalone_cxx-x86_64.a
-build:sanitize-linux --linkopt=external/llvm_toolchain/lib/clang/9.0.0/lib/linux/libclang_rt.ubsan_standalone-x86_64.a
+# TODO(jez) It's not clear whether we still need these tricks to get sanitizers to work,
+# because we're using the toolchain's lld linker now.
+# We could consider replacing this with something more typical.
+# Original motivation: Bazel links C++ files with $CC, not $CXX, this breaks UBSan
+build:sanitize-linux --linkopt=../../external/llvm_toolchain_15_0_7_llvm/lib/clang/15.0.7/lib/x86_64-unknown-linux-gnu/libclang_rt.asan_cxx.a
+build:sanitize-linux --linkopt=../../external/llvm_toolchain_15_0_7_llvm/lib/clang/15.0.7/lib/x86_64-unknown-linux-gnu/libclang_rt.ubsan_standalone_cxx.a
+build:sanitize-linux --linkopt=../../external/llvm_toolchain_15_0_7_llvm/lib/clang/15.0.7/lib/x86_64-unknown-linux-gnu/libclang_rt.ubsan_standalone.a
 build:sanitize-linux --config=sanitize
 
 build:sanitize-mac --config=sanitize
@@ -203,14 +264,16 @@ build:size --copt=-Os --config=lto
 # See https://github.com/bazelbuild/bazel/issues/2537
 build:debugsymbols --copt=-g3 --copt=-fstandalone-debug --copt=-DDEBUG_SYMBOLS --copt=-glldb
 build:debugsymbols --linkopt=-g3 --linkopt=-fstandalone-debug --linkopt=-DDEBUG_SYMBOLS --linkopt=-glldb
-build:debugsymbols --spawn_strategy=standalone
-build:debugsymbols --genrule_strategy=standalone
+build:debugsymbols --spawn_strategy=local
+build:debugsymbols --genrule_strategy=local
+
+# simpler & smaller debug symbols. Good enough for backtraces, but not for debugging.
+build:backtracesymbols --copt=-DDEBUG_SYMBOLS --copt=-gline-tables-only
+build:backtracesymbols --linkopt=-DDEBUG_SYMBOLS --linkopt=-gline-tables-only
+build:backtracesymbols --spawn_strategy=local
+build:backtracesymbols --genrule_strategy=local
 
 build --strip=never
-
-# Enable nice UIs. Taken from bazel.rc of Bazel itself.
-common --experimental_ui --experimental_ui_actions_shown 8
-common --show_progress_rate_limit=0.25
 
 ##
 ## Fuzzing
@@ -222,18 +285,16 @@ build:fuzz --copt=-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 ##
 ## Webasm config. Please use either of those depending on your platform
 ##
-build:webasm-linux --crosstool_top=//tools/toolchain/webasm-linux --config=webasm
-build:webasm-darwin --crosstool_top=//tools/toolchain/webasm-darwin --config=webasm
-
-# common webasm config
-# Use --cpu as a differentiator.
-build:webasm --cpu=webasm --spawn_strategy=standalone --genrule_strategy=standalone --copt=-Oz --linkopt=-Oz --copt=-DMDB_USE_ROBUST=0
+build:webasm --copt=-DMDB_USE_ROBUST=0
 build:webasm --define release=true
 build:webasm --compilation_mode=opt
-build:webasm --copt=-DNDEBUG --linkopt=-DNDEBUG # for some reason emscripten doesn't pass those when -O2\-Oz are specified
-build:webasm --copt=--llvm-lto --copt=3 --linkopt=--llvm-lto --linkopt=3
-# Specify a "sane" C++ toolchain for the host platform.
-build:webasm --host_crosstool_top=@llvm_toolchain//:toolchain
+# https://emscripten.org/docs/porting/exceptions.html#webassembly-exception-handling-based-support
+build:webasm --features=exceptions --cxxopt=-fwasm-exceptions --linkopt=-fwasm-exceptions
+# Blocked on https://github.com/emscripten-core/emscripten/issues/9780
+build:webasm --copt=-fno-stack-protector
+# We put the stack first, so that an argument stack overflow doesn't clobber
+# global data, and traps instead.
+build:webasm --linkopt=--stack-first
 
 ##
 ## Stripe's ci passes --config=ci, we need it to exist

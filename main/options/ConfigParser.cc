@@ -1,23 +1,45 @@
 #include "ConfigParser.h"
+#include "absl/algorithm/container.h"
 #include "absl/strings/str_split.h"
 #include "common/FileOps.h"
 #include "common/common.h"
 #include "options.h"
+#include <cctype> // for isspace
 
 using namespace std;
 namespace sorbet::realmain::options {
 
-void ConfigParser::readArgsFromFile(std::shared_ptr<spdlog::logger> logger, string_view filename,
-                                    std::vector<std::string> &stringArgs) {
+namespace {
+
+// Returns true when the line starts with a '#', ignoring leading space.
+//
+// NOTE: we don't handle trailing comments because it would be difficult to handle the following case without a more
+// complicated parser:
+//
+// > -e 'puts "hello" # this is a comment' -p parse-tree
+bool isComment(string_view line) {
+    auto hashPos = line.find('#');
+    if (hashPos == string_view::npos) {
+        return false;
+    }
+
+    auto prefix = line.substr(0, hashPos);
+    return absl::c_all_of(prefix, [](auto c) { return isspace(c); });
+}
+
+} // namespace
+
+void ConfigParser::readArgsFromFile(shared_ptr<spdlog::logger> logger, string_view filename,
+                                    vector<string> &stringArgs) {
     try {
-        string argsP = FileOps::read(filename);
+        string argsP = FileOps::read(string(filename));
         string_view argsPView = argsP;
         if (!argsPView.empty() && argsPView.back() == '\n') {
             argsPView = argsPView.substr(0, argsPView.size() - 1);
         }
         for (string_view arg : absl::StrSplit(argsPView, '\n')) {
-            if (arg.size() == 0) {
-                // skip empty line
+            if (arg.size() == 0 || isComment(arg)) {
+                // skip empty lines and comments
                 continue;
             } else if (arg[0] == '@') {
                 readArgsFromFile(logger, arg.substr(min(arg.find_first_not_of("@"), arg.size())), stringArgs);
@@ -31,10 +53,10 @@ void ConfigParser::readArgsFromFile(std::shared_ptr<spdlog::logger> logger, stri
     }
 }
 
-cxxopts::ParseResult ConfigParser::parseConfig(std::shared_ptr<spdlog::logger> logger, int &argc, char **&argv,
+cxxopts::ParseResult ConfigParser::parseConfig(shared_ptr<spdlog::logger> logger, int &argc, char **&argv,
                                                cxxopts::Options options) {
     // Pointers into those args will be passed in argv
-    std::vector<std::string> stringArgs;
+    vector<string> stringArgs;
 
     if (argc > 0) {
         // $0 / $PROGRAM_NAME should always be first
@@ -64,7 +86,7 @@ cxxopts::ParseResult ConfigParser::parseConfig(std::shared_ptr<spdlog::logger> l
     }
 
     // Recompose the `argv` array from what we parsed previously
-    std::vector<char *> args;
+    vector<char *> args;
     args.reserve(stringArgs.size());
     for (auto &arg : stringArgs) {
         args.emplace_back(const_cast<char *>(arg.c_str()));

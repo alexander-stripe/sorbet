@@ -4,17 +4,17 @@ using namespace std;
 
 namespace sorbet::ast {
 
-bool definesBehavior(const unique_ptr<ast::Expression> &expr) {
+bool definesBehavior(const ExpressionPtr &expr) {
     if (BehaviorHelpers::checkEmptyDeep(expr)) {
         return false;
     }
     bool result = true;
 
     typecase(
-        expr.get(),
+        expr,
 
-        [&](ast::ClassDef *klass) {
-            auto *id = ast::cast_tree<ast::UnresolvedIdent>(klass->name.get());
+        [&](const ast::ClassDef &klass) {
+            auto id = ast::cast_tree<ast::UnresolvedIdent>(klass.name);
             if (id && id->name == core::Names::singleton()) {
                 // class << self; We consider this
                 // behavior-defining. We could opt to recurse inside
@@ -27,59 +27,70 @@ bool definesBehavior(const unique_ptr<ast::Expression> &expr) {
             }
         },
 
-        [&](ast::Assign *asgn) {
-            if (ast::isa_tree<ast::ConstantLit>(asgn->lhs.get())) {
+        [&](const ast::Assign &asgn) {
+            // this check can fire before the namer converts lhs constants in assignments from UnresolvedConstantLit ->
+            // ConstantLit, so we have to allow for both types.
+            if (ast::isa_tree<ast::ConstantLit>(asgn.lhs) || ast::isa_tree<ast::UnresolvedConstantLit>(asgn.lhs)) {
                 result = false;
             } else {
                 result = true;
             }
         },
 
-        [&](ast::InsSeq *seq) {
-            result = absl::c_any_of(seq->stats, [](auto &child) { return definesBehavior(child); }) ||
-                     definesBehavior(seq->expr);
+        [&](const ast::InsSeq &seq) {
+            result = absl::c_any_of(seq.stats, [](auto &child) { return definesBehavior(child); }) ||
+                     definesBehavior(seq.expr);
         },
 
         // Ignore code synthesized by Rewriter pass.
-        [&](ast::Send *send) { result = !send->isRewriterSynthesized(); },
-        [&](ast::MethodDef *methodDef) { result = !methodDef->isRewriterSynthesized(); },
+        [&](const ast::Send &send) { result = !send.flags.isRewriterSynthesized; },
+        [&](const ast::MethodDef &methodDef) { result = !methodDef.flags.isRewriterSynthesized; },
+        [&](const ast::Literal &methodDef) { result = false; },
 
-        [&](ast::Expression *klass) { result = true; });
+        [&](const ExpressionPtr &klass) { result = true; });
     return result;
 }
 
-bool BehaviorHelpers::checkClassDefinesBehavior(const unique_ptr<ast::ClassDef> &klass) {
-    for (auto &ancst : klass->ancestors) {
-        auto *cnst = ast::cast_tree<ast::ConstantLit>(ancst.get());
-        if (cnst && cnst->original != nullptr) {
-            return true;
-        }
-    }
-    for (auto &ancst : klass->singletonAncestors) {
-        auto *cnst = ast::cast_tree<ast::ConstantLit>(ancst.get());
-        if (cnst && cnst->original != nullptr) {
-            return true;
-        }
-    }
-    return absl::c_any_of(klass->rhs, [](auto &tree) { return definesBehavior(tree); });
+bool BehaviorHelpers::checkClassDefinesBehavior(const ExpressionPtr &expr) {
+    auto klass = ast::cast_tree<ast::ClassDef>(expr);
+    ENFORCE(klass);
+    return BehaviorHelpers::checkClassDefinesBehavior(*klass);
 }
 
-bool BehaviorHelpers::checkEmptyDeep(const unique_ptr<ast::Expression> &expr) {
+bool BehaviorHelpers::checkClassDefinesBehavior(const ast::ClassDef &klass) {
+    for (auto &ancst : klass.ancestors) {
+        auto cnst = ast::cast_tree<ast::ConstantLit>(ancst);
+        if (cnst && cnst->original() != nullptr) {
+            return true;
+        }
+    }
+    for (auto &ancst : klass.singletonAncestors) {
+        auto cnst = ast::cast_tree<ast::ConstantLit>(ancst);
+        if (cnst && cnst->original() != nullptr) {
+            return true;
+        }
+    }
+    return absl::c_any_of(klass.rhs, [](auto &tree) { return definesBehavior(tree); });
+}
+
+bool BehaviorHelpers::checkEmptyDeep(const ExpressionPtr &expr) {
     bool result = false;
 
     typecase(
-        expr.get(),
+        expr,
 
-        [&](ast::Send *send) { result = (send->fun == core::Names::keepForIde()); },
-
-        [&](ast::EmptyTree *) { result = true; },
-
-        [&](ast::InsSeq *seq) {
-            result = absl::c_all_of(seq->stats, [](auto &child) { return checkEmptyDeep(child); }) &&
-                     checkEmptyDeep(seq->expr);
+        [&](const ast::Send &send) {
+            result = send.fun == core::Names::include() || send.fun == core::Names::extend();
         },
 
-        [&](ast::Expression *klass) { result = false; });
+        [&](const ast::EmptyTree &) { result = true; },
+
+        [&](const ast::InsSeq &seq) {
+            result = absl::c_all_of(seq.stats, [](auto &child) { return checkEmptyDeep(child); }) &&
+                     checkEmptyDeep(seq.expr);
+        },
+
+        [&](const ExpressionPtr &klass) { result = false; });
     return result;
 }
 

@@ -9,6 +9,7 @@ gemfile do
   gem 'nokogiri'
   gem 'diff-lcs', require: 'diff/lcs'
   gem 'paint'
+  gem 'pry'
 end
 
 class RBIFile
@@ -147,6 +148,11 @@ class DocParser
         walk_scope(scope, &blk)
         assert_clean!
       end
+    when :SCLASS
+      # There are a handful of places in RBIs where we have to use `class <<
+      # self` because both a class and it's singleton class need to register a
+      # type_member/type_template with the name Elem
+      puts 'skipping :SCLASS node, documentation will not be generated'
     when :SCOPE, :BLOCK, :BEGIN
       assert_clean!
       node.children
@@ -180,9 +186,19 @@ class DocParser
       namespace = namespace.empty? ? "Object" : namespace
       yield "#{namespace}.#{name}", node, scope_stack.consume! || node
 
-    when :FCALL, # extend Foo
-         :VCALL # private
+    when :VCALL # private
       assert_clean!
+    when :FCALL # extend Foo, module_function def foo; end, private def foo; end
+      name, args = node.children
+      if ![:module_function, :private].include?(name) ||
+          args.type != :LIST ||
+          args.children.length == 0 ||
+          ![:DEFS, :DEFN].include?(args.children[0].type)
+        assert_clean!
+        return
+      end
+
+      walk_scope(args.children[0], &blk)
     else
       unexpected!(node)
     end
@@ -439,6 +455,10 @@ class SyncRDoc
     "Kernel#require",
   ]
 
+  ONLY_IN_FILE = {
+    "Kernel" => "rbi/core/kernel.rbi"
+  }
+
   private def driver
     @driver ||= RDoc::RI::Driver.new
   end
@@ -460,6 +480,14 @@ class SyncRDoc
       opts = RDoc::Options.new
       opts.parse(['--all'])
       opts.setup_generator("darkfish")
+
+      $LOAD_PATH.each do |path|
+        darkfish_dir = File.join(path, 'rdoc/generator/template/darkfish/')
+        next unless File.directory?(darkfish_dir)
+        opts.template_dir = darkfish_dir
+        break
+      end
+
       opts
     end
   end
@@ -497,7 +525,7 @@ class SyncRDoc
   private def render_comment(code_obj, indentation)
     context = code_obj.is_a?(RDoc::Context) ? code_obj : code_obj.parent
 
-    formatter = ToMarkdownRef.new(options, "https://docs.ruby-lang.org/en/2.6.0/", "/", context)
+    formatter = ToMarkdownRef.new(options, "https://docs.ruby-lang.org/en/2.7.0/", "/", context)
     formatter.width -= indentation.gsub("\t", '  ').length # account for indentation (assuming tabstop is 2)
     code_obj.comment.accept(formatter)
     formatter.add_alias_info(code_obj) if code_obj.is_a?(RDoc::MethodAttr)
@@ -513,6 +541,8 @@ class SyncRDoc
     to_replace = []
     DocParser.new(file).each_doc do |path, def_node, doc_range, indentation|
       next if SKIP.any? {|s| s.is_a?(String) ? path == s : path =~ s}
+      only_in_file = ONLY_IN_FILE[path]
+      next if only_in_file && only_in_file != file.path
       namespace, separator, name = path.rpartition(/::|\.|\#/)
       code_obj = case separator
       when ""
@@ -581,6 +611,12 @@ class SyncRDoc
     if argv.empty?
       puts parser
       return -1
+    end
+
+    if Gem::Version.new(RUBY_VERSION) < Gem::Version.new('2.7')
+      puts "Warning! Detected RUBY_VERSION=#{RUBY_VERSION}."
+      puts "This script uses the current Ruby version to parse documentation from."
+      puts "If you're seeing a large diff, it might be because all existing docstrings were generated using Ruby 2.7."
     end
 
     store.load_all # ensure cross-referencing can find everything

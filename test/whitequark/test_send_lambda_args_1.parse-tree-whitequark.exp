@@ -1,4 +1,5 @@
 s(:block,
-  s(:send, nil, :lambda),
-  s(:args,
-    s(:arg, :a)), nil)
+  s(:send,
+    s(:const, nil, :Kernel), :lambda),
+  s(:params,
+    s(:param, :a)), nil)

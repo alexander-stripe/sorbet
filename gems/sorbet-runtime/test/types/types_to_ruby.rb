@@ -29,6 +29,9 @@ class Opus::Types::Test::TypesToRubyTest < Critic::Unit::UnitTest
 
     # FixedHash:
     [{a: T.nilable(String)}, "{a: T.nilable(String)}"],
+    [{"a" => T.nilable(String)}, "{\"a\" => T.nilable(String)}"],
+    [{"a" => String, b: T.any(Integer, Float)}, "{\"a\" => String, b: T.any(Float, Integer)}"],
+    [{"foo bar" => String, :"foo bar" => T.any(Integer, Float)}, "{\"foo bar\" => String, :\"foo bar\" => T.any(Float, Integer)}"],
 
     # TypedHash:
     [T::Hash[T.any(String, Symbol), String], "T::Hash[T.any(String, Symbol), String]"],
@@ -38,13 +41,16 @@ class Opus::Types::Test::TypesToRubyTest < Critic::Unit::UnitTest
     [T.nilable(T::Hash[String, String]), "T.nilable(T::Hash[String, String])"],
 
     # Enum:
-    [T.enum(["a", "b", "c"]), 'T.enum(["a", "b", "c"])'],
+    [T.deprecated_enum(%w[a b c]), 'T.deprecated_enum(["a", "b", "c"])'],
 
     # Range:
     [T::Range[Integer], "T::Range[Integer]"],
 
     # Set:
     [T::Set[Integer], "T::Set[Integer]"],
+
+    # T.type_parameter:
+    [T.type_parameter(:A), "T.type_parameter(:A)"],
   ]
 
   cases.each do |c|

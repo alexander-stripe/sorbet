@@ -1,6 +1,8 @@
 // has to go first as it violates our poisons
 #include "rang.hpp"
 
+#include "absl/strings/escaping.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_replace.h"
 #include "core/Context.h"
 #include "core/Error.h"
@@ -15,6 +17,8 @@ template class std::unique_ptr<sorbet::core::Error>;
 namespace sorbet::core {
 
 using namespace std;
+
+namespace {
 
 constexpr auto ERROR_COLOR = rang::fg::red;
 constexpr auto LOW_NOISE_COLOR = rang::fgB::black;
@@ -36,12 +40,18 @@ string _replaceAll(string_view inWhat, string_view from, string_view to) {
     return absl::StrReplaceAll(inWhat, {{from, to}});
 }
 
+string prettyPrintEditReplacement(string_view it) {
+    return _replaceAll(absl::StripAsciiWhitespace(it), "\n", "\n    ");
+}
+
+} // namespace
+
 string ErrorColors::replaceAll(string_view inWhat, string_view from, string_view to) {
     return _replaceAll(inWhat, from, to);
 }
 
 bool Error::isCritical() const {
-    return this->what.minLevel == StrictLevel::Internal;
+    return this->what == core::errors::Internal::InternalError;
 }
 
 string restoreColors(string_view formatted, rang::fg color) {
@@ -53,9 +63,22 @@ string restoreColors(string_view formatted, rang::fg color) {
 string ErrorLine::toString(const GlobalState &gs, bool color) const {
     stringstream buf;
     string indent = "  ";
-    buf << indent << FILE_POS_STYLE << loc.filePosToString(gs) << RESET_STYLE << ":";
+    buf << indent;
+    switch (this->displayLoc) {
+        case LocDisplay::Shown:
+            buf << FILE_POS_STYLE << loc.filePosToString(gs) << RESET_STYLE << ":";
+            break;
+        case LocDisplay::Hidden:
+            break;
+    }
     if (!formattedMessage.empty()) {
-        buf << " ";
+        switch (this->displayLoc) {
+            case LocDisplay::Shown:
+                buf << " ";
+                break;
+            case LocDisplay::Hidden:
+                break;
+        }
         if (color) {
             buf << DETAIL_COLOR << restoreColors(formattedMessage, DETAIL_COLOR) << RESET_COLOR;
         } else {
@@ -64,6 +87,13 @@ string ErrorLine::toString(const GlobalState &gs, bool color) const {
     }
 
     if (loc.exists()) {
+        auto fileLength = loc.file().data(gs).source().size();
+        if (loc.beginPos() > fileLength || loc.endPos() > fileLength) {
+            fatalLogger->error(R"(msg="Bad ErrorLine::toString loc" path="{}" loc="{}" formattedMessage={}")",
+                               absl::CEscape(loc.file().data(gs).path()), loc.showRaw(gs), formattedMessage);
+            fatalLogger->error("source=\"{}\"", absl::CEscape(loc.file().data(gs).source()));
+            ENFORCE(false);
+        }
         buf << '\n' << loc.toStringWithTabs(gs, 2);
     }
     return buf.str();
@@ -76,7 +106,17 @@ string ErrorSection::toString(const GlobalState &gs) const {
     bool skipEOL = false;
     if (!this->header.empty()) {
         coloredLineHeaders = false;
-        buf << indent << DETAIL_COLOR << restoreColors(this->header, DETAIL_COLOR) << RESET_COLOR;
+        string formattedHeader;
+        if (this->isAutocorrectDescription) {
+            if (gs.autocorrect) {
+                formattedHeader = fmt::format("{} Done", this->header);
+            } else {
+                formattedHeader = ErrorColors::format("{} Use `{}` to autocorrect", this->header, "-a");
+            }
+        } else {
+            formattedHeader = this->header;
+        }
+        buf << indent << DETAIL_COLOR << restoreColors(formattedHeader, DETAIL_COLOR) << RESET_COLOR;
     } else {
         skipEOL = true;
     }
@@ -90,23 +130,53 @@ string ErrorSection::toString(const GlobalState &gs) const {
     return buf.str();
 }
 
+void ErrorSection::Collector::addErrorDetails(ErrorSection::Collector &&e) {
+    children.push_back(std::move(e));
+}
+
+void toErrorSectionHelper(const ErrorSection::Collector &e, vector<ErrorLine> &result, int indentLevel) {
+    ENFORCE(e.message.length() > 0);
+    string message = fmt::format("{}{}", string(indentLevel * 2, ' '), e.message);
+    result.push_back(ErrorLine(core::Loc::none(), move(message), ErrorLine::LocDisplay::Hidden));
+    for (auto &c : e.children) {
+        toErrorSectionHelper(c, result, indentLevel + 1);
+    }
+}
+
+optional<ErrorSection> ErrorSection::Collector::toErrorSection() const {
+    if (children.size() == 0) {
+        return nullopt;
+    }
+    vector<ErrorLine> lines;
+    for (auto &c : children) {
+        toErrorSectionHelper(c, lines, 0);
+    }
+    return ErrorSection("Detailed explanation:", move(lines));
+}
+
 string Error::toString(const GlobalState &gs) const {
     stringstream buf;
     buf << RESET_STYLE << FILE_POS_STYLE << loc.filePosToString(gs) << RESET_STYLE << ": " << ERROR_COLOR
         << restoreColors(header, ERROR_COLOR) << RESET_COLOR << LOW_NOISE_COLOR << " " << gs.errorUrlBase << what.code
         << RESET_COLOR;
     if (loc.exists()) {
+        auto fileLength = loc.file().data(gs).source().size();
+        if (loc.beginPos() > fileLength || loc.endPos() > fileLength) {
+            fatalLogger->error(R"(msg="Bad Error::toString loc" path="{}" loc="{}" header={}")",
+                               absl::CEscape(loc.file().data(gs).path()), loc.showRaw(gs), header);
+            fatalLogger->error("source=\"{}\"", absl::CEscape(loc.file().data(gs).source()));
+            ENFORCE(false);
+        }
         buf << '\n' << loc.toStringWithTabs(gs, 2);
     }
 
-    for (auto &section : this->sections) {
-        buf << '\n' << section.toString(gs);
+    if (gs.includeErrorSections) {
+        for (auto &section : this->sections) {
+            buf << '\n' << section.toString(gs);
+        }
     }
-    return buf.str();
-}
 
-ErrorRegion::~ErrorRegion() {
-    gs.errorQueue->markFileForFlushing(this->f);
+    return buf.str();
 }
 
 ErrorBuilder::ErrorBuilder(const GlobalState &gs, bool willBuild, Loc loc, ErrorClass what)
@@ -119,31 +189,72 @@ void ErrorBuilder::_setHeader(string &&header) {
     this->header = move(header);
 }
 
-void ErrorBuilder::addErrorSection(ErrorSection &&section) {
+void ErrorBuilder::addErrorSection(optional<ErrorSection> &&section) {
     ENFORCE(state == State::WillBuild);
-    this->sections.emplace_back(move(section));
+    if (section.has_value()) {
+        this->sections.emplace_back(move(*section));
+    }
+}
+
+void ErrorBuilder::addErrorSections(const ErrorSection::Collector &&errorDetailsCollector) {
+    if (auto errorSection = errorDetailsCollector.toErrorSection()) {
+        addErrorSection(move(errorSection.value()));
+    }
 }
 
 void ErrorBuilder::addAutocorrect(AutocorrectSuggestion &&autocorrect) {
     ENFORCE(state == State::WillBuild);
+    string sectionTitle;
+    if (gs.autocorrect) {
+        sectionTitle = "Autocorrect:";
+    } else if (autocorrect.isDidYouMean && autocorrect.edits.size() == 1) {
+        sectionTitle = ErrorColors::format("Did you mean `{}`?", autocorrect.edits[0].replacement);
+    } else {
+        sectionTitle = "Autocorrect:";
+    }
+
+    vector<ErrorLine> messages;
     for (auto &edit : autocorrect.edits) {
-        u4 n = edit.loc.endPos() - edit.loc.beginPos();
+        auto isInsert = edit.replacement == "";
+        uint32_t n = edit.loc.endPos() - edit.loc.beginPos();
         if (gs.autocorrect) {
-            auto line =
-                edit.replacement == ""
-                    ? ErrorLine::from(edit.loc, "Deleted")
-                    : ErrorLine::from(edit.loc, "{} `{}`", n == 0 ? "Inserted" : "Replaced with", edit.replacement);
+            auto line = isInsert ? ErrorLine::from(edit.loc, "Deleted")
+                                 : ErrorLine::from(edit.loc, "{} `{}`", n == 0 ? "Inserted" : "Replaced with",
+                                                   prettyPrintEditReplacement(edit.replacement));
 
-            addErrorSection(ErrorSection("Autocorrect: Done", {line}));
+            messages.emplace_back(std::move(line));
         } else {
-            auto line = edit.replacement == "" ? ErrorLine::from(edit.loc, "Delete")
-                                               : ErrorLine::from(edit.loc, "{} `{}`",
-                                                                 n == 0 ? "Insert" : "Replace with", edit.replacement);
+            auto line = isInsert ? ErrorLine::from(edit.loc, "Delete")
+                                 : ErrorLine::from(edit.loc, "{} `{}`", n == 0 ? "Insert" : "Replace with",
+                                                   prettyPrintEditReplacement(edit.replacement));
 
-            addErrorSection(ErrorSection("Autocorrect: Use `-a` to autocorrect", {line}));
+            messages.emplace_back(std::move(line));
         }
     }
+    auto errorSection = ErrorSection{sectionTitle, std::move(messages)};
+    errorSection.isAutocorrectDescription = true;
+    errorSection.isDidYouMean = autocorrect.isDidYouMean;
+    addErrorSection(move(errorSection));
     this->autocorrects.emplace_back(move(autocorrect));
+}
+
+void ErrorBuilder::maybeAddAutocorrect(std::optional<AutocorrectSuggestion> &&ma) {
+    if (!ma.has_value()) {
+        return;
+    }
+
+    addAutocorrect(std::move(ma.value()));
+}
+
+void ErrorBuilder::didYouMean(const string &replacement, Loc loc) {
+    if (!gs.didYouMean) {
+        return;
+    }
+
+    string formatted = fmt::format("Replace with `{}`", replacement);
+    auto isDidYouMean = true;
+    addAutocorrect(
+        AutocorrectSuggestion{move(formatted), {AutocorrectSuggestion::Edit{loc, replacement}}, isDidYouMean});
 }
 
 // This will sometimes be bypassed in lieu of just calling build() so put your
@@ -165,7 +276,7 @@ unique_ptr<Error> ErrorBuilder::build() {
     return err;
 }
 
-string ErrorColors::coloredPatternReplace = (string)coloredPatternSigil;
+string ErrorColors::coloredPatternReplace = string(coloredPatternSigil);
 
 void ErrorColors::enableColors() {
     rang::setControlMode(rang::control::Force);

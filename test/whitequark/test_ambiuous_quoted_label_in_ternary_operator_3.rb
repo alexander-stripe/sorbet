@@ -1,3 +1,4 @@
 # typed: true
 
-a ? b ! '': nil # error: unexpected token tBANG
+a ? b ! '': nil
+#     ^ error: missing arg to "!" operator

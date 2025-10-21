@@ -1,4 +1,5 @@
 #include "main/lsp/lsp_messages_gen_helpers.h"
+#include "main/lsp/json_types.h"
 
 using namespace std;
 
@@ -41,7 +42,7 @@ string tryConvertToString(optional<const rapidjson::Value *> value, string_view 
     if (!realValue.IsString()) {
         throw JSONTypeError(name, "string", realValue);
     }
-    return realValue.GetString();
+    return string(realValue.GetString(), realValue.GetStringLength());
 }
 
 string tryConvertToStringConstant(optional<const rapidjson::Value *> value, string_view constantValue,
@@ -53,11 +54,13 @@ string tryConvertToStringConstant(optional<const rapidjson::Value *> value, stri
     return strValue;
 }
 
-optional<const rapidjson::Value *> maybeGetJSONField(const rapidjson::Value &value, const string &name) {
-    if (value.HasMember(name)) {
-        return &value[name];
+optional<const rapidjson::Value *> maybeGetJSONField(const rapidjson::Value &value, string_view nameStr) {
+    rapidjson::Value name(rapidjson::StringRef(nameStr.data(), nameStr.size()));
+    auto iter = value.FindMember(name);
+    if (iter == value.MemberEnd()) {
+        return nullopt;
     }
-    return nullopt;
+    return &iter->value;
 }
 
 const rapidjson::Value &assertJSONField(optional<const rapidjson::Value *> maybeValue, string_view name) {

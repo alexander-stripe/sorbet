@@ -20,8 +20,7 @@ _clang_tool = rule(
     _clang_tool_impl,
     attrs = {
         "tool": attr.label(
-            allow_files = True,
-            single_file = True,
+            allow_single_file = True,
             cfg = "host",
         ),
     },
@@ -31,6 +30,6 @@ _clang_tool = rule(
 def clang_tool(name):
     _clang_tool(
         name = name,
-        tool = "@llvm_toolchain//:bin/" + name,
+        tool = "@llvm_toolchain_15_0_7//:bin/" + name,
         visibility = ["//visibility:public"],
     )

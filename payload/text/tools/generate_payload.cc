@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "absl/strings/escaping.h"
-#include "version/version.h"
+#include "sorbet_version/sorbet_version.h"
 
 using namespace std;
 
@@ -33,8 +33,8 @@ void emit_classfile(vector<string> sourceFiles, ostream &out) {
     out << "#include<string_view>" << '\n' << "#include<vector>\nusing namespace std;\n";
     out << "namespace sorbet{" << '\n' << "namespace rbi{" << '\n';
     string version;
-    if (sorbet::Version::isReleaseBuild) {
-        version = sorbet::Version::build_scm_revision;
+    if (sorbet_is_release_build) {
+        version = sorbet_build_scm_revision;
     } else {
         version = "master";
     }

@@ -1,9 +1,9 @@
 # typed: true
 
-R = 5
-class R; end # error: Redefining constant `R`
+R = 5 # error: Cannot initialize the class `R` by constant assignment
+class R; end
 
-# this should resolve as a class, so this would not be an error
+# The static field never mangles the class definition, so this is allowed
 x = R.new
-# this should not resolve as the constant, so this will be an error
+# this resolves as the class, so this will be an error
 puts R + 1 # error: Method `+` does not exist on `T.class_of(R)`

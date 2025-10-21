@@ -19,6 +19,7 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
       SPADE = new('_spade_')
       DIAMOND = new('_diamond_')
       HEART = new('_heart_')
+      NONE = new(nil)
     end
   end
 
@@ -38,6 +39,7 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
         assert_equal('_spade_', CardSuitCustom::SPADE.serialize)
         assert_equal('_diamond_', CardSuitCustom::DIAMOND.serialize)
         assert_equal('_heart_', CardSuitCustom::HEART.serialize)
+        assert_nil(CardSuitCustom::NONE.serialize)
       end
     end
   end
@@ -67,13 +69,6 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
     end
   end
 
-  describe 'sorting' do
-    it 'sorts according to serialized_val' do
-      assert_equal(CardSuit::CLUB, CardSuit.values.min) # 'c' is first alphabetically
-      assert_equal(CardSuit::SPADE, CardSuit.values.max)
-    end
-  end
-
   describe 'to_s' do
     it 'prints the full constant name' do
       assert_equal('#<T::Enum::Test::EnumTest::CardSuit::SPADE>', CardSuit::SPADE.to_s)
@@ -81,9 +76,10 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
   end
 
   describe 'values' do
-    it 'returns an array of enum instances' do
+    it 'returns an array of enum instances, sorted by code order' do
+      # note this is *not* alphabetical order (S before D)
       assert_equal(
-        [CardSuit::CLUB, CardSuit::DIAMOND, CardSuit::HEART, CardSuit::SPADE],
+        [CardSuit::CLUB, CardSuit::SPADE, CardSuit::DIAMOND, CardSuit::HEART],
         CardSuit.values
       )
     end
@@ -93,6 +89,29 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
         CardSuit.values << 'foo'
       end
       assert_match(/can't modify frozen Array/, ex.message)
+    end
+  end
+
+  describe 'each_value' do
+    it 'yields values given block' do
+      result = []
+      CardSuit.each_value do |val|
+        result << val
+      end
+
+      assert_equal(
+        [CardSuit::CLUB, CardSuit::SPADE, CardSuit::DIAMOND, CardSuit::HEART],
+        result,
+      )
+    end
+
+    it 'returns values given no block' do
+      result = CardSuit.each_value.to_a
+
+      assert_equal(
+        [CardSuit::CLUB, CardSuit::SPADE, CardSuit::DIAMOND, CardSuit::HEART],
+        result,
+      )
     end
   end
 
@@ -126,6 +145,10 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
       assert_equal(true, CardSuitCustom.has_serialized?('_spade_'))
       assert_equal(false, CardSuitCustom.has_serialized?('spade'))
       assert_equal(false, CardSuitCustom.has_serialized?('blerg'))
+    end
+
+    it 'does not break for arbitrary objects' do
+      assert_equal(false, CardSuitCustom.has_serialized?(Class.new.new))
     end
   end
 
@@ -165,6 +188,28 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
           "#<T::Enum::Test::EnumTest::CardSuitCustom::HEART>" => "y",
         },
         JSON.parse(h.to_json))
+    end
+  end
+
+  describe 'as_json' do
+    class CustomSerializedValue
+      def as_json(*args)
+        1234
+      end
+    end
+
+    class CustomSerializationEnum < T::Enum
+      enums do
+        SPADE = new(CustomSerializedValue.new)
+      end
+    end
+
+    it 'has a JSON representation' do
+      assert_equal("club", CardSuit::CLUB.as_json)
+    end
+
+    it 'asks for the JSON representation of the serialized value' do
+      assert_equal(1234, CustomSerializationEnum::SPADE.as_json)
     end
   end
 
@@ -265,6 +310,13 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
       )
     end
 
+    it 'does not allow `_register_instance` after enum has been defined' do
+      ex = assert_raises(RuntimeError) do
+        CardSuit._register_instance(CardSuit::HEART)
+      end
+      assert_match(/can't modify frozen Array/, ex.message)
+    end
+
     it 'returns the same object for #dup and #clone' do
       assert_equal(CardSuit::DIAMOND.object_id, CardSuit::DIAMOND.dup.object_id)
       assert_equal(CardSuit::DIAMOND.object_id, CardSuit::DIAMOND.clone.object_id)
@@ -304,10 +356,24 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
         ex.message
       )
     end
+
+    it 'does not allow instance without assigning to constant' do
+      ex = assert_raises(RuntimeError) do
+        Class.new(T::Enum) do
+          enums do
+            new('foo')
+            new
+            new(nil)
+          end
+        end
+      end
+      assert_equal('Enum values must be assigned to constants: ["foo", T::Enum::UNSET, nil]', ex.message)
+    end
   end
 
   describe 'string value conversion assertions' do
-    ENUM_CONVERSION_MSG = 'Implicit conversion of Enum instances to strings is not allowed. Call #serialize instead.'
+    ENUM_CONVERSION_MSG = /Implicit conversion of Enum instances to strings is not allowed. Call #serialize instead./.freeze
+
     before do
       T::Configuration.expects(:soft_assert_handler).never
     end
@@ -316,14 +382,16 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
       ex = assert_raises(NoMethodError) do
         CardSuit::HEART.to_str
       end
-      assert_equal(ENUM_CONVERSION_MSG, ex.message)
+      assert_match(ENUM_CONVERSION_MSG, ex.message)
     end
 
     it 'raises an assertion if to_str is called (implicitly) and also returns the serialized value' do
       ex = assert_raises(NoMethodError) do
-        'foo ' + CardSuit::HEART
+        # rubocop:disable Style/StringConcatenation
+        "foo " + CardSuit::HEART
+        # rubocop:enable Style/StringConcatenation
       end
-      assert_equal(ENUM_CONVERSION_MSG, ex.message)
+      assert_match(ENUM_CONVERSION_MSG, ex.message)
     end
   end
 
@@ -331,8 +399,9 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
     ENUM_CONVERSION_MSG_LEGACY = 'Implicit conversion of Enum instances to strings is not allowed. Call #serialize instead.'
     before do
       T::Configuration.enable_legacy_t_enum_migration_mode
-      T::Configuration.expects(:soft_assert_handler).at_least_once.with do |message|
+      T::Configuration.expects(:soft_assert_handler).at_least_once.with do |message, storytime:|
         assert_equal(ENUM_CONVERSION_MSG_LEGACY, message)
+        assert_includes(storytime[:caller_location], __FILE__)
       end
     end
 
@@ -345,7 +414,9 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
     end
 
     it 'raises an assertion if to_str is called (implicitly) and also returns the serialized value' do
+      # rubocop:disable Style/StringConcatenation
       assert_equal('foo heart', 'foo ' + CardSuit::HEART)
+      # rubocop:enable Style/StringConcatenation
     end
   end
 
@@ -390,8 +461,9 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
     ENUM_COMPARE_MSG = 'Enum to string comparison not allowed. Compare to the Enum instance directly instead. See go/enum-migration'
     before do
       T::Configuration.enable_legacy_t_enum_migration_mode
-      T::Configuration.expects(:soft_assert_handler).at_least_once.with do |message|
+      T::Configuration.expects(:soft_assert_handler).at_least_once.with do |message, storytime:|
         assert_equal(ENUM_COMPARE_MSG, message)
+        assert_includes(storytime[:caller_location], __FILE__)
       end
     end
 
@@ -442,6 +514,23 @@ class T::Enum::Test::EnumTest < Critic::Unit::UnitTest
       when CardSuit::SPADE then true
       end
       assert_equal(true, matched)
+    end
+  end
+
+  it "is compatible with Marshal" do
+    (CardSuit.values + CardSuitCustom.values).each do |value|
+      roundtrip = Marshal.load(Marshal.dump(value))
+
+      assert_equal(roundtrip, value)
+
+      assert(value === roundtrip)
+
+      assert(
+        case roundtrip
+        when value then true
+        else false
+        end
+      )
     end
   end
 

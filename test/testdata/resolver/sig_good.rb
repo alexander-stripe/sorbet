@@ -14,7 +14,7 @@ class A
       e: T.untyped,
       f: T::Array[T1],
       g: T::Hash[T1, T2],
-      h: T.enum([false, 1, 3.14, "foo", :bar]),
+      h: T.deprecated_enum([false, 1, 3.14, "foo", :bar]),
       i: A1,
       j: T.class_of(T1),
       k: T.class_of(A1),

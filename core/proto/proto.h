@@ -7,7 +7,7 @@
 #include "proto/Symbol.pb.h"
 #include "proto/Type.pb.h"
 #include "proto/pay-server/SourceMetrics.pb.h"
-#include <google/protobuf/util/json_util.h>
+#include <google/protobuf/json/json.h>
 
 #include "core/core.h"
 #include <fstream>
@@ -19,14 +19,17 @@ public:
 
     static com::stripe::rubytyper::Name toProto(const GlobalState &gs, NameRef name);
 
-    static com::stripe::rubytyper::Symbol::ArgumentInfo toProto(const GlobalState &gs, const ArgInfo &arg);
+    static com::stripe::rubytyper::Symbol::ArgumentInfo toProto(const GlobalState &gs, const ParamInfo &arg);
     static com::stripe::rubytyper::Symbol toProto(const GlobalState &gs, SymbolRef sym, bool showFull);
 
-    static com::stripe::rubytyper::Type::Literal toProto(const GlobalState &gs, const LiteralType &lit);
-    static com::stripe::rubytyper::Type toProto(const GlobalState &gs, TypePtr typ);
+    static com::stripe::rubytyper::Type::Literal toProto(const GlobalState &gs, const NamedLiteralType &lit);
+    static com::stripe::rubytyper::Type::LiteralInteger toProto(const GlobalState &gs, const IntegerLiteralType &lit);
+    static com::stripe::rubytyper::Type::LiteralFloat toProto(const GlobalState &gs, const FloatLiteralType &lit);
+    static com::stripe::rubytyper::Type toProto(const GlobalState &gs, const TypePtr &typ);
 
     static com::stripe::rubytyper::Loc toProto(const GlobalState &gs, Loc loc);
-    static com::stripe::rubytyper::FileTable filesToProto(const GlobalState &gs);
+    static com::stripe::rubytyper::FileTable filesToProto(const GlobalState &gs,
+                                                          const UnorderedMap<long, long> &untypedUsages, bool showFull);
 
     static com::stripe::payserver::events::cibot::SourceMetrics toProto(const CounterState &counters,
                                                                         std::string_view prefix);

@@ -5,10 +5,15 @@
 
 namespace sorbet::web_tracer_framework {
 class Tracing {
+    friend class TracingTestHelper;
+
+    static std::string stateToJSONL(const CounterState &counters, pid_t pid, microseconds now);
+    static std::string jsonlToJSON(const std::string &jsonl, bool needsOpeningBracket, bool strictClosing);
+
 public:
     Tracing() = delete;
 
-    static bool storeTraces(const CounterState &counters, std::string_view fileName);
+    static bool storeTraces(const CounterState &counters, const std::string &fileName, bool strict = false);
 };
 } // namespace sorbet::web_tracer_framework
 

@@ -22,23 +22,23 @@ end
 def test
   ab = T.let(A.new, T.any(A, B))
   ab.foo_
-#        ^ completion: foo_common_1, foo_common_2
-# ^^^^^^^ error: Method `foo_` does not exist on `A` component of `T.any(A, B)`
-# ^^^^^^^ error: Method `foo_` does not exist on `B` component of `T.any(A, B)`
+  #      ^ completion: foo_common_1, foo_common_2
+  #  ^^^^ error: Method `foo_` does not exist on `A` component of `T.any(A, B)`
+  #  ^^^^ error: Method `foo_` does not exist on `B` component of `T.any(A, B)`
 
   maybe_a = T.let(nil, T.nilable(A))
   maybe_a.foo_only
-#                 ^ completion: (nothing)
-# ^^^^^^^^^^^^^^^^ error: Method `foo_only` does not exist on `A` component of `T.nilable(A)`
-# ^^^^^^^^^^^^^^^^ error: Method `foo_only` does not exist on `NilClass` component of `T.nilable(A)`
+  #               ^ completion: (nothing)
+  #       ^^^^^^^^ error: Method `foo_only` does not exist on `A` component of `T.nilable(A)`
+  #       ^^^^^^^^ error: Method `foo_only` does not exist on `NilClass` component of `T.nilable(A)`
 
-  # TODO(jez) This is a weird case. There are two methods named `some_method`.
-  # We've decided to show all methods with the same name, but the arity on each
-  # component is different, so it'll be impossible to call even though we
+  # This is a weird case. There are two methods named `some_method`.
+  # It currently shows all methods with the same name, but the arity on each
+  # component is different so it'll be impossible to call even though we
   # suggest it.
   nullary_or_unary = T.let(Nullary.new, T.any(Nullary, Unary))
   nullary_or_unary.some_
-#                       ^ completion: some_method
-# ^^^^^^^^^^^^^^^^^^^^^^ error: does not exist on `Unary`
-# ^^^^^^^^^^^^^^^^^^^^^^ error: does not exist on `Nullary`
+  #                     ^ completion: some_method
+  #                ^^^^^ error: does not exist on `Unary`
+  #                ^^^^^ error: does not exist on `Nullary`
 end

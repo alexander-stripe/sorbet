@@ -31,7 +31,7 @@ class Addrinfo < Data
   # nil is returned if no canonical name.
   #
   # The canonical name is set by
-  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-getaddrinfo)
+  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-getaddrinfo)
   # when AI\_CANONNAME is specified.
   #
   # ```ruby
@@ -73,7 +73,7 @@ class Addrinfo < Data
   #
   # If one or more arguments given as *local\_addr\_args*, it is used as the
   # local address of the socket. *local\_addr\_args* is given for
-  # [`family_addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-i-family_addrinfo)
+  # [`family_addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-i-family_addrinfo)
   # to obtain actual address.
   #
   # If *local\_addr\_args* is not given, the local address of the socket is not
@@ -139,7 +139,7 @@ class Addrinfo < Data
   end
   def connect_to(*args, timeout: T.unsafe(nil), &block); end
 
-  # creates an [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html)
+  # creates an [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html)
   # object from the arguments.
   #
   # The arguments are interpreted as similar to self.
@@ -172,19 +172,19 @@ class Addrinfo < Data
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def getnameinfo(*_); end
+  def getnameinfo(*arg0); end
 
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
-  def initialize(*_); end
+  def initialize(*arg0); end
 
   # returns a string which shows addrinfo in human-readable form.
   #
@@ -369,11 +369,11 @@ class Addrinfo < Data
 
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def marshal_load(_); end
+  def marshal_load(arg0); end
 
   # returns the protocol family as an integer.
   #
@@ -436,9 +436,9 @@ class Addrinfo < Data
   def unix_path(); end
 
   # iterates over the list of
-  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) objects
+  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) objects
   # obtained by
-  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-getaddrinfo).
+  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-getaddrinfo).
   #
   # ```ruby
   # Addrinfo.foreach(nil, 80) {|x| p x }
@@ -472,7 +472,7 @@ class Addrinfo < Data
   # family, socktype and protocol are hint for preferred protocol. If the result
   # will be used for a socket with SOCK\_STREAM, SOCK\_STREAM should be
   # specified as socktype. If so,
-  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-getaddrinfo)
+  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-getaddrinfo)
   # returns addrinfo list appropriate for SOCK\_STREAM. If they are omitted or
   # nil is given, the result is not restricted.
   #
@@ -503,11 +503,11 @@ class Addrinfo < Data
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.getaddrinfo(*_); end
+  def self.getaddrinfo(*arg0); end
 
   # returns an addrinfo object for IP address.
   #
@@ -519,11 +519,11 @@ class Addrinfo < Data
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.ip(_); end
+  def self.ip(arg0); end
 
   # returns an addrinfo object for TCP address.
   #
@@ -532,12 +532,12 @@ class Addrinfo < Data
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.tcp(_, _1); end
+  def self.tcp(arg0, arg1); end
 
   # returns an addrinfo object for UDP address.
   #
@@ -546,12 +546,12 @@ class Addrinfo < Data
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.udp(_, _1); end
+  def self.udp(arg0, arg1); end
 
   # returns an addrinfo object for UNIX socket address.
   #
@@ -563,19 +563,19 @@ class Addrinfo < Data
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.unix(*_); end
+  def self.unix(*arg0); end
 end
 
-# [`BasicSocket`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html) is the
+# [`BasicSocket`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html) is the
 # super class for all the
-# [`Socket`](https://docs.ruby-lang.org/en/2.6.0/Socket.html) classes.
+# [`Socket`](https://docs.ruby-lang.org/en/2.7.0/Socket.html) classes.
 class BasicSocket < IO
   extend T::Generic
-  Elem = type_member(:out, fixed: String)
+  Elem = type_member(:out) {{fixed: String}}
 
   # Disallows further read using shutdown system call.
   #
@@ -613,7 +613,7 @@ class BasicSocket < IO
   #
   #
   # If the local address is not suitable for connect,
-  # [`SocketError`](https://docs.ruby-lang.org/en/2.6.0/SocketError.html) is
+  # [`SocketError`](https://docs.ruby-lang.org/en/2.7.0/SocketError.html) is
   # raised. IPv4 and IPv6 address which port is 0 is not suitable for connect.
   # Unix domain socket which has no path is not suitable for connect.
   #
@@ -630,7 +630,7 @@ class BasicSocket < IO
   def connect_address(); end
 
   # Gets the
-  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-c-do_not_reverse_lookup)
+  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-c-do_not_reverse_lookup)
   # flag of *basicsocket*.
   #
   # ```ruby
@@ -649,7 +649,7 @@ class BasicSocket < IO
   def do_not_reverse_lookup(); end
 
   # Sets the
-  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-c-do_not_reverse_lookup)
+  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-c-do_not_reverse_lookup)
   # flag of *basicsocket*.
   #
   # ```ruby
@@ -699,9 +699,9 @@ class BasicSocket < IO
   # }
   # ```
   #
-  # If [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) object is
+  # If [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) object is
   # preferred over the binary string, use
-  # [`BasicSocket#remote_address`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-remote_address).
+  # [`BasicSocket#remote_address`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-remote_address).
   sig {returns(::T.untyped)}
   def getpeername(); end
 
@@ -713,15 +713,15 @@ class BasicSocket < IO
   # }
   # ```
   #
-  # If [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) object is
+  # If [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) object is
   # preferred over the binary string, use
-  # [`BasicSocket#local_address`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-local_address).
+  # [`BasicSocket#local_address`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-local_address).
   sig {returns(::T.untyped)}
   def getsockname(); end
 
   # Gets a socket option. These are protocol and system specific, see your local
   # system documentation for details. The option is returned as a
-  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html)
+  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html)
   # object.
   #
   # ### Parameters
@@ -736,7 +736,7 @@ class BasicSocket < IO
   # ### Examples
   #
   # Some socket options are integers with boolean values, in this case
-  # [`getsockopt`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-getsockopt)
+  # [`getsockopt`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-getsockopt)
   # could be called like this:
   #
   # ```ruby
@@ -748,7 +748,7 @@ class BasicSocket < IO
   # ```
   #
   # Some socket options are integers with numeric values, in this case
-  # [`getsockopt`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-getsockopt)
+  # [`getsockopt`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-getsockopt)
   # could be called like this:
   #
   # ```ruby
@@ -771,7 +771,7 @@ class BasicSocket < IO
   # ```
   #
   # In this case
-  # [`getsockopt`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-getsockopt)
+  # [`getsockopt`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-getsockopt)
   # could be called like this:
   #
   # ```ruby
@@ -784,14 +784,14 @@ class BasicSocket < IO
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def getsockopt(_, _1); end
+  def getsockopt(arg0, arg1); end
 
-  # Returns an [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html)
+  # Returns an [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html)
   # object for local address obtained by getsockname.
   #
   # Note that addrinfo.protocol is filled by 0.
@@ -828,18 +828,18 @@ class BasicSocket < IO
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def recv(*_); end
+  def recv(*arg0); end
 
   # Receives up to *maxlen* bytes from `socket` using recvfrom(2) after
   # O\_NONBLOCK is set for the underlying file descriptor. *flags* is zero or
   # more of the `MSG_` options. The result, *mesg*, is the data received.
   #
   # When recvfrom(2) returns 0,
-  # [`Socket#recv_nonblock`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-recv_nonblock)
+  # [`Socket#recv_nonblock`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-recv_nonblock)
   # returns an empty string as data. The meaning depends on the socket: EOF on
   # TCP, empty packet on UDP, etc.
   #
@@ -847,7 +847,7 @@ class BasicSocket < IO
   # *   `maxlen` - the number of bytes to receive from the socket
   # *   `flags` - zero or more of the `MSG_` options
   # *   `buf` - destination
-  #     [`String`](https://docs.ruby-lang.org/en/2.6.0/String.html) buffer
+  #     [`String`](https://docs.ruby-lang.org/en/2.7.0/String.html) buffer
   # *   `options` - keyword hash, supporting `exception: false`
   #
   #
@@ -868,28 +868,28 @@ class BasicSocket < IO
   # ```
   #
   # Refer to
-  # [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom)
+  # [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom)
   # for the exceptions that may be thrown if the call to *recv\_nonblock* fails.
   #
-  # [`BasicSocket#recv_nonblock`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-recv_nonblock)
+  # [`BasicSocket#recv_nonblock`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-recv_nonblock)
   # may raise any error corresponding to recvfrom(2) failure, including
   # Errno::EWOULDBLOCK.
   #
   # If the exception is Errno::EWOULDBLOCK or Errno::EAGAIN, it is extended by
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html).
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html).
   # So
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # can be used to rescue the exceptions for retrying recv\_nonblock.
   #
   # By specifying a keyword argument *exception* to `false`, you can indicate
   # that
-  # [`recv_nonblock`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-recv_nonblock)
+  # [`recv_nonblock`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-recv_nonblock)
   # should not raise an
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # exception, but return the symbol `:wait_readable` instead.
   #
   # ### See
-  # *   [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom)
+  # *   [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom)
   sig do
     params(
       len: ::T.untyped,
@@ -919,9 +919,9 @@ class BasicSocket < IO
   #
   # If :scm\_rights value is neither nil nor false, application expects
   # SCM\_RIGHTS control message. In this case, recvmsg creates
-  # [`IO`](https://docs.ruby-lang.org/en/2.6.0/IO.html) objects for each file
+  # [`IO`](https://docs.ruby-lang.org/en/2.7.0/IO.html) objects for each file
   # descriptors for
-  # [`Socket::AncillaryData#unix_rights`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html#method-i-unix_rights)
+  # [`Socket::AncillaryData#unix_rights`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html#method-i-unix_rights)
   # method.
   #
   # The return value is 4-elements array.
@@ -929,7 +929,7 @@ class BasicSocket < IO
   # *mesg* is a string of the received message.
   #
   # *sender\_addrinfo* is a sender socket address for connection-less socket. It
-  # is an [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html)
+  # is an [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html)
   # object. For connection-oriented socket such as TCP, sender\_addrinfo is
   # platform dependent.
   #
@@ -938,7 +938,7 @@ class BasicSocket < IO
   # 4.3BSD style old recvmsg system call.
   #
   # *controls* is ancillary data which is an array of
-  # [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html)
+  # [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html)
   # objects such as:
   #
   # ```ruby
@@ -974,15 +974,15 @@ class BasicSocket < IO
   # manner.
   #
   # It is similar to
-  # [`BasicSocket#recvmsg`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-recvmsg)
+  # [`BasicSocket#recvmsg`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-recvmsg)
   # but non-blocking flag is set before the system call and it doesn't retry the
   # system call.
   #
   # By specifying a keyword argument *exception* to `false`, you can indicate
   # that
-  # [`recvmsg_nonblock`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-recvmsg_nonblock)
+  # [`recvmsg_nonblock`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-recvmsg_nonblock)
   # should not raise an
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # exception, but return the symbol `:wait_readable` instead.
   sig do
     params(
@@ -996,7 +996,7 @@ class BasicSocket < IO
   end
   def recvmsg_nonblock(dlen=T.unsafe(nil), flags=T.unsafe(nil), clen=T.unsafe(nil), scm_rights: T.unsafe(nil), exception: T.unsafe(nil)); end
 
-  # Returns an [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html)
+  # Returns an [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html)
   # object for remote address obtained by getpeername.
   #
   # Note that addrinfo.protocol is filled by 0.
@@ -1031,11 +1031,11 @@ class BasicSocket < IO
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def send(*_); end
+  def send(*arg0); end
 
   # sendmsg sends a message using sendmsg(2) system call in blocking manner.
   #
@@ -1045,12 +1045,12 @@ class BasicSocket < IO
   #
   # *dest\_sockaddr* is a destination socket address for connection-less socket.
   # It should be a sockaddr such as a result of
-  # [`Socket.sockaddr_in`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-sockaddr_in).
-  # An [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) object
+  # [`Socket.sockaddr_in`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-sockaddr_in).
+  # An [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) object
   # can be used too.
   #
   # *controls* is a list of ancillary data. The element of *controls* should be
-  # [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html)
+  # [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html)
   # or 3-elements array. The 3-element array should contains cmsg\_level,
   # cmsg\_type and data.
   #
@@ -1079,19 +1079,19 @@ class BasicSocket < IO
   end
   def sendmsg(mesg, flags=T.unsafe(nil), dest_sockaddr=T.unsafe(nil), *controls); end
 
-  # [`sendmsg_nonblock`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-sendmsg_nonblock)
+  # [`sendmsg_nonblock`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-sendmsg_nonblock)
   # sends a message using sendmsg(2) system call in non-blocking manner.
   #
   # It is similar to
-  # [`BasicSocket#sendmsg`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-sendmsg)
+  # [`BasicSocket#sendmsg`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-sendmsg)
   # but the non-blocking flag is set before the system call and it doesn't retry
   # the system call.
   #
   # By specifying a keyword argument *exception* to `false`, you can indicate
   # that
-  # [`sendmsg_nonblock`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-sendmsg_nonblock)
+  # [`sendmsg_nonblock`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-sendmsg_nonblock)
   # should not raise an
-  # [`IO::WaitWritable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitWritable.html)
+  # [`IO::WaitWritable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitWritable.html)
   # exception, but return the symbol `:wait_writable` instead.
   sig do
     params(
@@ -1122,18 +1122,18 @@ class BasicSocket < IO
   #         passed, with length of sizeof(int).
   #     *   true or false: 1 or 0 (respectively) is assigned to an int, and the
   #         int is passed as for an
-  #         [`Integer`](https://docs.ruby-lang.org/en/2.6.0/Integer.html). Note
+  #         [`Integer`](https://docs.ruby-lang.org/en/2.7.0/Integer.html). Note
   #         that `false` must be passed, not `nil`.
   #     *   String: the string's data and length is passed to the socket.
   #
   # *   `socketoption` is an instance of
-  #     [`Socket::Option`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html)
+  #     [`Socket::Option`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html)
   #
   #
   # ### Examples
   #
   # Some socket options are integers with boolean values, in this case
-  # [`setsockopt`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-setsockopt)
+  # [`setsockopt`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-setsockopt)
   # could be called like this:
   #
   # ```ruby
@@ -1143,7 +1143,7 @@ class BasicSocket < IO
   # ```
   #
   # Some socket options are integers with numeric values, in this case
-  # [`setsockopt`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-setsockopt)
+  # [`setsockopt`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-setsockopt)
   # could be called like this:
   #
   # ```ruby
@@ -1164,7 +1164,7 @@ class BasicSocket < IO
   # ```
   #
   # In this case
-  # [`setsockopt`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-setsockopt)
+  # [`setsockopt`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-setsockopt)
   # could be called like this:
   #
   # ```ruby
@@ -1174,11 +1174,11 @@ class BasicSocket < IO
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def setsockopt(*_); end
+  def setsockopt(*arg0); end
 
   # Calls shutdown(2) system call.
   #
@@ -1194,7 +1194,7 @@ class BasicSocket < IO
   # *   :RDWR, :SHUT\_RDWR, "RDWR" and "SHUT\_RDWR" are accepted as
   #     Socket::SHUT\_RDWR.
   #
-  #     [`UNIXSocket.pair`](https://docs.ruby-lang.org/en/2.6.0/UNIXSocket.html#method-c-pair)
+  #     [`UNIXSocket.pair`](https://docs.ruby-lang.org/en/2.7.0/UNIXSocket.html#method-c-pair)
   #     {|s1, s2|
   #
   # ```ruby
@@ -1209,14 +1209,14 @@ class BasicSocket < IO
   #     }
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def shutdown(*_); end
+  def shutdown(*arg0); end
 
   # Gets the global
-  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-c-do_not_reverse_lookup)
+  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-c-do_not_reverse_lookup)
   # flag.
   #
   # ```ruby
@@ -1226,11 +1226,11 @@ class BasicSocket < IO
   def self.do_not_reverse_lookup(); end
 
   # Sets the global
-  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-c-do_not_reverse_lookup)
+  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-c-do_not_reverse_lookup)
   # flag.
   #
   # The flag is used for initial value of
-  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-c-do_not_reverse_lookup)
+  # [`do_not_reverse_lookup`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-c-do_not_reverse_lookup)
   # for each socket.
   #
   # ```ruby
@@ -1258,19 +1258,19 @@ class BasicSocket < IO
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.for_fd(_); end
+  def self.for_fd(arg0); end
 end
 
-# [`IPSocket`](https://docs.ruby-lang.org/en/2.6.0/IPSocket.html) is the super
-# class of [`TCPSocket`](https://docs.ruby-lang.org/en/2.6.0/TCPSocket.html) and
-# [`UDPSocket`](https://docs.ruby-lang.org/en/2.6.0/UDPSocket.html).
+# [`IPSocket`](https://docs.ruby-lang.org/en/2.7.0/IPSocket.html) is the super
+# class of [`TCPSocket`](https://docs.ruby-lang.org/en/2.7.0/TCPSocket.html) and
+# [`UDPSocket`](https://docs.ruby-lang.org/en/2.7.0/UDPSocket.html).
 class IPSocket < BasicSocket
   extend T::Generic
-  Elem = type_member(:out, fixed: String)
+  Elem = type_member(:out) {{fixed: String}}
 
   # Returns the local address as an array which contains address\_family, port,
   # hostname and numeric\_address.
@@ -1291,15 +1291,15 @@ class IPSocket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def addr(*_); end
+  def addr(*arg0); end
 
   # Returns the remote address as an array which contains address\_family, port,
   # hostname and numeric\_address. It is defined for connection oriented socket
-  # such as [`TCPSocket`](https://docs.ruby-lang.org/en/2.6.0/TCPSocket.html).
+  # such as [`TCPSocket`](https://docs.ruby-lang.org/en/2.7.0/TCPSocket.html).
   #
   # If `reverse_lookup` is `true` or `:hostname`, hostname is obtained from
   # numeric\_address using reverse lookup. Or if it is `false`, or `:numeric`,
@@ -1317,11 +1317,11 @@ class IPSocket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def peeraddr(*_); end
+  def peeraddr(*arg0); end
 
   # Receives a message and return the message as a string and an address which
   # the message come from.
@@ -1341,11 +1341,11 @@ class IPSocket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def recvfrom(*_); end
+  def recvfrom(*arg0); end
 
   # Lookups the IP address of *host*.
   #
@@ -1358,28 +1358,28 @@ class IPSocket < BasicSocket
   #
   #
   # Also aliased as:
-  # [`getaddress_orig`](https://docs.ruby-lang.org/en/2.6.0/IPSocket.html#method-c-getaddress_orig)
+  # [`getaddress_orig`](https://docs.ruby-lang.org/en/2.7.0/IPSocket.html#method-c-getaddress_orig)
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.getaddress(_); end
+  def self.getaddress(arg0); end
 end
 
-# [`Class`](https://docs.ruby-lang.org/en/2.6.0/Class.html) `Socket` provides
+# [`Class`](https://docs.ruby-lang.org/en/2.7.0/Class.html) `Socket` provides
 # access to the underlying operating system socket implementations. It can be
 # used to provide more operating system specific functionality than the
 # protocol-specific socket classes.
 #
 # The constants defined under
-# [`Socket::Constants`](https://docs.ruby-lang.org/en/2.6.0/Socket/Constants.html)
+# [`Socket::Constants`](https://docs.ruby-lang.org/en/2.7.0/Socket/Constants.html)
 # are also defined under
-# [`Socket`](https://docs.ruby-lang.org/en/2.6.0/Socket.html). For example,
-# [`Socket::AF_INET`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#AF_INET)
+# [`Socket`](https://docs.ruby-lang.org/en/2.7.0/Socket.html). For example,
+# [`Socket::AF_INET`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#AF_INET)
 # is usable as well as Socket::Constants::AF\_INET. See
-# [`Socket::Constants`](https://docs.ruby-lang.org/en/2.6.0/Socket/Constants.html)
+# [`Socket::Constants`](https://docs.ruby-lang.org/en/2.7.0/Socket/Constants.html)
 # for the list of constants.
 #
 # ### What's a socket?
@@ -1387,23 +1387,23 @@ end
 # Sockets are endpoints of a bidirectional communication channel. Sockets can
 # communicate within a process, between processes on the same machine or between
 # different machines. There are many types of socket:
-# [`TCPSocket`](https://docs.ruby-lang.org/en/2.6.0/TCPSocket.html),
-# [`UDPSocket`](https://docs.ruby-lang.org/en/2.6.0/UDPSocket.html) or
-# [`UNIXSocket`](https://docs.ruby-lang.org/en/2.6.0/UNIXSocket.html) for
+# [`TCPSocket`](https://docs.ruby-lang.org/en/2.7.0/TCPSocket.html),
+# [`UDPSocket`](https://docs.ruby-lang.org/en/2.7.0/UDPSocket.html) or
+# [`UNIXSocket`](https://docs.ruby-lang.org/en/2.7.0/UNIXSocket.html) for
 # example.
 #
 # Sockets have their own vocabulary:
 #
 # **domain:** The family of protocols:
-# *   [`Socket::PF_INET`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#PF_INET)
-# *   [`Socket::PF_INET6`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#PF_INET6)
-# *   [`Socket::PF_UNIX`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#PF_UNIX)
+# *   [`Socket::PF_INET`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#PF_INET)
+# *   [`Socket::PF_INET6`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#PF_INET6)
+# *   [`Socket::PF_UNIX`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#PF_UNIX)
 # *   etc.
 #
 #
 # **type:** The type of communications between the two endpoints, typically
-# *   [`Socket::SOCK_STREAM`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#SOCK_STREAM)
-# *   [`Socket::SOCK_DGRAM`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#SOCK_DGRAM).
+# *   [`Socket::SOCK_STREAM`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#SOCK_STREAM)
+# *   [`Socket::SOCK_DGRAM`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#SOCK_DGRAM).
 #
 #
 # **protocol:** Typically *zero*. This may be used to identify a variant of a
@@ -1413,16 +1413,16 @@ end
 # *   a string (hostname, IPv4 or IPv6 address or `broadcast` which specifies a
 #     broadcast address)
 # *   a zero-length string which specifies
-#     [`INADDR_ANY`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#INADDR_ANY)
+#     [`INADDR_ANY`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#INADDR_ANY)
 # *   an integer (interpreted as binary address in host byte order).
 #
 #
 # ### Quick start
 #
 # Many of the classes, such as
-# [`TCPSocket`](https://docs.ruby-lang.org/en/2.6.0/TCPSocket.html),
-# [`UDPSocket`](https://docs.ruby-lang.org/en/2.6.0/UDPSocket.html) or
-# [`UNIXSocket`](https://docs.ruby-lang.org/en/2.6.0/UNIXSocket.html), ease the
+# [`TCPSocket`](https://docs.ruby-lang.org/en/2.7.0/TCPSocket.html),
+# [`UDPSocket`](https://docs.ruby-lang.org/en/2.7.0/UDPSocket.html) or
+# [`UNIXSocket`](https://docs.ruby-lang.org/en/2.7.0/UNIXSocket.html), ease the
 # use of sockets comparatively to the equivalent C programming interface.
 #
 # Let's create an internet socket using the IPv4 protocol in a C-like manner:
@@ -1435,7 +1435,7 @@ end
 # ```
 #
 # You could also use the
-# [`TCPSocket`](https://docs.ruby-lang.org/en/2.6.0/TCPSocket.html) class:
+# [`TCPSocket`](https://docs.ruby-lang.org/en/2.7.0/TCPSocket.html) class:
 #
 # ```ruby
 # s = TCPSocket.new 'example.com', 80
@@ -1470,9 +1470,9 @@ end
 # s.close             # close socket when done
 # ```
 #
-# ### [`Exception`](https://docs.ruby-lang.org/en/2.6.0/Exception.html) Handling
+# ### [`Exception`](https://docs.ruby-lang.org/en/2.7.0/Exception.html) Handling
 #
-# Ruby's [`Socket`](https://docs.ruby-lang.org/en/2.6.0/Socket.html)
+# Ruby's [`Socket`](https://docs.ruby-lang.org/en/2.7.0/Socket.html)
 # implementation raises exceptions based on the error generated by the system
 # dependent implementation. This is why the methods are documented in a way that
 # isolate Unix-based system exceptions from Windows based exceptions. If more
@@ -1482,21 +1482,21 @@ end
 # ### Convenience methods
 #
 # Although the general way to create socket is
-# [`Socket.new`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-new),
+# [`Socket.new`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-new),
 # there are several methods of socket creation for most cases.
 #
 # TCP client socket
-# :   [`Socket.tcp`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-tcp),
-#     [`TCPSocket.open`](https://docs.ruby-lang.org/en/2.6.0/IO.html#method-c-open)
+# :   [`Socket.tcp`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-tcp),
+#     [`TCPSocket.open`](https://docs.ruby-lang.org/en/2.7.0/IO.html#method-c-open)
 # TCP server socket
-# :   [`Socket.tcp_server_loop`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-tcp_server_loop),
-#     [`TCPServer.open`](https://docs.ruby-lang.org/en/2.6.0/IO.html#method-c-open)
+# :   [`Socket.tcp_server_loop`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-tcp_server_loop),
+#     [`TCPServer.open`](https://docs.ruby-lang.org/en/2.7.0/IO.html#method-c-open)
 # UNIX client socket
-# :   [`Socket.unix`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-unix),
-#     [`UNIXSocket.open`](https://docs.ruby-lang.org/en/2.6.0/IO.html#method-c-open)
+# :   [`Socket.unix`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-unix),
+#     [`UNIXSocket.open`](https://docs.ruby-lang.org/en/2.7.0/IO.html#method-c-open)
 # UNIX server socket
-# :   [`Socket.unix_server_loop`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-unix_server_loop),
-#     [`UNIXServer.open`](https://docs.ruby-lang.org/en/2.6.0/IO.html#method-c-open)
+# :   [`Socket.unix_server_loop`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-unix_server_loop),
+#     [`UNIXServer.open`](https://docs.ruby-lang.org/en/2.7.0/IO.html#method-c-open)
 #
 #
 # ### Documentation by
@@ -1510,7 +1510,7 @@ end
 # Ruby* from The Pragmatic Bookshelf.
 class Socket < BasicSocket
   extend T::Generic
-  Elem = type_member(:out, fixed: String)
+  Elem = type_member(:out) {{fixed: String}}
 
   # AppleTalk protocol
   AF_APPLETALK = ::T.let(nil, ::T.untyped)
@@ -1572,7 +1572,7 @@ class Socket < BasicSocket
   EAI_OVERFLOW = ::T.let(nil, ::T.untyped)
   # Servname not supported for socket type
   EAI_SERVICE = ::T.let(nil, ::T.untyped)
-  # [`Socket`](https://docs.ruby-lang.org/en/2.6.0/Socket.html) type not
+  # [`Socket`](https://docs.ruby-lang.org/en/2.7.0/Socket.html) type not
   # supported
   EAI_SOCKTYPE = ::T.let(nil, ::T.untyped)
   # System error returned in errno
@@ -1616,7 +1616,7 @@ class Socket < BasicSocket
   # Multicast group for all systems on this subset
   INADDR_ALLHOSTS_GROUP = ::T.let(nil, ::T.untyped)
   # A socket bound to
-  # [`INADDR_ANY`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#INADDR_ANY)
+  # [`INADDR_ANY`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#INADDR_ANY)
   # receives packets from all interfaces and sends from the default IP address
   INADDR_ANY = ::T.let(nil, ::T.untyped)
   # The network broadcast address
@@ -1820,7 +1820,9 @@ class Socket < BasicSocket
   MSG_DONTROUTE = ::T.let(nil, ::T.untyped)
   # This message should be non-blocking
   MSG_DONTWAIT = ::T.let(nil, ::T.untyped)
-  # [`Data`](https://docs.ruby-lang.org/en/2.6.0/Data.html) completes record
+  # [Data completes connection](https://ruby-doc.org/stdlib-3.0.0/libdoc/socket/rdoc/Socket.html#MSG_EOF)
+  MSG_EOF = ::T.let(nil, ::T.untyped) 
+  # [`Data`](https://docs.ruby-lang.org/en/2.7.0/Data.html) completes record
   MSG_EOR = ::T.let(nil, ::T.untyped)
   # Fetch message from error queue
   MSG_ERRQUEUE = ::T.let(nil, ::T.untyped)
@@ -1831,7 +1833,7 @@ class Socket < BasicSocket
   MSG_MORE = ::T.let(nil, ::T.untyped)
   # Do not generate SIGPIPE
   MSG_NOSIGNAL = ::T.let(nil, ::T.untyped)
-  # [`Process`](https://docs.ruby-lang.org/en/2.6.0/Process.html) out-of-band
+  # [`Process`](https://docs.ruby-lang.org/en/2.7.0/Process.html) out-of-band
   # data
   MSG_OOB = ::T.let(nil, ::T.untyped)
   # Peek at incoming message
@@ -1840,7 +1842,7 @@ class Socket < BasicSocket
   MSG_PROXY = ::T.let(nil, ::T.untyped)
   MSG_RST = ::T.let(nil, ::T.untyped)
   MSG_SYN = ::T.let(nil, ::T.untyped)
-  # [`Data`](https://docs.ruby-lang.org/en/2.6.0/Data.html) discarded before
+  # [`Data`](https://docs.ruby-lang.org/en/2.7.0/Data.html) discarded before
   # delivery
   MSG_TRUNC = ::T.let(nil, ::T.untyped)
   # Wait for full request or error
@@ -1929,7 +1931,7 @@ class Socket < BasicSocket
   SOL_UDP = ::T.let(nil, ::T.untyped)
   # Maximum connection requests that may be queued for a socket
   SOMAXCONN = ::T.let(nil, ::T.untyped)
-  # [`Socket`](https://docs.ruby-lang.org/en/2.6.0/Socket.html) has had listen()
+  # [`Socket`](https://docs.ruby-lang.org/en/2.7.0/Socket.html) has had listen()
   # called on it
   SO_ACCEPTCONN = ::T.let(nil, ::T.untyped)
   # Attach an accept filter
@@ -1938,7 +1940,7 @@ class Socket < BasicSocket
   SO_BINDTODEVICE = ::T.let(nil, ::T.untyped)
   # Permit sending of broadcast messages
   SO_BROADCAST = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) the threshold in
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) the threshold in
   # microseconds for low latency polling (Linux 3.11)
   SO_BUSY_POLL = ::T.let(nil, ::T.untyped)
   # Debug info recording
@@ -1952,7 +1954,7 @@ class Socket < BasicSocket
   # Get and clear the error status
   SO_ERROR = ::T.let(nil, ::T.untyped)
   # Obtain filter set by
-  # [`SO_ATTACH_FILTER`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#SO_ATTACH_FILTER)
+  # [`SO_ATTACH_FILTER`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#SO_ATTACH_FILTER)
   # (Linux 3.8)
   SO_GET_FILTER = ::T.let(nil, ::T.untyped)
   # Keep connections alive
@@ -1961,12 +1963,12 @@ class Socket < BasicSocket
   SO_LINGER = ::T.let(nil, ::T.untyped)
   # Lock the filter attached to a socket (Linux 3.9)
   SO_LOCK_FILTER = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) the mark for
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) the mark for
   # mark-based routing (Linux 2.6.25)
   SO_MARK = ::T.let(nil, ::T.untyped)
   # Cap the rate computed by transport layer. [bytes per second] (Linux 3.13)
   SO_MAX_PACING_RATE = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) netns of a socket
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) netns of a socket
   # (Linux 3.4)
   SO_NOFCS = ::T.let(nil, ::T.untyped)
   # Disable checksums
@@ -1974,12 +1976,12 @@ class Socket < BasicSocket
   # Leave received out-of-band data in-line
   SO_OOBINLINE = ::T.let(nil, ::T.untyped)
   # Receive
-  # [`SCM_CREDENTIALS`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#SCM_CREDENTIALS)
+  # [`SCM_CREDENTIALS`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#SCM_CREDENTIALS)
   # messages
   SO_PASSCRED = ::T.let(nil, ::T.untyped)
   # Toggle security context passing (Linux 2.6.18)
   SO_PASSSEC = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) the peek offset (Linux
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) the peek offset (Linux
   # 3.4)
   SO_PEEK_OFF = ::T.let(nil, ::T.untyped)
   # The credentials of the foreign process connected to this socket
@@ -2021,7 +2023,7 @@ class Socket < BasicSocket
   SO_SNDTIMEO = ::T.let(nil, ::T.untyped)
   # Receive timestamp with datagrams (timeval)
   SO_TIMESTAMP = ::T.let(nil, ::T.untyped)
-  # [`Time`](https://docs.ruby-lang.org/en/2.6.0/Time.html) stamping of incoming
+  # [`Time`](https://docs.ruby-lang.org/en/2.7.0/Time.html) stamping of incoming
   # and outgoing packets (Linux 2.6.30)
   SO_TIMESTAMPING = ::T.let(nil, ::T.untyped)
   # Receive nanosecond timestamp with datagrams (timespec)
@@ -2047,12 +2049,12 @@ class Socket < BasicSocket
   TCP_KEEPCNT = ::T.let(nil, ::T.untyped)
   # Idle time before keepalive probes are sent (Linux 2.4, glibc 2.2)
   TCP_KEEPIDLE = ::T.let(nil, ::T.untyped)
-  # [`Time`](https://docs.ruby-lang.org/en/2.6.0/Time.html) between keepalive
+  # [`Time`](https://docs.ruby-lang.org/en/2.7.0/Time.html) between keepalive
   # probes (Linux 2.4, glibc 2.2)
   TCP_KEEPINTVL = ::T.let(nil, ::T.untyped)
   # Lifetime of orphaned FIN\_WAIT2 sockets (Linux 2.4, glibc 2.2)
   TCP_LINGER2 = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) maximum segment size
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) maximum segment size
   TCP_MAXSEG = ::T.let(nil, ::T.untyped)
   # Use MD5 digests (RFC2385, Linux 2.6.20, glibc 2.7)
   TCP_MD5SIG = ::T.let(nil, ::T.untyped)
@@ -2066,7 +2068,7 @@ class Socket < BasicSocket
   TCP_REPAIR = ::T.let(nil, ::T.untyped)
   # Options for repair mode (Linux 3.5, glibc 2.18)
   TCP_REPAIR_OPTIONS = ::T.let(nil, ::T.untyped)
-  # [`Queue`](https://docs.ruby-lang.org/en/2.6.0/Queue.html) for repair mode
+  # [`Queue`](https://docs.ruby-lang.org/en/2.7.0/Queue.html) for repair mode
   # (Linux 3.5, glibc 2.18)
   TCP_REPAIR_QUEUE = ::T.let(nil, ::T.untyped)
   # Number of SYN retransmits before a connection is dropped (Linux 2.4, glibc
@@ -2087,8 +2089,8 @@ class Socket < BasicSocket
   UDP_CORK = ::T.let(nil, ::T.untyped)
 
   # Accepts a next connection. Returns a new
-  # [`Socket`](https://docs.ruby-lang.org/en/2.6.0/Socket.html) object and
-  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) object.
+  # [`Socket`](https://docs.ruby-lang.org/en/2.7.0/Socket.html) object and
+  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) object.
   #
   # ```ruby
   # serv = Socket.new(:INET, :STREAM, 0)
@@ -2103,7 +2105,7 @@ class Socket < BasicSocket
   # Accepts an incoming connection using accept(2) after O\_NONBLOCK is set for
   # the underlying file descriptor. It returns an array containing the accepted
   # socket for the incoming connection, *client\_socket*, and an
-  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html),
+  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html),
   # *client\_addrinfo*.
   #
   # ### Example
@@ -2138,32 +2140,32 @@ class Socket < BasicSocket
   # ```
   #
   # Refer to
-  # [`Socket#accept`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept)
+  # [`Socket#accept`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept)
   # for the exceptions that may be thrown if the call to *accept\_nonblock*
   # fails.
   #
-  # [`Socket#accept_nonblock`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept_nonblock)
+  # [`Socket#accept_nonblock`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept_nonblock)
   # may raise any error corresponding to accept(2) failure, including
   # Errno::EWOULDBLOCK.
   #
   # If the exception is Errno::EWOULDBLOCK, Errno::EAGAIN,
-  # [`Errno::ECONNABORTED`](https://docs.ruby-lang.org/en/2.6.0/Errno/ECONNABORTED.html)
-  # or [`Errno::EPROTO`](https://docs.ruby-lang.org/en/2.6.0/Errno/EPROTO.html),
+  # [`Errno::ECONNABORTED`](https://docs.ruby-lang.org/en/2.7.0/Errno/ECONNABORTED.html)
+  # or [`Errno::EPROTO`](https://docs.ruby-lang.org/en/2.7.0/Errno/EPROTO.html),
   # it is extended by
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html).
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html).
   # So
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # can be used to rescue the exceptions for retrying accept\_nonblock.
   #
   # By specifying a keyword argument *exception* to `false`, you can indicate
   # that
-  # [`accept_nonblock`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept_nonblock)
+  # [`accept_nonblock`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept_nonblock)
   # should not raise an
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # exception, but return the symbol `:wait_readable` instead.
   #
   # ### See
-  # *   [`Socket#accept`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept)
+  # *   [`Socket#accept`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept)
   sig do
     params(
       exception: ::T.untyped,
@@ -2176,7 +2178,7 @@ class Socket < BasicSocket
   #
   # ### Parameter
   # *   `local_sockaddr` - the `struct` sockaddr contained in a string or an
-  #     [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) object
+  #     [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) object
   #
   #
   # ### Example
@@ -2224,7 +2226,7 @@ class Socket < BasicSocket
   #
   #
   # On unix-based based systems if the address family of the calling `socket` is
-  # [`Socket::AF_UNIX`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#AF_UNIX)
+  # [`Socket::AF_UNIX`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#AF_UNIX)
   # the follow exceptions may be raised if the call to *bind* fails:
   # *   Errno::EACCES - search permission is denied for a component of the
   #     prefix path or write access to the `socket` is denied
@@ -2264,18 +2266,18 @@ class Socket < BasicSocket
   # *   bind function in Microsoft's Winsock functions reference
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def bind(_); end
+  def bind(arg0); end
 
   # Requests a connection to be made on the given `remote_sockaddr`. Returns 0
   # if successful, otherwise an exception is raised.
   #
   # ### Parameter
   # *   `remote_sockaddr` - the `struct` sockaddr contained in a string or
-  #     [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) object
+  #     [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) object
   #
   #
   # ### Example:
@@ -2306,7 +2308,7 @@ class Socket < BasicSocket
   # *   Errno::EBADF - the `socket` is not a valid file descriptor
   # *   Errno::ECONNREFUSED - the target *sockaddr* was not listening for
   #     connections refused the connection request
-  # *   [`Errno::ECONNRESET`](https://docs.ruby-lang.org/en/2.6.0/Errno/ECONNRESET.html)
+  # *   [`Errno::ECONNRESET`](https://docs.ruby-lang.org/en/2.7.0/Errno/ECONNRESET.html)
   #     - the remote host reset the connection request
   # *   Errno::EFAULT - the *sockaddr* cannot be accessed
   # *   Errno::EHOSTUNREACH - the destination host cannot be reached (probably
@@ -2339,7 +2341,7 @@ class Socket < BasicSocket
   #
   #
   # On unix-based systems if the address family of the calling `socket` is
-  # [`AF_UNIX`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#AF_UNIX) the
+  # [`AF_UNIX`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#AF_UNIX) the
   # follow exceptions may be raised if the call to *connect* fails:
   # *   Errno::EIO - an i/o error occurred while reading from or writing to the
   #     file system
@@ -2365,7 +2367,7 @@ class Socket < BasicSocket
   # *   Errno::EALREADY - see Errno::EINVAL
   # *   Errno::EADDRNOTAVAIL - the remote address is not a valid address, such
   #     as ADDR\_ANY TODO check ADDRANY TO
-  #     [`INADDR_ANY`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#INADDR_ANY)
+  #     [`INADDR_ANY`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#INADDR_ANY)
   # *   Errno::EAFNOSUPPORT - addresses in the specified family cannot be used
   #     with with this `socket`
   # *   Errno::ECONNREFUSED - the target *sockaddr* was not listening for
@@ -2392,11 +2394,11 @@ class Socket < BasicSocket
   # *   connect function in Microsoft's Winsock functions reference
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def connect(_); end
+  def connect(arg0); end
 
   # Requests a connection to be made on the given `remote_sockaddr` after
   # O\_NONBLOCK is set for the underlying file descriptor. Returns 0 if
@@ -2430,25 +2432,25 @@ class Socket < BasicSocket
   # ```
   #
   # Refer to
-  # [`Socket#connect`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-connect)
+  # [`Socket#connect`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-connect)
   # for the exceptions that may be thrown if the call to *connect\_nonblock*
   # fails.
   #
-  # [`Socket#connect_nonblock`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-connect_nonblock)
+  # [`Socket#connect_nonblock`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-connect_nonblock)
   # may raise any error corresponding to connect(2) failure, including
   # Errno::EINPROGRESS.
   #
   # If the exception is Errno::EINPROGRESS, it is extended by
-  # [`IO::WaitWritable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitWritable.html).
+  # [`IO::WaitWritable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitWritable.html).
   # So
-  # [`IO::WaitWritable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitWritable.html)
+  # [`IO::WaitWritable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitWritable.html)
   # can be used to rescue the exceptions for retrying connect\_nonblock.
   #
   # By specifying a keyword argument *exception* to `false`, you can indicate
   # that
-  # [`connect_nonblock`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-connect_nonblock)
+  # [`connect_nonblock`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-connect_nonblock)
   # should not raise an
-  # [`IO::WaitWritable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitWritable.html)
+  # [`IO::WaitWritable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitWritable.html)
   # exception, but return the symbol `:wait_writable` instead.
   #
   # ### See
@@ -2467,25 +2469,25 @@ class Socket < BasicSocket
 
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
-  def initialize(*_); end
+  def initialize(*arg0); end
 
   # enable the socket option
-  # [`IPV6_V6ONLY`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#IPV6_V6ONLY)
+  # [`IPV6_V6ONLY`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#IPV6_V6ONLY)
   # if
-  # [`IPV6_V6ONLY`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#IPV6_V6ONLY)
+  # [`IPV6_V6ONLY`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#IPV6_V6ONLY)
   # is available.
   sig {returns(::T.untyped)}
   def ipv6only!(); end
 
   # Listens for connections, using the specified `int` as the backlog. A call to
   # *listen* only applies if the `socket` is of type
-  # [`SOCK_STREAM`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#SOCK_STREAM)
+  # [`SOCK_STREAM`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#SOCK_STREAM)
   # or
-  # [`SOCK_SEQPACKET`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#SOCK_SEQPACKET).
+  # [`SOCK_SEQPACKET`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#SOCK_SEQPACKET).
   #
   # ### Parameter
   # *   `backlog` - the maximum length of the queue for pending connections.
@@ -2559,11 +2561,11 @@ class Socket < BasicSocket
   # *   listen function in Microsoft's Winsock functions reference
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def listen(_); end
+  def listen(arg0); end
 
   # Receives up to *maxlen* bytes from `socket`. *flags* is zero or more of the
   # `MSG_` options. The first element of the results, *mesg*, is the data
@@ -2606,20 +2608,20 @@ class Socket < BasicSocket
   # the call to *recvfrom* fails:
   # *   Errno::EAGAIN - the `socket` file descriptor is marked as O\_NONBLOCK
   #     and no data is waiting to be received; or
-  #     [`MSG_OOB`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#MSG_OOB) is
+  #     [`MSG_OOB`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#MSG_OOB) is
   #     set and no out-of-band data is available and either the `socket` file
   #     descriptor is marked as O\_NONBLOCK or the `socket` does not support
   #     blocking to wait for out-of-band-data
   # *   Errno::EWOULDBLOCK - see Errno::EAGAIN
   # *   Errno::EBADF - the `socket` is not a valid file descriptor
-  # *   [`Errno::ECONNRESET`](https://docs.ruby-lang.org/en/2.6.0/Errno/ECONNRESET.html)
+  # *   [`Errno::ECONNRESET`](https://docs.ruby-lang.org/en/2.7.0/Errno/ECONNRESET.html)
   #     - a connection was forcibly closed by a peer
   # *   Errno::EFAULT - the socket's internal buffer, address or address length
   #     cannot be accessed or written
   # *   Errno::EINTR - a signal interrupted *recvfrom* before any data was
   #     available
   # *   Errno::EINVAL - the
-  #     [`MSG_OOB`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#MSG_OOB)
+  #     [`MSG_OOB`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#MSG_OOB)
   #     flag is set and no out-of-band data is available
   # *   Errno::EIO - an i/o error occurred while reading from or writing to the
   #     filesystem
@@ -2650,9 +2652,9 @@ class Socket < BasicSocket
   #     or the service provider is still processing a callback function
   # *   Errno::EINVAL - `socket` has not been bound with a call to *bind*, or an
   #     unknown flag was specified, or
-  #     [`MSG_OOB`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#MSG_OOB) was
+  #     [`MSG_OOB`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#MSG_OOB) was
   #     specified for a socket with
-  #     [`SO_OOBINLINE`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#SO_OOBINLINE)
+  #     [`SO_OOBINLINE`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#SO_OOBINLINE)
   #     enabled, or (for byte stream-style sockets only) the internal len
   #     parameter on `socket` was zero or negative
   # *   Errno::EISCONN - `socket` is already connected. The call to *recvfrom*
@@ -2661,9 +2663,9 @@ class Socket < BasicSocket
   # *   Errno::ENETRESET - the connection has been broken due to the keep-alive
   #     activity detecting a failure while the operation was in progress.
   # *   Errno::EOPNOTSUPP -
-  #     [`MSG_OOB`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#MSG_OOB) was
+  #     [`MSG_OOB`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#MSG_OOB) was
   #     specified, but `socket` is not stream-style such as type
-  #     [`SOCK_STREAM`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#SOCK_STREAM).
+  #     [`SOCK_STREAM`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#SOCK_STREAM).
   #     OOB data is not supported in the communication domain associated with
   #     `socket`, or `socket` is unidirectional and supports only send
   #     operations
@@ -2675,18 +2677,18 @@ class Socket < BasicSocket
   #     buffer and was truncated.
   # *   Errno::ETIMEDOUT - the connection has been dropped, because of a network
   #     failure or because the system on the other end went down without notice
-  # *   [`Errno::ECONNRESET`](https://docs.ruby-lang.org/en/2.6.0/Errno/ECONNRESET.html)
+  # *   [`Errno::ECONNRESET`](https://docs.ruby-lang.org/en/2.7.0/Errno/ECONNRESET.html)
   #     - the virtual circuit was reset by the remote side executing a hard or
   #     abortive close. The application should close the socket; it is no longer
   #     usable. On a UDP-datagram socket this error indicates a previous send
   #     operation resulted in an ICMP Port Unreachable message.
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def recvfrom(*_); end
+  def recvfrom(*arg0); end
 
   # Receives up to *maxlen* bytes from `socket` using recvfrom(2) after
   # O\_NONBLOCK is set for the underlying file descriptor. *flags* is zero or
@@ -2695,7 +2697,7 @@ class Socket < BasicSocket
   # protocol-specific address information of the sender.
   #
   # When recvfrom(2) returns 0,
-  # [`Socket#recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom_nonblock)
+  # [`Socket#recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom_nonblock)
   # returns an empty string as data. The meaning depends on the socket: EOF on
   # TCP, empty packet on UDP, etc.
   #
@@ -2703,7 +2705,7 @@ class Socket < BasicSocket
   # *   `maxlen` - the maximum number of bytes to receive from the socket
   # *   `flags` - zero or more of the `MSG_` options
   # *   `outbuf` - destination
-  #     [`String`](https://docs.ruby-lang.org/en/2.6.0/String.html) buffer
+  #     [`String`](https://docs.ruby-lang.org/en/2.7.0/String.html) buffer
   # *   `opts` - keyword hash, supporting `exception: false`
   #
   #
@@ -2740,29 +2742,29 @@ class Socket < BasicSocket
   # ```
   #
   # Refer to
-  # [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom)
+  # [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom)
   # for the exceptions that may be thrown if the call to *recvfrom\_nonblock*
   # fails.
   #
-  # [`Socket#recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom_nonblock)
+  # [`Socket#recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom_nonblock)
   # may raise any error corresponding to recvfrom(2) failure, including
   # Errno::EWOULDBLOCK.
   #
   # If the exception is Errno::EWOULDBLOCK or Errno::EAGAIN, it is extended by
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html).
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html).
   # So
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # can be used to rescue the exceptions for retrying recvfrom\_nonblock.
   #
   # By specifying a keyword argument *exception* to `false`, you can indicate
   # that
-  # [`recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom_nonblock)
+  # [`recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom_nonblock)
   # should not raise an
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # exception, but return the symbol `:wait_readable` instead.
   #
   # ### See
-  # *   [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom)
+  # *   [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom)
   sig do
     params(
       len: ::T.untyped,
@@ -2776,7 +2778,7 @@ class Socket < BasicSocket
 
   # Accepts an incoming connection returning an array containing the (integer)
   # file descriptor for the incoming connection, *client\_socket\_fd*, and an
-  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html),
+  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html),
   # *client\_addrinfo*.
   #
   # ### Example
@@ -2807,11 +2809,11 @@ class Socket < BasicSocket
   # ```
   #
   # Refer to
-  # [`Socket#accept`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept)
+  # [`Socket#accept`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept)
   # for the exceptions that may be thrown if the call to *sysaccept* fails.
   #
   # ### See
-  # *   [`Socket#accept`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept)
+  # *   [`Socket#accept`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept)
   sig {returns(::T.untyped)}
   def sysaccept(); end
 
@@ -2835,7 +2837,7 @@ class Socket < BasicSocket
   # Obtains address information for *nodename*:*servname*.
   #
   # Note that
-  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-getaddrinfo)
+  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-getaddrinfo)
   # provides the same functionality in an object oriented style.
   #
   # *family* should be an address family such as: :INET, :INET6, etc.
@@ -2866,19 +2868,19 @@ class Socket < BasicSocket
   # +nil+:              obey to the current +do_not_reverse_lookup+ flag.
   # ```
   #
-  # If [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) object is
+  # If [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) object is
   # preferred, use
-  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-getaddrinfo).
+  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-getaddrinfo).
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.getaddrinfo(*_); end
+  def self.getaddrinfo(*arg0); end
 
   # Use
-  # [`Addrinfo#getnameinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-i-getnameinfo)
+  # [`Addrinfo#getnameinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-i-getnameinfo)
   # instead. This method is deprecated for the following reasons:
   #
   # *   Uncommon address representation: 4/16-bytes binary string to represent
@@ -2902,14 +2904,14 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.gethostbyaddr(*_); end
+  def self.gethostbyaddr(*arg0); end
 
   # Use
-  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-getaddrinfo)
+  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-getaddrinfo)
   # instead. This method is deprecated for the following reasons:
   #
   # *   The 3rd element of the result is the address family of the first
@@ -2929,11 +2931,11 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.gethostbyname(_); end
+  def self.gethostbyname(arg0); end
 
   # Returns the hostname.
   #
@@ -2943,13 +2945,13 @@ class Socket < BasicSocket
   #
   # Note that it is not guaranteed to be able to convert to IP address using
   # gethostbyname, getaddrinfo, etc. If you need local IP address, use
-  # [`Socket.ip_address_list`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-ip_address_list).
+  # [`Socket.ip_address_list`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-ip_address_list).
   sig {returns(::T.untyped)}
   def self.gethostname(); end
 
   # Returns an array of interface addresses. An element of the array is an
   # instance of
-  # [`Socket::Ifaddr`](https://docs.ruby-lang.org/en/2.6.0/Socket/Ifaddr.html).
+  # [`Socket::Ifaddr`](https://docs.ruby-lang.org/en/2.7.0/Socket/Ifaddr.html).
   #
   # This method can be used to find multicast-enabled interfaces:
   #
@@ -2996,7 +2998,7 @@ class Socket < BasicSocket
   #
   # *sockaddr* should be one of follows.
   # *   packed sockaddr string such as
-  #     [`Socket.sockaddr_in`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-sockaddr_in)(80,
+  #     [`Socket.sockaddr_in`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-sockaddr_in)(80,
   #     "127.0.0.1")
   # *   3-elements array such as ["AF\_INET", 80, "127.0.0.1"]
   # *   4-elements array such as ["AF\_INET", 80, ignored, "127.0.0.1"]
@@ -3005,9 +3007,9 @@ class Socket < BasicSocket
   # *flags* should be bitwise OR of Socket::NI\_\* constants.
   #
   # Note: The last form is compatible with
-  # [`IPSocket#addr`](https://docs.ruby-lang.org/en/2.6.0/IPSocket.html#method-i-addr)
+  # [`IPSocket#addr`](https://docs.ruby-lang.org/en/2.7.0/IPSocket.html#method-i-addr)
   # and
-  # [`IPSocket#peeraddr`](https://docs.ruby-lang.org/en/2.6.0/IPSocket.html#method-i-peeraddr).
+  # [`IPSocket#peeraddr`](https://docs.ruby-lang.org/en/2.7.0/IPSocket.html#method-i-peeraddr).
   #
   # ```ruby
   # Socket.getnameinfo(Socket.sockaddr_in(80, "127.0.0.1"))       #=> ["localhost", "www"]
@@ -3015,16 +3017,16 @@ class Socket < BasicSocket
   # Socket.getnameinfo(["AF_INET", 80, "localhost", "127.0.0.1"]) #=> ["localhost", "www"]
   # ```
   #
-  # If [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) object is
+  # If [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) object is
   # preferred, use
-  # [`Addrinfo#getnameinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-i-getnameinfo).
+  # [`Addrinfo#getnameinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-i-getnameinfo).
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.getnameinfo(*_); end
+  def self.getnameinfo(*arg0); end
 
   # Obtains the port number for *service\_name*.
   #
@@ -3037,11 +3039,11 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.getservbyname(*_); end
+  def self.getservbyname(*arg0); end
 
   # Obtains the port number for *port*.
   #
@@ -3054,16 +3056,16 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.getservbyport(*_); end
+  def self.getservbyport(*arg0); end
 
   # Returns local IP addresses as an array.
   #
   # The array contains
-  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) objects.
+  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) objects.
   #
   # ```
   # pp Socket.ip_address_list
@@ -3086,15 +3088,15 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.pack_sockaddr_in(_, _1); end
+  def self.pack_sockaddr_in(arg0, arg1); end
 
   # Packs *path* as an
-  # [`AF_UNIX`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#AF_UNIX)
+  # [`AF_UNIX`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#AF_UNIX)
   # sockaddr string.
   #
   # ```ruby
@@ -3102,11 +3104,11 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.pack_sockaddr_un(_); end
+  def self.pack_sockaddr_un(arg0); end
 
   # Creates a pair of sockets connected each other.
   #
@@ -3135,11 +3137,11 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.pair(*_); end
+  def self.pair(*arg0); end
 
   # Packs *port* and *host* as an AF\_INET/AF\_INET6 sockaddr string.
   #
@@ -3152,15 +3154,15 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.sockaddr_in(_, _1); end
+  def self.sockaddr_in(arg0, arg1); end
 
   # Packs *path* as an
-  # [`AF_UNIX`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#AF_UNIX)
+  # [`AF_UNIX`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#AF_UNIX)
   # sockaddr string.
   #
   # ```ruby
@@ -3168,11 +3170,11 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.sockaddr_un(_); end
+  def self.sockaddr_un(arg0); end
 
   # Creates a pair of sockets connected each other.
   #
@@ -3201,11 +3203,11 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.socketpair(*_); end
+  def self.socketpair(*arg0); end
 
   # creates a new socket object connected to host:port using TCP/IP.
   #
@@ -3216,6 +3218,8 @@ class Socket < BasicSocket
   #
   # :connect\_timeout
   # :   specify the timeout in seconds.
+  # :resolv\_timeout
+  # :   specify the name resolution timeout in seconds.
   #
   #
   # If a block is given, the block is called with the socket. The value of the
@@ -3237,14 +3241,15 @@ class Socket < BasicSocket
       local_host: ::T.untyped,
       local_port: ::T.untyped,
       connect_timeout: ::T.untyped,
+      blk: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.tcp(host, port, local_host=T.unsafe(nil), local_port=T.unsafe(nil), connect_timeout: T.unsafe(nil)); end
+  def self.tcp(host, port, local_host=T.unsafe(nil), local_port=T.unsafe(nil), connect_timeout: T.unsafe(nil), &blk); end
 
   # creates a TCP/IP server on *port* and calls the block for each connection
   # accepted. The block is called with a socket and a client\_address as an
-  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html) object.
+  # [`Addrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html) object.
   #
   # If *host* is specified, it is used with *port* to determine the server
   # addresses.
@@ -3257,12 +3262,12 @@ class Socket < BasicSocket
   # example, should be used to service multiple clients at a time.
   #
   # Note that
-  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-getaddrinfo)
+  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-getaddrinfo)
   # is used to determine the server socket addresses. When
-  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-getaddrinfo)
+  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-getaddrinfo)
   # returns two or more addresses, IPv4 and IPv6 address for example, all of
   # them are used.
-  # [`Socket.tcp_server_loop`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-tcp_server_loop)
+  # [`Socket.tcp_server_loop`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-tcp_server_loop)
   # succeeds if one socket can be used at least.
   #
   # ```ruby
@@ -3349,7 +3354,7 @@ class Socket < BasicSocket
   # The *msg* is a string.
   #
   # The *msg\_src* is a
-  # [`Socket::UDPSource`](https://docs.ruby-lang.org/en/2.6.0/Socket/UDPSource.html)
+  # [`Socket::UDPSource`](https://docs.ruby-lang.org/en/2.7.0/Socket/UDPSource.html)
   # object. It is used for reply.
   #
   # ```ruby
@@ -3371,7 +3376,7 @@ class Socket < BasicSocket
   # Run UDP/IP server loop on the given sockets.
   #
   # The return value of
-  # [`Socket.udp_server_sockets`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-udp_server_sockets)
+  # [`Socket.udp_server_sockets`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-udp_server_sockets)
   # is appropriate for the argument.
   #
   # It calls the block for each message received.
@@ -3389,10 +3394,10 @@ class Socket < BasicSocket
   #
   # The block receives *msg* and *msg\_src*. *msg* is a string which is the
   # payload of the received packet. *msg\_src* is a
-  # [`Socket::UDPSource`](https://docs.ruby-lang.org/en/2.6.0/Socket/UDPSource.html)
+  # [`Socket::UDPSource`](https://docs.ruby-lang.org/en/2.7.0/Socket/UDPSource.html)
   # object which is used for reply.
   #
-  # [`Socket.udp_server_loop`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-udp_server_loop)
+  # [`Socket.udp_server_loop`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-udp_server_loop)
   # can be implemented using this method as follows.
   #
   # ```
@@ -3457,10 +3462,11 @@ class Socket < BasicSocket
   sig do
     params(
       path: ::T.untyped,
+      blk: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.unix(path); end
+  def self.unix(path, &blk); end
 
   # creates a UNIX socket server on *path*. It calls the block for each socket
   # accepted.
@@ -3519,10 +3525,11 @@ class Socket < BasicSocket
   sig do
     params(
       path: ::T.untyped,
+      blk: T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.unix_server_socket(path); end
+  def self.unix_server_socket(path, &blk); end
 
   # Unpacks *sockaddr* into port and ip\_address.
   #
@@ -3535,16 +3542,16 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.unpack_sockaddr_in(_); end
+  def self.unpack_sockaddr_in(arg0); end
 
   # Unpacks *sockaddr* into path.
   #
   # *sockaddr* should be a string or an addrinfo for
-  # [`AF_UNIX`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#AF_UNIX).
+  # [`AF_UNIX`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#AF_UNIX).
   #
   # ```ruby
   # sockaddr = Socket.sockaddr_un("/tmp/sock")
@@ -3552,23 +3559,23 @@ class Socket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.unpack_sockaddr_un(_); end
+  def self.unpack_sockaddr_un(arg0); end
 end
 
-# [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html)
+# [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html)
 # represents the ancillary data (control information) used by sendmsg and
 # recvmsg system call. It contains socket
-# [`family`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html#method-i-family),
+# [`family`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html#method-i-family),
 # control message (cmsg)
-# [`level`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html#method-i-level),
+# [`level`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html#method-i-level),
 # cmsg
-# [`type`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html#method-i-type)
+# [`type`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html#method-i-type)
 # and cmsg
-# [`data`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html#method-i-data).
+# [`data`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html#method-i-data).
 class Socket::AncillaryData
   # tests the level and type of *ancillarydata*.
   #
@@ -3581,12 +3588,12 @@ class Socket::AncillaryData
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def cmsg_is?(_, _1); end
+  def cmsg_is?(arg0, arg1); end
 
   # returns the cmsg data as a string.
   #
@@ -3608,14 +3615,14 @@ class Socket::AncillaryData
 
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
-      _2: ::T.untyped,
-      _3: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
+      arg2: ::T.untyped,
+      arg3: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
-  def initialize(_, _1, _2, _3); end
+  def initialize(arg0, arg1, arg2, arg3); end
 
   # returns a string which shows ancillarydata in human-readable form.
   #
@@ -3710,7 +3717,7 @@ class Socket::AncillaryData
   # *   SOL\_SOCKET/SCM\_TIMESTAMPNS (nanosecond) GNU/Linux
   # *   SOL\_SOCKET/SCM\_BINTIME (2\*\*(-64) second) FreeBSD
   #
-  #     [`Addrinfo.udp`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-udp)("127.0.0.1",
+  #     [`Addrinfo.udp`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-udp)("127.0.0.1",
   #     0).bind {|s1|
   #
   # ```ruby
@@ -3739,16 +3746,16 @@ class Socket::AncillaryData
   sig {returns(::T.untyped)}
   def type(); end
 
-  # returns the array of [`IO`](https://docs.ruby-lang.org/en/2.6.0/IO.html)
+  # returns the array of [`IO`](https://docs.ruby-lang.org/en/2.7.0/IO.html)
   # objects for SCM\_RIGHTS control message in UNIX domain socket.
   #
-  # The class of the [`IO`](https://docs.ruby-lang.org/en/2.6.0/IO.html) objects
-  # in the array is [`IO`](https://docs.ruby-lang.org/en/2.6.0/IO.html) or
-  # [`Socket`](https://docs.ruby-lang.org/en/2.6.0/Socket.html).
+  # The class of the [`IO`](https://docs.ruby-lang.org/en/2.7.0/IO.html) objects
+  # in the array is [`IO`](https://docs.ruby-lang.org/en/2.7.0/IO.html) or
+  # [`Socket`](https://docs.ruby-lang.org/en/2.7.0/Socket.html).
   #
   # The array is attached to *ancillarydata* when it is instantiated. For
   # example,
-  # [`BasicSocket#recvmsg`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-recvmsg)
+  # [`BasicSocket#recvmsg`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-recvmsg)
   # attach the array when receives a SCM\_RIGHTS control message and
   # :scm\_rights=>true option is given.
   #
@@ -3774,7 +3781,7 @@ class Socket::AncillaryData
   def unix_rights(); end
 
   # Creates a new
-  # [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html)
+  # [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html)
   # object which contains a int as data.
   #
   # The size and endian is dependent on the host.
@@ -3787,14 +3794,14 @@ class Socket::AncillaryData
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
-      _2: ::T.untyped,
-      _3: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
+      arg2: ::T.untyped,
+      arg3: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.int(_, _1, _2, _3); end
+  def self.int(arg0, arg1, arg2, arg3); end
 
   # Returns new ancillary data for IP\_PKTINFO.
   #
@@ -3813,11 +3820,11 @@ class Socket::AncillaryData
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.ip_pktinfo(*_); end
+  def self.ip_pktinfo(*arg0); end
 
   # Returns new ancillary data for IPV6\_PKTINFO.
   #
@@ -3831,15 +3838,15 @@ class Socket::AncillaryData
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.ipv6_pktinfo(_, _1); end
+  def self.ipv6_pktinfo(arg0, arg1); end
 
   # Creates a new
-  # [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.6.0/Socket/AncillaryData.html)
+  # [`Socket::AncillaryData`](https://docs.ruby-lang.org/en/2.7.0/Socket/AncillaryData.html)
   # object which contains file descriptors as data.
   #
   # ```ruby
@@ -3848,14 +3855,14 @@ class Socket::AncillaryData
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.unix_rights(*_); end
+  def self.unix_rights(*arg0); end
 end
 
-# [`Socket::Constants`](https://docs.ruby-lang.org/en/2.6.0/Socket/Constants.html)
+# [`Socket::Constants`](https://docs.ruby-lang.org/en/2.7.0/Socket/Constants.html)
 # provides socket-related constants. All possible socket constants are listed in
 # the documentation but they may not all be present on your platform.
 #
@@ -3922,7 +3929,7 @@ module Socket::Constants
   EAI_OVERFLOW = ::T.let(nil, ::T.untyped)
   # Servname not supported for socket type
   EAI_SERVICE = ::T.let(nil, ::T.untyped)
-  # [`Socket`](https://docs.ruby-lang.org/en/2.6.0/Socket.html) type not
+  # [`Socket`](https://docs.ruby-lang.org/en/2.7.0/Socket.html) type not
   # supported
   EAI_SOCKTYPE = ::T.let(nil, ::T.untyped)
   # System error returned in errno
@@ -3966,7 +3973,7 @@ module Socket::Constants
   # Multicast group for all systems on this subset
   INADDR_ALLHOSTS_GROUP = ::T.let(nil, ::T.untyped)
   # A socket bound to
-  # [`INADDR_ANY`](https://docs.ruby-lang.org/en/2.6.0/Socket/Constants.html#INADDR_ANY)
+  # [`INADDR_ANY`](https://docs.ruby-lang.org/en/2.7.0/Socket/Constants.html#INADDR_ANY)
   # receives packets from all interfaces and sends from the default IP address
   INADDR_ANY = ::T.let(nil, ::T.untyped)
   # The network broadcast address
@@ -4170,7 +4177,7 @@ module Socket::Constants
   MSG_DONTROUTE = ::T.let(nil, ::T.untyped)
   # This message should be non-blocking
   MSG_DONTWAIT = ::T.let(nil, ::T.untyped)
-  # [`Data`](https://docs.ruby-lang.org/en/2.6.0/Data.html) completes record
+  # [`Data`](https://docs.ruby-lang.org/en/2.7.0/Data.html) completes record
   MSG_EOR = ::T.let(nil, ::T.untyped)
   # Fetch message from error queue
   MSG_ERRQUEUE = ::T.let(nil, ::T.untyped)
@@ -4181,7 +4188,7 @@ module Socket::Constants
   MSG_MORE = ::T.let(nil, ::T.untyped)
   # Do not generate SIGPIPE
   MSG_NOSIGNAL = ::T.let(nil, ::T.untyped)
-  # [`Process`](https://docs.ruby-lang.org/en/2.6.0/Process.html) out-of-band
+  # [`Process`](https://docs.ruby-lang.org/en/2.7.0/Process.html) out-of-band
   # data
   MSG_OOB = ::T.let(nil, ::T.untyped)
   # Peek at incoming message
@@ -4190,7 +4197,7 @@ module Socket::Constants
   MSG_PROXY = ::T.let(nil, ::T.untyped)
   MSG_RST = ::T.let(nil, ::T.untyped)
   MSG_SYN = ::T.let(nil, ::T.untyped)
-  # [`Data`](https://docs.ruby-lang.org/en/2.6.0/Data.html) discarded before
+  # [`Data`](https://docs.ruby-lang.org/en/2.7.0/Data.html) discarded before
   # delivery
   MSG_TRUNC = ::T.let(nil, ::T.untyped)
   # Wait for full request or error
@@ -4279,7 +4286,7 @@ module Socket::Constants
   SOL_UDP = ::T.let(nil, ::T.untyped)
   # Maximum connection requests that may be queued for a socket
   SOMAXCONN = ::T.let(nil, ::T.untyped)
-  # [`Socket`](https://docs.ruby-lang.org/en/2.6.0/Socket.html) has had listen()
+  # [`Socket`](https://docs.ruby-lang.org/en/2.7.0/Socket.html) has had listen()
   # called on it
   SO_ACCEPTCONN = ::T.let(nil, ::T.untyped)
   # Attach an accept filter
@@ -4288,7 +4295,7 @@ module Socket::Constants
   SO_BINDTODEVICE = ::T.let(nil, ::T.untyped)
   # Permit sending of broadcast messages
   SO_BROADCAST = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) the threshold in
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) the threshold in
   # microseconds for low latency polling (Linux 3.11)
   SO_BUSY_POLL = ::T.let(nil, ::T.untyped)
   # Debug info recording
@@ -4302,7 +4309,7 @@ module Socket::Constants
   # Get and clear the error status
   SO_ERROR = ::T.let(nil, ::T.untyped)
   # Obtain filter set by
-  # [`SO_ATTACH_FILTER`](https://docs.ruby-lang.org/en/2.6.0/Socket/Constants.html#SO_ATTACH_FILTER)
+  # [`SO_ATTACH_FILTER`](https://docs.ruby-lang.org/en/2.7.0/Socket/Constants.html#SO_ATTACH_FILTER)
   # (Linux 3.8)
   SO_GET_FILTER = ::T.let(nil, ::T.untyped)
   # Keep connections alive
@@ -4311,12 +4318,12 @@ module Socket::Constants
   SO_LINGER = ::T.let(nil, ::T.untyped)
   # Lock the filter attached to a socket (Linux 3.9)
   SO_LOCK_FILTER = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) the mark for
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) the mark for
   # mark-based routing (Linux 2.6.25)
   SO_MARK = ::T.let(nil, ::T.untyped)
   # Cap the rate computed by transport layer. [bytes per second] (Linux 3.13)
   SO_MAX_PACING_RATE = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) netns of a socket
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) netns of a socket
   # (Linux 3.4)
   SO_NOFCS = ::T.let(nil, ::T.untyped)
   # Disable checksums
@@ -4324,12 +4331,12 @@ module Socket::Constants
   # Leave received out-of-band data in-line
   SO_OOBINLINE = ::T.let(nil, ::T.untyped)
   # Receive
-  # [`SCM_CREDENTIALS`](https://docs.ruby-lang.org/en/2.6.0/Socket/Constants.html#SCM_CREDENTIALS)
+  # [`SCM_CREDENTIALS`](https://docs.ruby-lang.org/en/2.7.0/Socket/Constants.html#SCM_CREDENTIALS)
   # messages
   SO_PASSCRED = ::T.let(nil, ::T.untyped)
   # Toggle security context passing (Linux 2.6.18)
   SO_PASSSEC = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) the peek offset (Linux
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) the peek offset (Linux
   # 3.4)
   SO_PEEK_OFF = ::T.let(nil, ::T.untyped)
   # The credentials of the foreign process connected to this socket
@@ -4371,7 +4378,7 @@ module Socket::Constants
   SO_SNDTIMEO = ::T.let(nil, ::T.untyped)
   # Receive timestamp with datagrams (timeval)
   SO_TIMESTAMP = ::T.let(nil, ::T.untyped)
-  # [`Time`](https://docs.ruby-lang.org/en/2.6.0/Time.html) stamping of incoming
+  # [`Time`](https://docs.ruby-lang.org/en/2.7.0/Time.html) stamping of incoming
   # and outgoing packets (Linux 2.6.30)
   SO_TIMESTAMPING = ::T.let(nil, ::T.untyped)
   # Receive nanosecond timestamp with datagrams (timespec)
@@ -4397,12 +4404,12 @@ module Socket::Constants
   TCP_KEEPCNT = ::T.let(nil, ::T.untyped)
   # Idle time before keepalive probes are sent (Linux 2.4, glibc 2.2)
   TCP_KEEPIDLE = ::T.let(nil, ::T.untyped)
-  # [`Time`](https://docs.ruby-lang.org/en/2.6.0/Time.html) between keepalive
+  # [`Time`](https://docs.ruby-lang.org/en/2.7.0/Time.html) between keepalive
   # probes (Linux 2.4, glibc 2.2)
   TCP_KEEPINTVL = ::T.let(nil, ::T.untyped)
   # Lifetime of orphaned FIN\_WAIT2 sockets (Linux 2.4, glibc 2.2)
   TCP_LINGER2 = ::T.let(nil, ::T.untyped)
-  # [`Set`](https://docs.ruby-lang.org/en/2.6.0/Set.html) maximum segment size
+  # [`Set`](https://docs.ruby-lang.org/en/2.7.0/Set.html) maximum segment size
   TCP_MAXSEG = ::T.let(nil, ::T.untyped)
   # Use MD5 digests (RFC2385, Linux 2.6.20, glibc 2.7)
   TCP_MD5SIG = ::T.let(nil, ::T.untyped)
@@ -4416,7 +4423,7 @@ module Socket::Constants
   TCP_REPAIR = ::T.let(nil, ::T.untyped)
   # Options for repair mode (Linux 3.5, glibc 2.18)
   TCP_REPAIR_OPTIONS = ::T.let(nil, ::T.untyped)
-  # [`Queue`](https://docs.ruby-lang.org/en/2.6.0/Queue.html) for repair mode
+  # [`Queue`](https://docs.ruby-lang.org/en/2.7.0/Queue.html) for repair mode
   # (Linux 3.5, glibc 2.18)
   TCP_REPAIR_QUEUE = ::T.let(nil, ::T.untyped)
   # Number of SYN retransmits before a connection is dropped (Linux 2.4, glibc
@@ -4438,7 +4445,7 @@ module Socket::Constants
 
 end
 
-# [`Socket::Ifaddr`](https://docs.ruby-lang.org/en/2.6.0/Socket/Ifaddr.html)
+# [`Socket::Ifaddr`](https://docs.ruby-lang.org/en/2.7.0/Socket/Ifaddr.html)
 # represents a result of getifaddrs() function.
 class Socket::Ifaddr < Data
   # Returns the address of *ifaddr*. nil is returned if address is not available
@@ -4478,19 +4485,19 @@ class Socket::Ifaddr < Data
   def netmask(); end
 end
 
-# [`Socket::Option`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html)
+# [`Socket::Option`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html)
 # represents a socket option used by
-# [`BasicSocket#getsockopt`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-getsockopt)
+# [`BasicSocket#getsockopt`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-getsockopt)
 # and
-# [`BasicSocket#setsockopt`](https://docs.ruby-lang.org/en/2.6.0/BasicSocket.html#method-i-setsockopt).
+# [`BasicSocket#setsockopt`](https://docs.ruby-lang.org/en/2.7.0/BasicSocket.html#method-i-setsockopt).
 # A socket option contains the socket
-# [`family`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html#method-i-family),
+# [`family`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html#method-i-family),
 # protocol
-# [`level`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html#method-i-level),
+# [`level`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html#method-i-level),
 # option name
-# [`optname`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html#method-i-optname)
+# [`optname`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html#method-i-optname)
 # and option value
-# [`data`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html#method-i-data).
+# [`data`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html#method-i-data).
 class Socket::Option
   # Returns the data in *sockopt* as an boolean value.
   #
@@ -4530,14 +4537,14 @@ class Socket::Option
 
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
-      _2: ::T.untyped,
-      _3: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
+      arg2: ::T.untyped,
+      arg3: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
-  def initialize(_, _1, _2, _3); end
+  def initialize(arg0, arg1, arg2, arg3); end
 
   # Returns a string which shows sockopt in human-readable form.
   #
@@ -4560,7 +4567,7 @@ class Socket::Option
   def int(); end
 
   # Returns the
-  # [`ipv4_multicast_loop`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html#method-c-ipv4_multicast_loop)
+  # [`ipv4_multicast_loop`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html#method-c-ipv4_multicast_loop)
   # data in *sockopt* as an integer.
   #
   # ```ruby
@@ -4571,7 +4578,7 @@ class Socket::Option
   def ipv4_multicast_loop(); end
 
   # Returns the
-  # [`ipv4_multicast_ttl`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html#method-c-ipv4_multicast_ttl)
+  # [`ipv4_multicast_ttl`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html#method-c-ipv4_multicast_ttl)
   # data in *sockopt* as an integer.
   #
   # ```ruby
@@ -4618,7 +4625,7 @@ class Socket::Option
   def to_s(); end
 
   # Calls
-  # [`String#unpack`](https://docs.ruby-lang.org/en/2.6.0/String.html#method-i-unpack)
+  # [`String#unpack`](https://docs.ruby-lang.org/en/2.7.0/String.html#method-i-unpack)
   # on sockopt.data.
   #
   # ```ruby
@@ -4628,14 +4635,14 @@ class Socket::Option
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def unpack(_); end
+  def unpack(arg0); end
 
   # Creates a new
-  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html)
+  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html)
   # object which contains boolean as data. Actually 0 or 1 as int is used.
   #
   # ```ruby
@@ -4649,17 +4656,17 @@ class Socket::Option
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
-      _2: ::T.untyped,
-      _3: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
+      arg2: ::T.untyped,
+      arg3: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.bool(_, _1, _2, _3); end
+  def self.bool(arg0, arg1, arg2, arg3); end
 
   # Creates a new
-  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html)
+  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html)
   # object which contains a byte as data.
   #
   # ```ruby
@@ -4668,17 +4675,17 @@ class Socket::Option
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
-      _2: ::T.untyped,
-      _3: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
+      arg2: ::T.untyped,
+      arg3: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.byte(_, _1, _2, _3); end
+  def self.byte(arg0, arg1, arg2, arg3); end
 
   # Creates a new
-  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html)
+  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html)
   # object which contains an int as data.
   #
   # The size and endian is dependent on the platform.
@@ -4689,17 +4696,17 @@ class Socket::Option
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
-      _2: ::T.untyped,
-      _3: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
+      arg2: ::T.untyped,
+      arg3: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.int(_, _1, _2, _3); end
+  def self.int(arg0, arg1, arg2, arg3); end
 
   # Creates a new
-  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html)
+  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html)
   # object for IP\_MULTICAST\_LOOP.
   #
   # The size is dependent on the platform.
@@ -4713,14 +4720,14 @@ class Socket::Option
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.ipv4_multicast_loop(_); end
+  def self.ipv4_multicast_loop(arg0); end
 
   # Creates a new
-  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html)
+  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html)
   # object for IP\_MULTICAST\_TTL.
   #
   # The size is dependent on the platform.
@@ -4731,14 +4738,14 @@ class Socket::Option
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.ipv4_multicast_ttl(_); end
+  def self.ipv4_multicast_ttl(arg0); end
 
   # Creates a new
-  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.6.0/Socket/Option.html)
+  # [`Socket::Option`](https://docs.ruby-lang.org/en/2.7.0/Socket/Option.html)
   # object for SOL\_SOCKET/SO\_LINGER.
   #
   # *onoff* should be an integer or a boolean.
@@ -4751,22 +4758,26 @@ class Socket::Option
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.linger(_, _1); end
+  def self.linger(arg0, arg1); end
 end
 
-# [`SocketError`](https://docs.ruby-lang.org/en/2.6.0/SocketError.html) is the
+# [`SocketError`](https://docs.ruby-lang.org/en/2.7.0/SocketError.html) is the
 # error class for socket.
 class SocketError < StandardError
 end
 
+# [`Socket::ResolutionError`](https://docs.ruby-lang.org/en/master/Socket/ResolutionError.html)
+# is the error class for socket name resolution.
+class Socket::ResolutionError < SocketError    
+end
 
 # UDP/IP address information used by
-# [`Socket.udp_server_loop`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-c-udp_server_loop).
+# [`Socket.udp_server_loop`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-c-udp_server_loop).
 class Socket::UDPSource
   sig do
     params(
@@ -4774,7 +4785,7 @@ class Socket::UDPSource
       local_address: ::T.untyped,
       reply_proc: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
   def initialize(remote_address, local_address, &reply_proc); end
 
@@ -4789,7 +4800,7 @@ class Socket::UDPSource
   sig {returns(::T.untyped)}
   def remote_address(); end
 
-  # Sends the [`String`](https://docs.ruby-lang.org/en/2.6.0/String.html) `msg`
+  # Sends the [`String`](https://docs.ruby-lang.org/en/2.7.0/String.html) `msg`
   # to the source
   sig do
     params(
@@ -4800,7 +4811,7 @@ class Socket::UDPSource
   def reply(msg); end
 end
 
-# [`TCPServer`](https://docs.ruby-lang.org/en/2.6.0/TCPServer.html) represents a
+# [`TCPServer`](https://docs.ruby-lang.org/en/2.7.0/TCPServer.html) represents a
 # TCP/IP server socket.
 #
 # A simple TCP server may look like:
@@ -4833,10 +4844,10 @@ end
 # ```
 class TCPServer < TCPSocket
   extend T::Generic
-  Elem = type_member(:out, fixed: String)
+  Elem = type_member(:out) {{fixed: String}}
 
   # Accepts an incoming connection. It returns a new
-  # [`TCPSocket`](https://docs.ruby-lang.org/en/2.6.0/TCPSocket.html) object.
+  # [`TCPSocket`](https://docs.ruby-lang.org/en/2.7.0/TCPSocket.html) object.
   #
   # ```ruby
   # TCPServer.open("127.0.0.1", 14641) {|serv|
@@ -4850,7 +4861,7 @@ class TCPServer < TCPSocket
 
   # Accepts an incoming connection using accept(2) after O\_NONBLOCK is set for
   # the underlying file descriptor. It returns an accepted
-  # [`TCPSocket`](https://docs.ruby-lang.org/en/2.6.0/TCPSocket.html) for the
+  # [`TCPSocket`](https://docs.ruby-lang.org/en/2.7.0/TCPSocket.html) for the
   # incoming connection.
   #
   # ### Example
@@ -4868,34 +4879,34 @@ class TCPServer < TCPSocket
   # ```
   #
   # Refer to
-  # [`Socket#accept`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept)
+  # [`Socket#accept`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept)
   # for the exceptions that may be thrown if the call to
-  # [`TCPServer#accept_nonblock`](https://docs.ruby-lang.org/en/2.6.0/TCPServer.html#method-i-accept_nonblock)
+  # [`TCPServer#accept_nonblock`](https://docs.ruby-lang.org/en/2.7.0/TCPServer.html#method-i-accept_nonblock)
   # fails.
   #
-  # [`TCPServer#accept_nonblock`](https://docs.ruby-lang.org/en/2.6.0/TCPServer.html#method-i-accept_nonblock)
+  # [`TCPServer#accept_nonblock`](https://docs.ruby-lang.org/en/2.7.0/TCPServer.html#method-i-accept_nonblock)
   # may raise any error corresponding to accept(2) failure, including
   # Errno::EWOULDBLOCK.
   #
   # If the exception is Errno::EWOULDBLOCK, Errno::EAGAIN,
-  # [`Errno::ECONNABORTED`](https://docs.ruby-lang.org/en/2.6.0/Errno/ECONNABORTED.html),
-  # [`Errno::EPROTO`](https://docs.ruby-lang.org/en/2.6.0/Errno/EPROTO.html), it
+  # [`Errno::ECONNABORTED`](https://docs.ruby-lang.org/en/2.7.0/Errno/ECONNABORTED.html),
+  # [`Errno::EPROTO`](https://docs.ruby-lang.org/en/2.7.0/Errno/EPROTO.html), it
   # is extended by
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html).
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html).
   # So
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # can be used to rescue the exceptions for retrying accept\_nonblock.
   #
   # By specifying a keyword argument *exception* to `false`, you can indicate
   # that
-  # [`accept_nonblock`](https://docs.ruby-lang.org/en/2.6.0/TCPServer.html#method-i-accept_nonblock)
+  # [`accept_nonblock`](https://docs.ruby-lang.org/en/2.7.0/TCPServer.html#method-i-accept_nonblock)
   # should not raise an
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # exception, but return the symbol `:wait_readable` instead.
   #
   # ### See
-  # *   [`TCPServer#accept`](https://docs.ruby-lang.org/en/2.6.0/TCPServer.html#method-i-accept)
-  # *   [`Socket#accept`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept)
+  # *   [`TCPServer#accept`](https://docs.ruby-lang.org/en/2.7.0/TCPServer.html#method-i-accept)
+  # *   [`Socket#accept`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept)
   sig do
     params(
       exception: ::T.untyped,
@@ -4906,11 +4917,11 @@ class TCPServer < TCPSocket
 
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
-  def initialize(*_); end
+  def initialize(*arg0); end
 
   # Listens for connections, using the specified `int` as the backlog. A call to
   # *listen* only applies if the `socket` is of type SOCK\_STREAM or
@@ -4988,11 +4999,11 @@ class TCPServer < TCPSocket
   # *   listen function in Microsoft's Winsock functions reference
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def listen(_); end
+  def listen(arg0); end
 
   # Returns a file descriptor of a accepted connection.
   #
@@ -5008,7 +5019,7 @@ class TCPServer < TCPSocket
   def sysaccept(); end
 end
 
-# [`TCPSocket`](https://docs.ruby-lang.org/en/2.6.0/TCPSocket.html) represents a
+# [`TCPSocket`](https://docs.ruby-lang.org/en/2.7.0/TCPSocket.html) represents a
 # TCP/IP client socket.
 #
 # A simple client may look like:
@@ -5026,7 +5037,7 @@ end
 # ```
 class TCPSocket < IPSocket
   extend T::Generic
-  Elem = type_member(:out, fixed: String)
+  Elem = type_member(:out) {{fixed: String}}
 
   sig do
     params(
@@ -5035,9 +5046,20 @@ class TCPSocket < IPSocket
       local_host: ::T.untyped,
       local_port: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
   def initialize(host=T.unsafe(nil), port=T.unsafe(nil), local_host=T.unsafe(nil), local_port=T.unsafe(nil)); end
+
+  sig do
+    params(
+      host: String,
+      port: Integer,
+      local_host: T.nilable(String),
+      local_port: T.nilable(Integer),
+    )
+    .returns(::T.untyped)
+  end
+  def self.open(host, port, local_host=nil, local_port=nil); end
 
   sig {returns(::T.untyped)}
   def socks_authenticate(); end
@@ -5055,7 +5077,7 @@ class TCPSocket < IPSocket
   def socks_receive_reply(); end
 
   # Use
-  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.6.0/Addrinfo.html#method-c-getaddrinfo)
+  # [`Addrinfo.getaddrinfo`](https://docs.ruby-lang.org/en/2.7.0/Addrinfo.html#method-c-getaddrinfo)
   # instead. This method is deprecated for the following reasons:
   #
   # *   The 3rd element of the result is the address family of the first
@@ -5074,11 +5096,11 @@ class TCPSocket < IPSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.gethostbyname(_); end
+  def self.gethostbyname(arg0); end
 
   sig {returns(::T.untyped)}
   def self.socks_ignores(); end
@@ -5147,11 +5169,11 @@ class TCPSocket < IPSocket
   def self.socks_version=(version); end
 end
 
-# [`UDPSocket`](https://docs.ruby-lang.org/en/2.6.0/UDPSocket.html) represents a
+# [`UDPSocket`](https://docs.ruby-lang.org/en/2.7.0/UDPSocket.html) represents a
 # UDP/IP socket.
 class UDPSocket < IPSocket
   extend T::Generic
-  Elem = type_member(:out, fixed: String)
+  Elem = type_member(:out) {{fixed: String}}
 
   # Binds *udpsocket* to *host*:*port*.
   #
@@ -5163,12 +5185,12 @@ class UDPSocket < IPSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def bind(_, _1); end
+  def bind(arg0, arg1); end
 
   # Connects *udpsocket* to *host*:*port*.
   #
@@ -5184,20 +5206,20 @@ class UDPSocket < IPSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
-      _1: ::T.untyped,
+      arg0: ::T.untyped,
+      arg1: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def connect(_, _1); end
+  def connect(arg0, arg1); end
 
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
-  def initialize(*_); end
+  def initialize(*arg0); end
 
   # Receives up to *maxlen* bytes from `udpsocket` using recvfrom(2) after
   # O\_NONBLOCK is set for the underlying file descriptor. *flags* is zero or
@@ -5206,14 +5228,14 @@ class UDPSocket < IPSocket
   # represent the sender address.
   #
   # When recvfrom(2) returns 0,
-  # [`Socket#recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom_nonblock)
+  # [`Socket#recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom_nonblock)
   # returns an empty string as data. It means an empty packet.
   #
   # ### Parameters
   # *   `maxlen` - the number of bytes to receive from the socket
   # *   `flags` - zero or more of the `MSG_` options
   # *   `outbuf` - destination
-  #     [`String`](https://docs.ruby-lang.org/en/2.6.0/String.html) buffer
+  #     [`String`](https://docs.ruby-lang.org/en/2.7.0/String.html) buffer
   # *   `options` - keyword hash, supporting `exception: false`
   #
   #
@@ -5237,29 +5259,29 @@ class UDPSocket < IPSocket
   # ```
   #
   # Refer to
-  # [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom)
+  # [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom)
   # for the exceptions that may be thrown if the call to *recvfrom\_nonblock*
   # fails.
   #
-  # [`UDPSocket#recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.6.0/UDPSocket.html#method-i-recvfrom_nonblock)
+  # [`UDPSocket#recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.7.0/UDPSocket.html#method-i-recvfrom_nonblock)
   # may raise any error corresponding to recvfrom(2) failure, including
   # Errno::EWOULDBLOCK.
   #
   # If the exception is Errno::EWOULDBLOCK or Errno::EAGAIN, it is extended by
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html).
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html).
   # So
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # can be used to rescue the exceptions for retrying recvfrom\_nonblock.
   #
   # By specifying a keyword argument *exception* to `false`, you can indicate
   # that
-  # [`recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.6.0/UDPSocket.html#method-i-recvfrom_nonblock)
+  # [`recvfrom_nonblock`](https://docs.ruby-lang.org/en/2.7.0/UDPSocket.html#method-i-recvfrom_nonblock)
   # should not raise an
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # exception, but return the symbol `:wait_readable` instead.
   #
   # ### See
-  # *   [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-recvfrom)
+  # *   [`Socket#recvfrom`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-recvfrom)
   sig do
     params(
       len: ::T.untyped,
@@ -5289,20 +5311,20 @@ class UDPSocket < IPSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def send(*_); end
+  def send(*arg0); end
 end
 
-# [`UNIXServer`](https://docs.ruby-lang.org/en/2.6.0/UNIXServer.html) represents
+# [`UNIXServer`](https://docs.ruby-lang.org/en/2.7.0/UNIXServer.html) represents
 # a UNIX domain stream server socket.
 class UNIXServer < UNIXSocket
-  Elem = type_member(:out, fixed: String)
+  Elem = type_member(:out) {{fixed: String}}
 
   # Accepts an incoming connection. It returns a new
-  # [`UNIXSocket`](https://docs.ruby-lang.org/en/2.6.0/UNIXSocket.html) object.
+  # [`UNIXSocket`](https://docs.ruby-lang.org/en/2.7.0/UNIXSocket.html) object.
   #
   # ```ruby
   # UNIXServer.open("/tmp/sock") {|serv|
@@ -5319,7 +5341,7 @@ class UNIXServer < UNIXSocket
 
   # Accepts an incoming connection using accept(2) after O\_NONBLOCK is set for
   # the underlying file descriptor. It returns an accepted
-  # [`UNIXSocket`](https://docs.ruby-lang.org/en/2.6.0/UNIXSocket.html) for the
+  # [`UNIXSocket`](https://docs.ruby-lang.org/en/2.7.0/UNIXSocket.html) for the
   # incoming connection.
   #
   # ### Example
@@ -5337,34 +5359,34 @@ class UNIXServer < UNIXSocket
   # ```
   #
   # Refer to
-  # [`Socket#accept`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept)
+  # [`Socket#accept`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept)
   # for the exceptions that may be thrown if the call to
-  # [`UNIXServer#accept_nonblock`](https://docs.ruby-lang.org/en/2.6.0/UNIXServer.html#method-i-accept_nonblock)
+  # [`UNIXServer#accept_nonblock`](https://docs.ruby-lang.org/en/2.7.0/UNIXServer.html#method-i-accept_nonblock)
   # fails.
   #
-  # [`UNIXServer#accept_nonblock`](https://docs.ruby-lang.org/en/2.6.0/UNIXServer.html#method-i-accept_nonblock)
+  # [`UNIXServer#accept_nonblock`](https://docs.ruby-lang.org/en/2.7.0/UNIXServer.html#method-i-accept_nonblock)
   # may raise any error corresponding to accept(2) failure, including
   # Errno::EWOULDBLOCK.
   #
   # If the exception is Errno::EWOULDBLOCK, Errno::EAGAIN,
-  # [`Errno::ECONNABORTED`](https://docs.ruby-lang.org/en/2.6.0/Errno/ECONNABORTED.html)
-  # or [`Errno::EPROTO`](https://docs.ruby-lang.org/en/2.6.0/Errno/EPROTO.html),
+  # [`Errno::ECONNABORTED`](https://docs.ruby-lang.org/en/2.7.0/Errno/ECONNABORTED.html)
+  # or [`Errno::EPROTO`](https://docs.ruby-lang.org/en/2.7.0/Errno/EPROTO.html),
   # it is extended by
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html).
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html).
   # So
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # can be used to rescue the exceptions for retrying accept\_nonblock.
   #
   # By specifying a keyword argument *exception* to `false`, you can indicate
   # that
-  # [`accept_nonblock`](https://docs.ruby-lang.org/en/2.6.0/UNIXServer.html#method-i-accept_nonblock)
+  # [`accept_nonblock`](https://docs.ruby-lang.org/en/2.7.0/UNIXServer.html#method-i-accept_nonblock)
   # should not raise an
-  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.6.0/IO/WaitReadable.html)
+  # [`IO::WaitReadable`](https://docs.ruby-lang.org/en/2.7.0/IO/WaitReadable.html)
   # exception, but return the symbol `:wait_readable` instead.
   #
   # ### See
-  # *   [`UNIXServer#accept`](https://docs.ruby-lang.org/en/2.6.0/UNIXServer.html#method-i-accept)
-  # *   [`Socket#accept`](https://docs.ruby-lang.org/en/2.6.0/Socket.html#method-i-accept)
+  # *   [`UNIXServer#accept`](https://docs.ruby-lang.org/en/2.7.0/UNIXServer.html#method-i-accept)
+  # *   [`Socket#accept`](https://docs.ruby-lang.org/en/2.7.0/Socket.html#method-i-accept)
   sig do
     params(
       exception: ::T.untyped,
@@ -5375,11 +5397,11 @@ class UNIXServer < UNIXSocket
 
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
-  def initialize(_); end
+  def initialize(arg0); end
 
   # Listens for connections, using the specified `int` as the backlog. A call to
   # *listen* only applies if the `socket` is of type SOCK\_STREAM or
@@ -5457,11 +5479,11 @@ class UNIXServer < UNIXSocket
   # *   listen function in Microsoft's Winsock functions reference
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def listen(_); end
+  def listen(arg0); end
 
   # Accepts a new connection. It returns the new file descriptor which is an
   # integer.
@@ -5481,11 +5503,11 @@ class UNIXServer < UNIXSocket
   def sysaccept(); end
 end
 
-# [`UNIXSocket`](https://docs.ruby-lang.org/en/2.6.0/UNIXSocket.html) represents
+# [`UNIXSocket`](https://docs.ruby-lang.org/en/2.7.0/UNIXSocket.html) represents
 # a UNIX domain stream client socket.
 class UNIXSocket < BasicSocket
   extend T::Generic
-  Elem = type_member(:out, fixed: String)
+  Elem = type_member(:out) {{fixed: String}}
 
   # Returns the local address as an array which contains address\_family and
   # unix\_path.
@@ -5501,11 +5523,11 @@ class UNIXSocket < BasicSocket
 
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
-    .returns(::T.untyped)
+    .void
   end
-  def initialize(_); end
+  def initialize(arg0); end
 
   # Returns the path of the local address of unixsocket.
   #
@@ -5548,19 +5570,19 @@ class UNIXSocket < BasicSocket
   # ```
   #
   # *klass* will determine the class of *io* returned (using the
-  # [`IO.for_fd`](https://docs.ruby-lang.org/en/2.6.0/IO.html#method-c-for_fd)
+  # [`IO.for_fd`](https://docs.ruby-lang.org/en/2.7.0/IO.html#method-c-for_fd)
   # singleton method or similar). If *klass* is `nil`, an integer file
   # descriptor is returned.
   #
   # *mode* is the same as the argument passed to
-  # [`IO.for_fd`](https://docs.ruby-lang.org/en/2.6.0/IO.html#method-c-for_fd)
+  # [`IO.for_fd`](https://docs.ruby-lang.org/en/2.7.0/IO.html#method-c-for_fd)
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def recv_io(*_); end
+  def recv_io(*arg0); end
 
   # Receives a message via *unixsocket*.
   #
@@ -5586,11 +5608,11 @@ class UNIXSocket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def recvfrom(*_); end
+  def recvfrom(*arg0); end
 
   # Sends *io* as file descriptor passing.
   #
@@ -5606,15 +5628,15 @@ class UNIXSocket < BasicSocket
   # stdout.puts "hello" # outputs "hello\n" to standard output.
   # ```
   #
-  # *io* may be any kind of [`IO`](https://docs.ruby-lang.org/en/2.6.0/IO.html)
+  # *io* may be any kind of [`IO`](https://docs.ruby-lang.org/en/2.7.0/IO.html)
   # object or integer file descriptor.
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def send_io(_); end
+  def send_io(arg0); end
 
   # Creates a pair of sockets connected to each other.
   #
@@ -5631,11 +5653,11 @@ class UNIXSocket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.pair(*_); end
+  def self.pair(*arg0); end
 
   # Creates a pair of sockets connected to each other.
   #
@@ -5652,9 +5674,9 @@ class UNIXSocket < BasicSocket
   # ```
   sig do
     params(
-      _: ::T.untyped,
+      arg0: ::T.untyped,
     )
     .returns(::T.untyped)
   end
-  def self.socketpair(*_); end
+  def self.socketpair(*arg0); end
 end

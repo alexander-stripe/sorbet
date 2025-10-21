@@ -1,7 +1,0 @@
-tmp="$(mktemp)"
-pre="test/cli/autocorrect-strict/pre.rb"
-post="test/cli/autocorrect-strict/post.rb"
-cp "$pre" "$tmp"
-main/sorbet --silence-dev-message -a "$tmp"
-diff "$post" "$tmp"
-rm "$tmp"

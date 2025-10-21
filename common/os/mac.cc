@@ -1,5 +1,6 @@
 #ifdef __APPLE__
-#include "common/common.h"
+#include "absl/debugging/symbolize.h"
+#include "spdlog/spdlog.h"
 #include <cassert>
 #include <cstdio>
 #include <mach-o/dyld.h> /* _NSGetExecutablePath */
@@ -37,7 +38,7 @@ bool amIBeingDebugged()
 // Returns true if the current process is being debugged (either
 // running under the debugger or has a debugger attached post facto).
 {
-    int junk;
+    int junk __attribute__((unused));
     int mib[4];
     struct kinfo_proc info;
     size_t size;
@@ -68,7 +69,7 @@ bool amIBeingDebugged()
 
 bool stopInDebugger() {
     if (amIBeingDebugged()) {
-        __asm__("int $3");
+        __builtin_debugtrap();
         return true;
     }
     return false;
@@ -86,5 +87,9 @@ bool bindThreadToCore(pthread_t handle, int coreId) {
     thread_port_t mach_thread = pthread_mach_thread_np(handle);
     auto ret = thread_policy_set(mach_thread, THREAD_AFFINITY_POLICY, (thread_policy_t)&policy, 1);
     return ret == 0;
+}
+
+void initializeSymbolizer(char *argv0) {
+    absl::InitializeSymbolizer(argv0);
 }
 #endif

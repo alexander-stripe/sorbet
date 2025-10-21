@@ -1,13 +1,9 @@
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
+  class <emptyTree><<C <root>>> < (::<todo sym>)
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
       begin
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::A)
-          <emptyTree>
-        end
         ::A.new().foo()
         ::A.foo()
         ::A.new().food()
@@ -25,31 +21,10 @@ begin
     end
   end
   class ::A<<C A>> < (::<todo sym>)
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
     def foo(<blk>)
       begin
-        :"food"
-        :"foos"
-      end
-    end
-
-    def self.sfoo(<blk>)
-      begin
-        :"sfood"
-        :"sfoos"
+        <runtime method definition of food>
+        <runtime method definition of self.foos>
       end
     end
 
@@ -61,6 +36,13 @@ begin
       <emptyTree>
     end
 
+    def self.sfoo(<blk>)
+      begin
+        <runtime method definition of sfood>
+        <runtime method definition of self.sfoos>
+      end
+    end
+
     def sfood(<blk>)
       <emptyTree>
     end
@@ -70,7 +52,11 @@ begin
     end
 
     def self.<static-init>(<blk>)
-      <emptyTree>
+      begin
+        <runtime method definition of foo>
+        <runtime method definition of self.sfoo>
+        <emptyTree>
+      end
     end
   end
   <emptyTree>

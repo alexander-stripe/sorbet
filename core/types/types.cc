@@ -1,18 +1,21 @@
 #include "core/Types.h"
 #include "absl/base/casts.h"
+#include "absl/strings/match.h"
 #include "common/common.h"
+#include "common/strings/formatting.h"
 #include "common/typecase.h"
 #include "core/Context.h"
 #include "core/GlobalState.h"
 #include "core/Names.h"
 #include "core/Symbols.h"
 #include "core/TypeConstraint.h"
+#include "core/errors/infer.h"
+#include "core/errors/resolver.h"
 #include <utility>
 
 #include "core/Types.h"
 
 // improve debugging.
-template class std::shared_ptr<sorbet::core::Type>;
 template class std::shared_ptr<sorbet::core::TypeConstraint>;
 template class std::shared_ptr<sorbet::core::SendAndBlockLink>;
 template class std::vector<sorbet::core::Loc>;
@@ -21,42 +24,43 @@ namespace sorbet::core {
 
 using namespace std;
 
-TypePtr Types::dispatchCallWithoutBlock(Context ctx, const TypePtr &recv, DispatchArgs args) {
-    auto dispatched = recv->dispatchCall(ctx, move(args));
-    auto link = &dispatched;
-    while (link != nullptr) {
-        for (auto &err : link->main.errors) {
-            ctx.state._error(move(err));
-        }
-        link = link->secondary.get();
+namespace {
+// We create types pretty freely during inference, and even small programs can create a
+// large amount of types; see test/testdata/infer/is_subtype_timeout.rb for an example.
+// Recording counters for these types can take up a substantial amount of time for such
+// tests, and so we disable counting them altogether even in debug builds.
+//
+// If you want to compute a histogram of types, flip this to true and rebuild.
+constexpr bool countTypeAllocations = false;
+void recordAllocatedType(ConstExprStr kind) {
+    if constexpr (countTypeAllocations) {
+        categoryCounterInc("types.allocated", kind);
     }
-    return move(dispatched.returnType);
 }
-
-TypePtr::TypePtr(shared_ptr<Type> &&store) : store(move(store)){};
+} // namespace
 
 TypePtr Types::top() {
-    static auto res = make_type<ClassType>(Symbols::top());
-    return res;
+    return make_type<ClassType>(Symbols::top());
 }
 
 TypePtr Types::bottom() {
-    static auto res = make_type<ClassType>(Symbols::bottom());
-    return res;
+    return make_type<ClassType>(Symbols::bottom());
 }
 
 TypePtr Types::nilClass() {
-    static auto res = make_type<ClassType>(Symbols::NilClass());
-    return res;
+    return make_type<ClassType>(Symbols::NilClass());
 }
 
 TypePtr Types::untypedUntracked() {
-    static auto res = make_type<ClassType>(Symbols::untyped());
-    return res;
+    return make_type<ClassType>(Symbols::untyped());
 }
 
-TypePtr Types::untyped(const sorbet::core::GlobalState &gs, sorbet::core::SymbolRef blame) {
-    if (sorbet::debug_mode) {
+TypePtr Types::untyped(sorbet::core::SymbolRef blame) {
+    if constexpr (!sorbet::track_untyped_blame_mode && !sorbet::debug_mode) {
+        return untypedUntracked();
+    }
+
+    if (blame.exists()) {
         return make_type<BlamedUntyped>(blame);
     } else {
         return untypedUntracked();
@@ -64,18 +68,15 @@ TypePtr Types::untyped(const sorbet::core::GlobalState &gs, sorbet::core::Symbol
 }
 
 TypePtr Types::void_() {
-    static auto res = make_type<ClassType>(Symbols::void_());
-    return res;
+    return make_type<ClassType>(Symbols::void_());
 }
 
 TypePtr Types::trueClass() {
-    static auto res = make_type<ClassType>(Symbols::TrueClass());
-    return res;
+    return make_type<ClassType>(Symbols::TrueClass());
 }
 
 TypePtr Types::falseClass() {
-    static auto res = make_type<ClassType>(Symbols::FalseClass());
-    return res;
+    return make_type<ClassType>(Symbols::FalseClass());
 }
 
 TypePtr Types::Boolean() {
@@ -84,55 +85,81 @@ TypePtr Types::Boolean() {
 }
 
 TypePtr Types::Integer() {
-    static auto res = make_type<ClassType>(Symbols::Integer());
-    return res;
+    return make_type<ClassType>(Symbols::Integer());
 }
 
 TypePtr Types::Float() {
-    static auto res = make_type<ClassType>(Symbols::Float());
-    return res;
+    return make_type<ClassType>(Symbols::Float());
 }
 
-TypePtr Types::arrayOfUntyped() {
-    static vector<TypePtr> targs{Types::untypedUntracked()};
-    static auto res = make_type<AppliedType>(Symbols::Array(), targs);
-    return res;
+TypePtr Types::arrayOfUntyped(sorbet::core::SymbolRef blame) {
+    if constexpr (!sorbet::track_untyped_blame_mode && !sorbet::debug_mode) {
+        static vector<TypePtr> targs{Types::untypedUntracked()};
+        static auto res = make_type<AppliedType>(Symbols::Array(), move(targs));
+        return res;
+    } else {
+        vector<TypePtr> targs{Types::untyped(blame)};
+        auto res = make_type<AppliedType>(Symbols::Array(), move(targs));
+        return res;
+    }
+}
+
+TypePtr Types::rangeOfUntyped(sorbet::core::SymbolRef blame) {
+    if constexpr (!sorbet::track_untyped_blame_mode && !sorbet::debug_mode) {
+        static vector<TypePtr> targs{Types::untypedUntracked()};
+        static auto res = make_type<AppliedType>(Symbols::Range(), move(targs));
+        return res;
+    } else {
+        vector<TypePtr> targs{Types::untyped(blame)};
+        auto res = make_type<AppliedType>(Symbols::Range(), move(targs));
+        return res;
+    }
 }
 
 TypePtr Types::hashOfUntyped() {
     static vector<TypePtr> targs{Types::untypedUntracked(), Types::untypedUntracked(), Types::untypedUntracked()};
-    static auto res = make_type<AppliedType>(Symbols::Hash(), targs);
+    static auto res = make_type<AppliedType>(Symbols::Hash(), move(targs));
     return res;
+}
+
+TypePtr Types::hashOfUntyped(sorbet::core::SymbolRef blame) {
+    if constexpr (!sorbet::track_untyped_blame_mode && !sorbet::debug_mode) {
+        return Types::hashOfUntyped();
+    } else {
+        auto untypedWithBlame = Types::untyped(blame);
+        vector<TypePtr> targs{untypedWithBlame, untypedWithBlame, untypedWithBlame};
+        auto res = make_type<AppliedType>(Symbols::Hash(), move(targs));
+        return res;
+    }
 }
 
 TypePtr Types::procClass() {
-    static auto res = make_type<ClassType>(Symbols::Proc());
-    return res;
+    return make_type<ClassType>(Symbols::Proc());
 }
 
-TypePtr Types::classClass() {
-    static auto res = make_type<ClassType>(Symbols::Class());
+TypePtr Types::nilableProcClass() {
+    static auto res = OrType::make_shared(nilClass(), procClass());
     return res;
 }
 
 TypePtr Types::declBuilderForProcsSingletonClass() {
-    static auto res = make_type<ClassType>(Symbols::DeclBuilderForProcsSingleton());
-    return res;
+    return make_type<ClassType>(Symbols::DeclBuilderForProcsSingleton());
 }
 
 TypePtr Types::String() {
-    static auto res = make_type<ClassType>(Symbols::String());
-    return res;
+    return make_type<ClassType>(Symbols::String());
 }
 
 TypePtr Types::Symbol() {
-    static auto res = make_type<ClassType>(Symbols::Symbol());
-    return res;
+    return make_type<ClassType>(Symbols::Symbol());
 }
 
 TypePtr Types::Object() {
-    static auto res = make_type<ClassType>(Symbols::Object());
-    return res;
+    return make_type<ClassType>(Symbols::Object());
+}
+
+TypePtr Types::BasicObject() {
+    return make_type<ClassType>(Symbols::BasicObject());
 }
 
 TypePtr Types::falsyTypes() {
@@ -140,295 +167,416 @@ TypePtr Types::falsyTypes() {
     return res;
 }
 
-TypePtr Types::dropSubtypesOf(Context ctx, const TypePtr &from, SymbolRef klass) {
+absl::Span<const ClassOrModuleRef> Types::falsySymbols() {
+    static InlinedVector<ClassOrModuleRef, 2> res{Symbols::NilClass(), Symbols::FalseClass()};
+    return res;
+}
+
+TypePtr Types::todo() {
+    return make_type<ClassType>(Symbols::todo());
+}
+
+TypePtr Types::dropSubtypesOf(const GlobalState &gs, const TypePtr &from, absl::Span<const ClassOrModuleRef> klasses) {
     TypePtr result;
 
-    if (from->isUntyped()) {
+    if (from.isUntyped()) {
         return from;
     }
 
     typecase(
-        from.get(),
-        [&](OrType *o) {
-            auto lhs = dropSubtypesOf(ctx, o->left, klass);
-            auto rhs = dropSubtypesOf(ctx, o->right, klass);
-            if (lhs == o->left && rhs == o->right) {
+        from,
+        [&](const OrType &o) {
+            auto lhs = dropSubtypesOf(gs, o.left, klasses);
+            auto rhs = dropSubtypesOf(gs, o.right, klasses);
+            if (lhs == o.left && rhs == o.right) {
                 result = from;
-            } else if (lhs->isBottom()) {
+            } else if (lhs.isBottom()) {
                 result = rhs;
-            } else if (rhs->isBottom()) {
+            } else if (rhs.isBottom()) {
                 result = lhs;
             } else {
                 result = OrType::make_shared(lhs, rhs);
             }
         },
-        [&](AndType *a) {
-            auto lhs = dropSubtypesOf(ctx, a->left, klass);
-            auto rhs = dropSubtypesOf(ctx, a->right, klass);
-            if (lhs != a->left || rhs != a->right) {
-                result = Types::all(ctx, lhs, rhs);
+        [&](const AndType &a) {
+            auto lhs = dropSubtypesOf(gs, a.left, klasses);
+            auto rhs = dropSubtypesOf(gs, a.right, klasses);
+            if (lhs != a.left || rhs != a.right) {
+                result = Types::all(gs, lhs, rhs);
             } else {
                 result = from;
             }
         },
-        [&](ClassType *c) {
-            auto cdata = c->symbol.data(ctx);
-            if (c->isUntyped()) {
+        [&](const ClassType &c) {
+            auto cdata = c.symbol.data(gs);
+            if (c.symbol == core::Symbols::untyped()) {
                 result = from;
-            } else if (c->symbol == klass || c->derivesFrom(ctx, klass)) {
+            } else if (absl::c_any_of(klasses,
+                                      [&](auto klass) { return c.symbol == klass || c.derivesFrom(gs, klass); })) {
                 result = Types::bottom();
-            } else if (c->symbol.data(ctx)->isClassOrModuleClass() && klass.data(ctx)->isClassOrModuleClass() &&
-                       !klass.data(ctx)->derivesFrom(ctx, c->symbol)) {
-                // We have two classes (not modules), and if the class we're
-                // removing doesn't derive from `c`, there's nothing to do,
-                // because of ruby having single inheretance.
+            } else if (c.symbol.data(gs)->isClass() && absl::c_all_of(klasses, [&](auto klass) {
+                           return klass.data(gs)->isClass() && !klass.data(gs)->derivesFrom(gs, c.symbol);
+                       })) {
+                // We have two classes (not modules), and if all of the the classes we're removing
+                // don't derive from `c`, there's nothing to do because Ruby has single inheritance.
                 result = from;
-            } else if (cdata->isClassOrModuleSealed() &&
-                       (cdata->isClassOrModuleAbstract() || cdata->isClassOrModuleModule())) {
-                auto subclasses = cdata->sealedSubclassesToUnion(ctx);
-                ENFORCE(!Types::equiv(ctx, subclasses, from), "sealedSubclassesToUnion about to cause infinte loop");
-                result = dropSubtypesOf(ctx, subclasses, klass);
+            } else if (cdata->flags.isSealed && (cdata->flags.isAbstract || cdata->isModule())) {
+                auto subclasses = cdata->sealedSubclassesToUnion(gs);
+                ENFORCE(!Types::equiv(gs, subclasses, from), "sealedSubclassesToUnion about to cause infinite loop");
+                result = dropSubtypesOf(gs, subclasses, klasses);
             } else {
                 result = from;
             }
         },
-        [&](AppliedType *c) {
-            if (c->klass == klass || c->derivesFrom(ctx, klass)) {
+        [&](const AppliedType &a) {
+            auto adata = a.klass.data(gs);
+            if (absl::c_any_of(klasses, [&](auto klass) { return a.klass == klass || a.derivesFrom(gs, klass); })) {
+                result = Types::bottom();
+            } else if (a.klass.data(gs)->isClass() && absl::c_all_of(klasses, [&](auto klass) {
+                           return klass.data(gs)->isClass() && !klass.data(gs)->derivesFrom(gs, a.klass);
+                       })) {
+                // We have two classes (not modules), and if all of the the classes we're removing
+                // don't derive from `c`, there's nothing to do because Ruby has single inheritance.
+                result = from;
+            } else if (adata->flags.isSealed && (adata->flags.isAbstract || adata->isModule())) {
+                auto subclasses = adata->sealedSubclassesToUnion(gs);
+                ENFORCE(!Types::equiv(gs, subclasses, from), "sealedSubclassesToUnion about to cause infinite loop");
+                result = dropSubtypesOf(gs, subclasses, klasses);
+                result = Types::all(gs, from, result);
+            } else {
+                result = from;
+            }
+        },
+        [&](const TypePtr &) {
+            if (is_proxy_type(from) && dropSubtypesOf(gs, from.underlying(gs), klasses).isBottom()) {
                 result = Types::bottom();
             } else {
                 result = from;
             }
-        },
-        [&](ProxyType *c) {
-            if (dropSubtypesOf(ctx, c->underlying(), klass)->isBottom()) {
-                result = Types::bottom();
-            } else {
-                result = from;
-            }
-        },
-        [&](Type *) { result = from; });
-    ENFORCE(Types::isSubType(ctx, result, from),
-            "dropSubtypesOf({}, {}) returned {}, which is not a subtype of the input", from->toString(ctx),
-            klass.data(ctx)->showFullName(ctx), result->toString(ctx));
+        });
+    SLOW_ENFORCE(Types::isSubType(gs, result, from),
+                 "dropSubtypesOf({}, [{}]) returned {}, which is not a subtype of the input", from.toString(gs),
+                 fmt::map_join(klasses, ", ", [&](auto klass) { return klass.showFullName(gs); }), result.toString(gs));
     return result;
 }
 
-bool Types::canBeTruthy(Context ctx, const TypePtr &what) {
+bool Types::canBeTruthy(const GlobalState &gs, const TypePtr &what) {
     bool isTruthy = true;
     typecase(
-        what.get(), [&](OrType *o) { isTruthy = canBeTruthy(ctx, o->left) || canBeTruthy(ctx, o->right); },
-        [&](AndType *a) { isTruthy = canBeTruthy(ctx, a->left) && canBeTruthy(ctx, a->right); },
-        [&](ClassType *c) {
-            auto sym = c->symbol;
+        what, [&](const OrType &o) { isTruthy = canBeTruthy(gs, o.left) || canBeTruthy(gs, o.right); },
+        [&](const AndType &a) { isTruthy = canBeTruthy(gs, a.left) && canBeTruthy(gs, a.right); },
+        [&](const ClassType &c) {
+            auto sym = c.symbol;
             isTruthy = sym == core::Symbols::untyped() ||
                        (sym != core::Symbols::FalseClass() && sym != core::Symbols::NilClass());
         },
-        [&](AppliedType *c) {
-            auto sym = c->klass;
+        [&](const AppliedType &c) {
+            auto sym = c.klass;
             isTruthy = sym == core::Symbols::untyped() ||
                        (sym != core::Symbols::FalseClass() && sym != core::Symbols::NilClass());
         },
-        [&](ProxyType *c) { isTruthy = canBeTruthy(ctx, c->underlying()); }, [&](Type *) { isTruthy = true; });
+        [&](const TypePtr &) {
+            if (is_proxy_type(what)) {
+                isTruthy = canBeTruthy(gs, what.underlying(gs));
+            } else {
+                isTruthy = true;
+            }
+        });
 
     return isTruthy;
 }
 
-bool Types::canBeFalsy(Context ctx, const TypePtr &what) {
-    if (what->isUntyped()) {
+bool Types::canBeFalsy(const GlobalState &gs, const TypePtr &what) {
+    if (what.isUntyped()) {
         return true;
     }
-    return Types::isSubType(ctx, Types::falseClass(), what) ||
-           Types::isSubType(ctx, Types::nilClass(),
-                            what); // check if inhabited by falsy values
+    return Types::isSubType(gs, Types::falseClass(), what) ||
+           Types::isSubType(gs, Types::nilClass(), what); // check if inhabited by falsy values
 }
 
-TypePtr Types::approximateSubtract(Context ctx, const TypePtr &from, const TypePtr &what) {
+TypePtr Types::approximateSubtract(const GlobalState &gs, const TypePtr &from, const TypePtr &what) {
     TypePtr result;
     typecase(
-        what.get(), [&](ClassType *c) { result = Types::dropSubtypesOf(ctx, from, c->symbol); },
-        [&](AppliedType *c) { result = Types::dropSubtypesOf(ctx, from, c->klass); },
-        [&](OrType *o) {
-            result = Types::approximateSubtract(ctx, Types::approximateSubtract(ctx, from, o->left), o->right);
+        what, [&](const ClassType &c) { result = Types::dropSubtypesOf(gs, from, absl::MakeSpan(&c.symbol, 1)); },
+        [&](const AppliedType &c) { result = Types::dropSubtypesOf(gs, from, absl::MakeSpan(&c.klass, 1)); },
+        [&](const OrType &o) {
+            result = Types::approximateSubtract(gs, Types::approximateSubtract(gs, from, o.left), o.right);
         },
-        [&](Type *) { result = from; });
+        [&](const TypePtr &) { result = from; });
     return result;
 }
 
-TypePtr Types::dropLiteral(const TypePtr &tp) {
-    if (auto *a = cast_type<LiteralType>(tp.get())) {
-        return a->underlying();
+TypePtr Types::dropLiteral(const GlobalState &gs, const TypePtr &tp) {
+    if (isa_type<NamedLiteralType>(tp)) {
+        auto a = cast_type_nonnull<NamedLiteralType>(tp);
+        return a.underlying(gs);
+    }
+    if (isa_type<IntegerLiteralType>(tp)) {
+        auto &i = cast_type_nonnull<IntegerLiteralType>(tp);
+        return i.underlying(gs);
+    }
+    if (isa_type<FloatLiteralType>(tp)) {
+        auto &f = cast_type_nonnull<FloatLiteralType>(tp);
+        return f.underlying(gs);
     }
     return tp;
 }
 
-TypePtr Types::lubAll(Context ctx, vector<TypePtr> &elements) {
+TypePtr Types::lubAll(const GlobalState &gs, const vector<TypePtr> &elements) {
     TypePtr acc = Types::bottom();
     for (auto &el : elements) {
-        acc = Types::lub(ctx, acc, el);
+        // The only time that `Types::lub` produces a proxy_type is if the two proxy types are
+        // equivalent: `:foo | :foo`. If they're not equivalent, we widen. There are no
+        // `:foo | :bar` types produced by `lub`, so `widen` is unnecessary.
+        //
+        // Which means that to remove all literals, it's sufficient to do a single `dropLiteral`
+        // at the call `lubAll` call site.
+        acc = Types::lub(gs, acc, el);
     }
     return acc;
 }
 
-TypePtr Types::arrayOf(Context ctx, const TypePtr &elem) {
+TypePtr Types::arrayOf(const GlobalState &gs, const TypePtr &elem) {
     vector<TypePtr> targs{move(elem)};
-    return make_type<AppliedType>(Symbols::Array(), targs);
+    return make_type<AppliedType>(Symbols::Array(), move(targs));
 }
 
-TypePtr Types::hashOf(Context ctx, const TypePtr &elem) {
+TypePtr Types::rangeOf(const GlobalState &gs, const TypePtr &elem) {
+    vector<TypePtr> targs{move(elem)};
+    return make_type<AppliedType>(Symbols::Range(), move(targs));
+}
+
+TypePtr Types::hashOf(const GlobalState &gs, const TypePtr &elem) {
     vector<TypePtr> tupleArgs{Types::Symbol(), elem};
-    vector<TypePtr> targs{Types::Symbol(), elem, TupleType::build(ctx, tupleArgs)};
-    return make_type<AppliedType>(Symbols::Hash(), targs);
+    vector<TypePtr> targs{Types::Symbol(), elem, make_type<TupleType>(move(tupleArgs))};
+    return make_type<AppliedType>(Symbols::Hash(), move(targs));
 }
 
-std::optional<int> Types::getProcArity(const AppliedType &type) {
+TypePtr Types::hashOf(const GlobalState &gs, const TypePtr &key, const TypePtr &val) {
+    vector<TypePtr> tupleArgs{key, val};
+    vector<TypePtr> targs{key, val, make_type<TupleType>(move(tupleArgs))};
+    return make_type<AppliedType>(Symbols::Hash(), move(targs));
+}
+
+TypePtr Types::setOf(const TypePtr &elem) {
+    vector<TypePtr> targs{elem};
+    return make_type<AppliedType>(Symbols::Set(), move(targs));
+}
+
+TypePtr Types::tClass(const TypePtr &attachedClass) {
+    vector<TypePtr> targs;
+    targs.emplace_back(attachedClass);
+    return make_type<AppliedType>(Symbols::Class(), move(targs));
+}
+
+TypePtr Types::dropNil(const GlobalState &gs, const TypePtr &from) {
+    static auto nilClass = core::Symbols::NilClass();
+    static auto toDrop = absl::MakeSpan(&nilClass, 1);
+    return Types::dropSubtypesOf(gs, from, toDrop);
+}
+
+optional<int> Types::getProcArity(const AppliedType &type) {
     for (int i = 0; i <= Symbols::MAX_PROC_ARITY; i++) {
         if (type.klass == Symbols::Proc(i)) {
             return i;
         }
     }
-    return std::nullopt;
+    return nullopt;
 }
 
-ClassType::ClassType(SymbolRef symbol) : symbol(symbol) {
-    categoryCounterInc("types.allocated", "classtype");
+ClassType::ClassType(ClassOrModuleRef symbol) : symbol(symbol) {
+    recordAllocatedType("classtype");
     ENFORCE(symbol.exists());
 }
 
-void ProxyType::_sanityCheck(Context ctx) {
-    ENFORCE(cast_type<ClassType>(this->underlying().get()) != nullptr ||
-            cast_type<AppliedType>(this->underlying().get()) != nullptr);
-    this->underlying()->sanityCheck(ctx);
+namespace {
+void sanityCheckProxyType(const GlobalState &gs, TypePtr underlying) {
+    ENFORCE(isa_type<ClassType>(underlying) || isa_type<AppliedType>(underlying));
+    underlying.sanityCheck(gs);
 }
+} // namespace
 
-bool Type::isUntyped() const {
-    auto *t = cast_type<ClassType>(this);
-    return t != nullptr && t->symbol == Symbols::untyped();
-}
-
-core::SymbolRef Type::untypedBlame() const {
-    ENFORCE(isUntyped());
-    auto *t = cast_type<BlamedUntyped>(this);
-    if (t == nullptr) {
-        return Symbols::noSymbol();
+NamedLiteralType::NamedLiteralType(ClassOrModuleRef klass, NameRef val)
+    : name(val), kind(klass == Symbols::String() ? Kind::String : Kind::Symbol) {
+    if (klass == Symbols::String()) {
+        recordAllocatedType("literaltype.string");
+    } else {
+        recordAllocatedType("literaltype.symbol");
     }
-    return t->blame;
-}
-
-bool Type::isBottom() const {
-    auto *t = cast_type<ClassType>(this);
-    return t != nullptr && t->symbol == Symbols::bottom();
-}
-
-LiteralType::LiteralType(int64_t val) : value(val), literalKind(LiteralTypeKind::Integer) {
-    categoryCounterInc("types.allocated", "literaltype");
-}
-
-LiteralType::LiteralType(double val) : floatval(val), literalKind(LiteralTypeKind::Float) {
-    categoryCounterInc("types.allocated", "literaltype");
-}
-
-LiteralType::LiteralType(SymbolRef klass, NameRef val)
-    : value(val._id), literalKind(klass == Symbols::String() ? LiteralTypeKind::String : LiteralTypeKind::Symbol) {
-    categoryCounterInc("types.allocated", "literaltype");
     ENFORCE(klass == Symbols::String() || klass == Symbols::Symbol());
 }
 
-LiteralType::LiteralType(bool val)
-    : value(val ? 1 : 0), literalKind(val ? LiteralTypeKind::True : LiteralTypeKind::False) {
-    categoryCounterInc("types.allocated", "literaltype");
-}
-
-TypePtr LiteralType::underlying() const {
-    switch (literalKind) {
-        case LiteralTypeKind::Integer:
-            return Types::Integer();
-        case LiteralTypeKind::Float:
-            return Types::Float();
-        case LiteralTypeKind::String:
+TypePtr NamedLiteralType::underlying(const GlobalState &gs) const {
+    switch (kind) {
+        case Kind::String:
             return Types::String();
-        case LiteralTypeKind::Symbol:
+        case Kind::Symbol:
             return Types::Symbol();
-        case LiteralTypeKind::True:
-            return Types::trueClass();
-        case LiteralTypeKind::False:
-            return Types::falseClass();
     }
-    Exception::raise("should never be reached");
 }
 
-TupleType::TupleType(TypePtr underlying, vector<TypePtr> elements)
-    : elems(move(elements)), underlying_(std::move(underlying)) {
-    categoryCounterInc("types.allocated", "tupletype");
+IntegerLiteralType::IntegerLiteralType(int64_t val) : value(val) {
+    recordAllocatedType("literalintegertype");
 }
 
-TypePtr TupleType::build(Context ctx, vector<TypePtr> elements) {
-    TypePtr underlying = Types::arrayOf(ctx, Types::dropLiteral(Types::lubAll(ctx, elements)));
-    return make_type<TupleType>(move(underlying), move(elements));
+TypePtr IntegerLiteralType::underlying(const GlobalState &gs) const {
+    return Types::Integer();
+}
+
+FloatLiteralType::FloatLiteralType(double val) : value(val) {
+    recordAllocatedType("floatliteraltype");
+}
+
+TypePtr FloatLiteralType::underlying(const GlobalState &gs) const {
+    return Types::Float();
+}
+
+TupleType::TupleType(vector<TypePtr> elements) : elems(move(elements)) {
+    recordAllocatedType("tupletype");
+    histogramInc("tupletype.elems", this->elems.size());
 }
 
 AndType::AndType(const TypePtr &left, const TypePtr &right) : left(move(left)), right(move(right)) {
-    categoryCounterInc("types.allocated", "andtype");
+    recordAllocatedType("andtype");
 }
 
-bool LiteralType::equals(const LiteralType &rhs) const {
-    if (this->value != rhs.value) {
+void NamedLiteralType::_sanityCheck(const GlobalState &gs) const {
+    sanityCheckProxyType(gs, underlying(gs));
+}
+
+bool NamedLiteralType::equals(const NamedLiteralType &rhs) const {
+    if (this->kind != rhs.kind) {
         return false;
     }
-    auto *lklass = cast_type<ClassType>(this->underlying().get());
-    auto *rklass = cast_type<ClassType>(rhs.underlying().get());
-    if (!lklass || !rklass) {
-        return false;
-    }
-    return lklass->symbol == rklass->symbol;
+
+    return this->name == rhs.name;
+}
+
+void IntegerLiteralType::_sanityCheck(const GlobalState &gs) const {
+    sanityCheckProxyType(gs, underlying(gs));
+}
+
+bool IntegerLiteralType::equals(const IntegerLiteralType &rhs) const {
+    return this->value == rhs.value;
+}
+
+void FloatLiteralType::_sanityCheck(const GlobalState &gs) const {
+    sanityCheckProxyType(gs, underlying(gs));
+}
+
+bool FloatLiteralType::equals(const FloatLiteralType &rhs) const {
+    return this->value == rhs.value;
 }
 
 OrType::OrType(const TypePtr &left, const TypePtr &right) : left(move(left)), right(move(right)) {
-    categoryCounterInc("types.allocated", "ortype");
+    recordAllocatedType("ortype");
 }
 
-void TupleType::_sanityCheck(Context ctx) {
-    ProxyType::_sanityCheck(ctx);
-    auto *applied = cast_type<AppliedType>(this->underlying().get());
+void TupleType::_sanityCheck(const GlobalState &gs) const {
+    sanityCheckProxyType(gs, underlying(gs));
+    auto underlying = this->underlying(gs);
+    auto applied = cast_type<AppliedType>(underlying);
     ENFORCE(applied);
     ENFORCE(applied->klass == Symbols::Array());
 }
 
-ShapeType::ShapeType() : underlying_(Types::hashOfUntyped()) {
-    categoryCounterInc("types.allocated", "shapetype");
+ShapeType::ShapeType(vector<TypePtr> keys, vector<TypePtr> values) : keys(move(keys)), values(move(values)) {
+    DEBUG_ONLY(for (auto &k
+                    : this->keys) {
+        ENFORCE(isa_type<NamedLiteralType>(k) || isa_type<IntegerLiteralType>(k) || isa_type<FloatLiteralType>(k));
+    };);
+    recordAllocatedType("shapetype");
+    histogramInc("shapetype.keys", this->keys.size());
 }
 
-ShapeType::ShapeType(TypePtr underlying, vector<TypePtr> keys, vector<TypePtr> values)
-    : keys(move(keys)), values(move(values)), underlying_(std::move(underlying)) {
-    DEBUG_ONLY(for (auto &k : this->keys) { ENFORCE(cast_type<LiteralType>(k.get()) != nullptr); };);
-    categoryCounterInc("types.allocated", "shapetype");
+TypePtr ShapeType::underlying(const GlobalState &gs) const {
+    return Types::hashOfUntyped(Symbols::Magic_UntypedSource_shapeUnderlying());
 }
 
-TypePtr ShapeType::underlying() const {
-    return this->underlying_;
+optional<size_t> ShapeType::indexForKey(const TypePtr &t) const {
+    if (isa_type<NamedLiteralType>(t)) {
+        const auto &lit = cast_type_nonnull<NamedLiteralType>(t);
+        return this->indexForKey(lit);
+    }
+    if (isa_type<IntegerLiteralType>(t)) {
+        auto &lit = cast_type_nonnull<IntegerLiteralType>(t);
+        return this->indexForKey(lit);
+    }
+    if (isa_type<FloatLiteralType>(t)) {
+        auto &lit = cast_type_nonnull<FloatLiteralType>(t);
+        return this->indexForKey(lit);
+    }
+    return nullopt;
 }
 
-TypePtr TupleType::underlying() const {
-    return this->underlying_;
+optional<size_t> ShapeType::indexForKey(const NamedLiteralType &lit) const {
+    auto fnd = absl::c_find_if(this->keys, [&lit](const auto &candidate) -> bool {
+        if (!isa_type<NamedLiteralType>(candidate)) {
+            return false;
+        }
+        const auto &candlit = cast_type_nonnull<NamedLiteralType>(candidate);
+        return candlit.equals(lit);
+    });
+    if (fnd == this->keys.end()) {
+        return nullopt;
+    }
+    return std::distance(this->keys.begin(), fnd);
 }
 
-void ShapeType::_sanityCheck(Context ctx) {
-    ProxyType::_sanityCheck(ctx);
+optional<size_t> ShapeType::indexForKey(const IntegerLiteralType &lit) const {
+    auto fnd = absl::c_find_if(keys, [&](auto &candidate) -> bool {
+        if (!isa_type<IntegerLiteralType>(candidate)) {
+            return false;
+        }
+        const auto &candlit = cast_type_nonnull<IntegerLiteralType>(candidate);
+        return candlit.equals(lit);
+    });
+    if (fnd == this->keys.end()) {
+        return nullopt;
+    }
+    return std::distance(this->keys.begin(), fnd);
+}
+
+optional<size_t> ShapeType::indexForKey(const FloatLiteralType &lit) const {
+    auto fnd = absl::c_find_if(keys, [&](auto &candidate) -> bool {
+        if (!isa_type<FloatLiteralType>(candidate)) {
+            return false;
+        }
+        const auto &candlit = cast_type_nonnull<FloatLiteralType>(candidate);
+        return candlit.equals(lit);
+    });
+    if (fnd == this->keys.end()) {
+        return nullopt;
+    }
+    return std::distance(this->keys.begin(), fnd);
+}
+
+TypePtr TupleType::underlying(const GlobalState &gs) const {
+    if (this->elems.empty()) {
+        return Types::arrayOfUntyped(Symbols::Magic_UntypedSource_tupleUnderlying());
+    } else {
+        return Types::arrayOf(gs, Types::dropLiteral(gs, Types::lubAll(gs, this->elems)));
+    }
+}
+
+void ShapeType::_sanityCheck(const GlobalState &gs) const {
+    sanityCheckProxyType(gs, underlying(gs));
     ENFORCE(this->values.size() == this->keys.size());
     for (auto &v : this->keys) {
-        v->_sanityCheck(ctx);
+        v.sanityCheck(gs);
     }
     for (auto &e : this->values) {
-        e->_sanityCheck(ctx);
+        e.sanityCheck(gs);
     }
 }
 
 AliasType::AliasType(SymbolRef other) : symbol(other) {
-    categoryCounterInc("types.allocated", "aliastype");
+    recordAllocatedType("aliastype");
 }
 
-void AndType::_sanityCheck(Context ctx) {
-    left->_sanityCheck(ctx);
-    right->_sanityCheck(ctx);
+void AndType::_sanityCheck(const GlobalState &gs) const {
+    left.sanityCheck(gs);
+    right.sanityCheck(gs);
     /*
      * This is no longer true. Now we can construct types such as:
      * ShapeType(1 => 1), AppliedType{Array, Integer}
@@ -437,150 +585,76 @@ void AndType::_sanityCheck(Context ctx) {
 
        */
 
-    ENFORCE(!left->isUntyped());
-    ENFORCE(!right->isUntyped());
+    ENFORCE(!left.isUntyped());
+    ENFORCE(!right.isUntyped());
     // TODO: reenable
-    //    ENFORCE(!Types::isSubType(ctx, left, right),
-    //            this->toString(ctx) + " should have collapsed: " + left->toString(ctx) + " <: " +
-    //            right->toString(ctx));
-    //    ENFORCE(!Types::isSubType(ctx, right, left),
-    //            this->toString(ctx) + " should have collapsed: " + right->toString(ctx) + " <: " +
-    //            left->toString(ctx));
+    //    ENFORCE(!Types::isSubType(gs, left, right),
+    //            this->toString(gs) + " should have collapsed: " + left->toString(gs) + " <: " +
+    //            right->toString(gs));
+    //    ENFORCE(!Types::isSubType(gs, right, left),
+    //            this->toString(gs) + " should have collapsed: " + right->toString(gs) + " <: " +
+    //            left->toString(gs));
 }
 
-void OrType::_sanityCheck(Context ctx) {
-    left->_sanityCheck(ctx);
-    right->_sanityCheck(ctx);
+void OrType::_sanityCheck(const GlobalState &gs) const {
+    left.sanityCheck(gs);
+    right.sanityCheck(gs);
     //    ENFORCE(!isa_type<ProxyType>(left.get()));
     //    ENFORCE(!isa_type<ProxyType>(right.get()));
-    ENFORCE(!left->isUntyped());
-    ENFORCE(!right->isUntyped());
+    ENFORCE(!left.isUntyped());
+    ENFORCE(!right.isUntyped());
     //  TODO: @dmitry, reenable
-    //    ENFORCE(!Types::isSubType(ctx, left, right),
-    //            this->toString(ctx) + " should have collapsed: " + left->toString(ctx) + " <: " +
-    //            right->toString(ctx));
-    //    ENFORCE(!Types::isSubType(ctx, right, left),
-    //            this->toString(ctx) + " should have collapsed: " + right->toString(ctx) + " <: " +
-    //            left->toString(ctx));
+    //    ENFORCE(!Types::isSubType(gs, left, right),
+    //            this->toString(gs) + " should have collapsed: " + left->toString(gs) + " <: " +
+    //            right->toString(gs));
+    //    ENFORCE(!Types::isSubType(gs, right, left),
+    //            this->toString(gs) + " should have collapsed: " + right->toString(gs) + " <: " +
+    //            left->toString(gs));
 }
 
-void ClassType::_sanityCheck(Context ctx) {
+void ClassType::_sanityCheck(const GlobalState &gs) const {
     ENFORCE(this->symbol.exists());
 }
 
-int AppliedType::kind() {
-    return 1;
+void AliasType::_sanityCheck(const GlobalState &gs) const {
+    ENFORCE(this->symbol.exists());
 }
 
-int ClassType::kind() {
-    return 2;
-}
-
-int LiteralType::kind() {
-    return 3;
-}
-
-int ShapeType::kind() {
-    return 4;
-}
-
-int TupleType::kind() {
-    return 5;
-}
-
-int LambdaParam::kind() {
-    return 6;
-}
-
-int SelfTypeParam::kind() {
-    return 6;
-}
-
-int MetaType::kind() {
-    return 7;
-}
-
-int TypeVar::kind() {
-    return 8;
-}
-
-int AliasType::kind() {
-    return 9;
-}
-
-int OrType::kind() {
-    return 10;
-}
-
-int AndType::kind() {
-    return 11;
-}
-
-int SelfType::kind() {
-    return 12;
-}
-
-bool ClassType::isFullyDefined() {
-    return true;
-}
-
-bool LiteralType::isFullyDefined() {
-    return true;
-}
-
-bool ShapeType::isFullyDefined() {
-    return absl::c_all_of(values, [](TypePtr t) { return t->isFullyDefined(); });
-}
-
-bool TupleType::isFullyDefined() {
-    return absl::c_all_of(elems, [](TypePtr t) { return t->isFullyDefined(); });
-}
-
-bool AliasType::isFullyDefined() {
-    return true;
-}
-
-bool AndType::isFullyDefined() {
-    return this->left->isFullyDefined() && this->right->isFullyDefined();
-}
-
-bool OrType::isFullyDefined() {
-    return this->left->isFullyDefined() && this->right->isFullyDefined();
+void MetaType::_sanityCheck(const GlobalState &gs) const {
+    ENFORCE(!core::isa_type<MetaType>(wrapped));
+    this->wrapped.sanityCheck(gs);
 }
 
 /** Returns type parameters of what reordered in the order of type parameters of asIf
  * If some typeArgs are not present, return NoSymbol
  * */
-InlinedVector<SymbolRef, 4> Types::alignBaseTypeArgs(Context ctx, SymbolRef what, const vector<TypePtr> &targs,
-                                                     SymbolRef asIf) {
-    ENFORCE(asIf.data(ctx)->isClassOrModule());
-    ENFORCE(what.data(ctx)->isClassOrModule());
-    ENFORCE(what == asIf || what.data(ctx)->derivesFrom(ctx, asIf) || asIf.data(ctx)->derivesFrom(ctx, what),
-            what.data(ctx)->name.showRaw(ctx), asIf.data(ctx)->name.showRaw(ctx));
-    InlinedVector<SymbolRef, 4> currentAlignment;
+InlinedVector<TypeMemberRef, 4> Types::alignBaseTypeArgs(const GlobalState &gs, ClassOrModuleRef what,
+                                                         const vector<TypePtr> &targs, ClassOrModuleRef asIf) {
+    ENFORCE(what == asIf || what.data(gs)->derivesFrom(gs, asIf) || asIf.data(gs)->derivesFrom(gs, what),
+            "what={} asIf={}", what.data(gs)->name.showRaw(gs), asIf.data(gs)->name.showRaw(gs));
+    InlinedVector<TypeMemberRef, 4> currentAlignment;
     if (targs.empty()) {
         return currentAlignment;
     }
 
-    if (what == asIf || (asIf.data(ctx)->isClassOrModuleClass() && what.data(ctx)->isClassOrModuleClass() &&
-                         asIf.data(ctx)->typeMembers().size() == what.data(ctx)->typeMembers().size())) {
-        currentAlignment = what.data(ctx)->typeMembers();
+    if (what == asIf || (asIf.data(gs)->isClass() && what.data(gs)->isClass() &&
+                         asIf.data(gs)->typeMembers().size() == what.data(gs)->typeMembers().size())) {
+        auto members = what.data(gs)->typeMembers();
+        currentAlignment.assign(members.begin(), members.end());
     } else {
-        currentAlignment.reserve(asIf.data(ctx)->typeMembers().size());
-        for (auto originalTp : asIf.data(ctx)->typeMembers()) {
-            auto name = originalTp.data(ctx)->name;
+        currentAlignment.reserve(asIf.data(gs)->typeMembers().size());
+        for (auto originalTp : asIf.data(gs)->typeMembers()) {
+            auto name = originalTp.data(gs)->name;
             SymbolRef align;
-            int i = 0;
-            for (auto x : what.data(ctx)->typeMembers()) {
-                if (x.data(ctx)->name == name) {
+            for (auto x : what.data(gs)->typeMembers()) {
+                if (x.data(gs)->name == name) {
                     align = x;
                     currentAlignment.emplace_back(x);
                     break;
                 }
-                i++;
             }
             if (!align.exists()) {
-                currentAlignment.emplace_back(Symbols::noSymbol());
+                currentAlignment.emplace_back(Symbols::noTypeMember());
             }
         }
     }
@@ -591,33 +665,35 @@ InlinedVector<SymbolRef, 4> Types::alignBaseTypeArgs(Context ctx, SymbolRef what
  * fromWhat - where the generic type was written
  * inWhat   - where the generic type is observed
  */
-TypePtr Types::resultTypeAsSeenFrom(Context ctx, TypePtr what, SymbolRef fromWhat, SymbolRef inWhat,
-                                    const vector<TypePtr> &targs) {
-    SymbolRef originalOwner = fromWhat;
-    ENFORCE(fromWhat.data(ctx)->isClassOrModule());
-    ENFORCE(inWhat.data(ctx)->isClassOrModule());
+TypePtr Types::resultTypeAsSeenFrom(const GlobalState &gs, const TypePtr &what, ClassOrModuleRef fromWhat,
+                                    ClassOrModuleRef inWhat, const vector<TypePtr> &targs) {
+    auto originalOwner = fromWhat;
 
     // TODO: the ENFORCE below should be above this conditional, but there is
     // currently a problem with the handling of `module_function` that causes it
     // to fail reliably. https://github.com/sorbet/sorbet/issues/904
-    if (originalOwner.data(ctx)->typeMembers().empty() || (what == nullptr)) {
+    if (originalOwner.data(gs)->typeMembers().empty() || (what == nullptr)) {
         return what;
     }
 
-    ENFORCE(inWhat == fromWhat || inWhat.data(ctx)->derivesFrom(ctx, fromWhat) ||
-                fromWhat.data(ctx)->derivesFrom(ctx, inWhat),
-            "\n{}\nis unrelated to\n\n{}", fromWhat.data(ctx)->toString(ctx), inWhat.data(ctx)->toString(ctx));
+    ENFORCE(inWhat == fromWhat || inWhat.data(gs)->derivesFrom(gs, fromWhat) ||
+                fromWhat.data(gs)->derivesFrom(gs, inWhat),
+            "\n{}\nis unrelated to\n\n{}", fromWhat.toString(gs), inWhat.toString(gs));
 
-    auto currentAlignment = alignBaseTypeArgs(ctx, originalOwner, targs, inWhat);
+    auto currentAlignment = alignBaseTypeArgs(gs, originalOwner, targs, inWhat);
 
-    return instantiate(ctx, what, currentAlignment, targs);
+    auto result = what._instantiateLambdaParams(gs, currentAlignment, targs);
+    if (result != nullptr) {
+        return result;
+    }
+    return what;
 }
 
-TypePtr Types::getProcReturnType(Context ctx, const TypePtr &procType) {
-    if (!procType->derivesFrom(ctx, Symbols::Proc())) {
+TypePtr Types::getProcReturnType(const GlobalState &gs, const TypePtr &procType) {
+    if (!procType.derivesFrom(gs, Symbols::Proc())) {
         return Types::untypedUntracked();
     }
-    auto *applied = cast_type<AppliedType>(procType.get());
+    auto applied = cast_type<AppliedType>(procType);
     if (applied == nullptr || applied->targs.empty()) {
         return Types::untypedUntracked();
     }
@@ -625,176 +701,105 @@ TypePtr Types::getProcReturnType(Context ctx, const TypePtr &procType) {
     return applied->targs.front();
 }
 
-bool Types::isAsSpecificAs(Context ctx, const TypePtr &t1, const TypePtr &t2) {
-    return isSubTypeUnderConstraint(ctx, TypeConstraint::EmptyFrozenConstraint, t1, t2,
-                                    UntypedMode::AlwaysIncompatible);
+bool ClassType::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
+    if (symbol == Symbols::untyped() || symbol == klass) {
+        return true;
+    }
+    return symbol.data(gs)->derivesFrom(gs, klass);
 }
 
-bool Types::isSubType(Context ctx, const TypePtr &t1, const TypePtr &t2) {
-    return isSubTypeUnderConstraint(ctx, TypeConstraint::EmptyFrozenConstraint, t1, t2, UntypedMode::AlwaysCompatible);
+bool OrType::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
+    return left.derivesFrom(gs, klass) && right.derivesFrom(gs, klass);
 }
 
-bool TypeVar::isFullyDefined() {
+bool AndType::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
+    return left.derivesFrom(gs, klass) || right.derivesFrom(gs, klass);
+}
+
+bool AliasType::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
+    Exception::raise("AliasType.derivesfrom");
+}
+
+bool TypeVar::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
+    Exception::raise("should never happen. You're missing a call to either Types::approximateTypeVars or "
+                     "Types::instantiateTypeVars");
+}
+
+MetaType::MetaType(const TypePtr &wrapped) : wrapped(move(wrapped)) {
+    recordAllocatedType("metattype");
+}
+
+bool MetaType::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
     return false;
 }
 
-TypePtr TypeVar::getCallArguments(Context ctx, NameRef name) {
-    Exception::raise("should never happen");
+TypeVar::TypeVar(TypeParameterRef sym) : sym(sym) {
+    recordAllocatedType("typevar");
 }
 
-bool TypeVar::derivesFrom(const GlobalState &gs, SymbolRef klass) const {
-    Exception::raise("should never happen. You're missing a call to either Types::approximate or Types::instantiate");
-}
-
-TypeVar::TypeVar(SymbolRef sym) : sym(sym) {
-    categoryCounterInc("types.allocated", "typevar");
-}
-
-void TypeVar::_sanityCheck(Context ctx) {
+void TypeVar::_sanityCheck(const GlobalState &gs) const {
     ENFORCE(this->sym.exists());
 }
 
-bool AppliedType::isFullyDefined() {
-    for (auto &targ : this->targs) {
-        if (!targ->isFullyDefined()) {
-            return false;
-        }
-    }
-    return true;
-}
-
-void AppliedType::_sanityCheck(Context ctx) {
-    ENFORCE(this->klass.data(ctx)->isClassOrModule());
+void AppliedType::_sanityCheck(const GlobalState &gs) const {
     ENFORCE(this->klass != Symbols::untyped());
 
-    ENFORCE(this->klass.data(ctx)->typeMembers().size() == this->targs.size() ||
+    ENFORCE(this->klass.data(gs)->typeMembers().size() == this->targs.size() ||
                 (this->klass == Symbols::Array() && (this->targs.size() == 1)) ||
                 (this->klass == Symbols::Hash() && (this->targs.size() == 3)) ||
-                this->klass._id >= Symbols::Proc0()._id && this->klass._id <= Symbols::last_proc()._id,
-            this->klass.data(ctx)->name.showRaw(ctx));
+                this->klass.id() >= Symbols::Proc0().id() && this->klass.id() <= Symbols::last_proc().id(),
+            "{}", this->klass.data(gs)->name.showRaw(gs));
     for (auto &targ : this->targs) {
-        targ->sanityCheck(ctx);
+        targ.sanityCheck(gs);
     }
 }
 
-bool AppliedType::derivesFrom(const GlobalState &gs, SymbolRef klass) const {
+bool AppliedType::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
     ClassType und(this->klass);
     return und.derivesFrom(gs, klass);
 }
 
-LambdaParam::LambdaParam(const SymbolRef definition, TypePtr lowerBound, TypePtr upperBound)
+LambdaParam::LambdaParam(const TypeMemberRef definition, TypePtr lowerBound, TypePtr upperBound)
     : definition(definition), lowerBound(lowerBound), upperBound(upperBound) {
-    categoryCounterInc("types.allocated", "lambdatypeparam");
+    recordAllocatedType("lambdatypeparam");
 }
 
 SelfTypeParam::SelfTypeParam(const SymbolRef definition) : definition(definition) {
-    categoryCounterInc("types.allocated", "selftypeparam");
+    recordAllocatedType("selftypeparam");
 }
 
-bool LambdaParam::derivesFrom(const GlobalState &gs, SymbolRef klass) const {
+bool LambdaParam::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
     Exception::raise(
         "LambdaParam::derivesFrom not implemented, not clear what it should do. Let's see this fire first.");
 }
 
-bool SelfTypeParam::derivesFrom(const GlobalState &gs, SymbolRef klass) const {
+bool SelfTypeParam::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
     return false;
 }
 
-TypePtr LambdaParam::getCallArguments(Context ctx, NameRef name) {
-    Exception::raise(
-        "LambdaParam::getCallArguments not implemented, not clear what it should do. Let's see this fire first.");
-}
-
-TypePtr SelfTypeParam::getCallArguments(Context ctx, NameRef name) {
-    Exception::raise(
-        "SelfTypeParam::getCallArguments not implemented, not clear what it should do. Let's see this fire first.");
-}
-
-DispatchResult LambdaParam::dispatchCall(Context ctx, DispatchArgs args) {
-    Exception::raise(
-        "LambdaParam::dispatchCall not implemented, not clear what it should do. Let's see this fire first.");
-}
-
-DispatchResult SelfTypeParam::dispatchCall(Context ctx, DispatchArgs args) {
-    return Types::untypedUntracked()->dispatchCall(ctx, args);
-}
-
-void LambdaParam::_sanityCheck(Context ctx) {}
-void SelfTypeParam::_sanityCheck(Context ctx) {}
-
-bool LambdaParam::isFullyDefined() {
-    return false;
-}
-
-bool SelfTypeParam::isFullyDefined() {
-    return true;
-}
-
-bool Type::hasUntyped() {
-    return false;
-}
-
-bool ClassType::hasUntyped() {
-    return isUntyped();
-}
-
-bool OrType::hasUntyped() {
-    return left->hasUntyped() || right->hasUntyped();
+void LambdaParam::_sanityCheck(const GlobalState &gs) const {}
+void SelfTypeParam::_sanityCheck(const GlobalState &gs) const {
+    ENFORCE(definition.isTypeMember() || definition.isTypeParameter());
 }
 
 TypePtr OrType::make_shared(const TypePtr &left, const TypePtr &right) {
-    TypePtr res(new OrType(left, right));
+    TypePtr res(TypePtr::Tag::OrType, new OrType(left, right));
     return res;
-}
-
-bool AndType::hasUntyped() {
-    return left->hasUntyped() || right->hasUntyped();
 }
 
 TypePtr AndType::make_shared(const TypePtr &left, const TypePtr &right) {
-    TypePtr res(new AndType(left, right));
+    TypePtr res(TypePtr::Tag::AndType, new AndType(left, right));
     return res;
 }
 
-bool AppliedType::hasUntyped() {
-    for (auto &arg : this->targs) {
-        if (arg->hasUntyped()) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool TupleType::hasUntyped() {
-    for (auto &arg : this->elems) {
-        if (arg->hasUntyped()) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool ShapeType::hasUntyped() {
-    for (auto &arg : this->values) {
-        if (arg->hasUntyped()) {
-            return true;
-        }
-    }
-    return false;
-};
-SendAndBlockLink::SendAndBlockLink(NameRef fun, vector<ArgInfo::ArgFlags> &&argFlags, int rubyBlockId)
-    : argFlags(argFlags), fun(fun), rubyBlockId(rubyBlockId) {}
-
-shared_ptr<SendAndBlockLink> SendAndBlockLink::duplicate() {
-    auto copy = *this;
-    return make_shared<SendAndBlockLink>(move(copy));
-}
+SendAndBlockLink::SendAndBlockLink(NameRef fun, LocOffsets loc, vector<ParamInfo::Flags> &&paramFlags)
+    : paramFlags(move(paramFlags)), loc(loc), fun(fun) {}
 
 optional<int> SendAndBlockLink::fixedArity() const {
     optional<int> arity = 0;
-    for (auto &arg : argFlags) {
+    for (auto &arg : paramFlags) {
         if (arg.isKeyword || arg.isDefault || arg.isRepeated) {
-            arity = std::nullopt;
+            arity = nullopt;
             break;
         }
         arity = *arity + 1;
@@ -802,8 +807,9 @@ optional<int> SendAndBlockLink::fixedArity() const {
     return arity;
 }
 
-TypePtr TupleType::elementType() const {
-    auto *ap = cast_type<AppliedType>(this->underlying().get());
+TypePtr TupleType::elementType(const GlobalState &gs) const {
+    auto underlying = this->underlying(gs);
+    auto ap = cast_type<AppliedType>(underlying);
     ENFORCE(ap);
     ENFORCE(ap->klass == Symbols::Array());
     ENFORCE(ap->targs.size() == 1);
@@ -811,74 +817,410 @@ TypePtr TupleType::elementType() const {
 }
 
 SelfType::SelfType() {
-    categoryCounterInc("types.allocated", "selftype");
+    recordAllocatedType("selftype");
 };
-AppliedType::AppliedType(SymbolRef klass, vector<TypePtr> targs) : klass(klass), targs(std::move(targs)) {
-    categoryCounterInc("types.allocated", "appliedtype");
+AppliedType::AppliedType(ClassOrModuleRef klass, vector<TypePtr> targs) : klass(klass), targs(std::move(targs)) {
+    recordAllocatedType("appliedtype");
+    histogramInc("appliedtype.targs", this->targs.size());
 }
 
-string SelfType::typeName() const {
-    return "SelfType";
+bool SelfType::derivesFrom(const GlobalState &gs, ClassOrModuleRef klass) const {
+    Exception::raise("Should never call `derivesFrom` on a SelfType");
 }
 
-bool SelfType::isFullyDefined() {
-    return false;
-}
+void SelfType::_sanityCheck(const GlobalState &gs) const {}
 
-TypePtr SelfType::getCallArguments(Context ctx, NameRef name) {
-    Exception::raise("should never happen");
-}
-
-bool SelfType::derivesFrom(const GlobalState &gs, SymbolRef klass) const {
-    Exception::raise("should never happen");
-}
-
-DispatchResult SelfType::dispatchCall(Context ctx, DispatchArgs args) {
-    Exception::raise("should never happen");
-}
-
-void SelfType::_sanityCheck(Context ctx) {}
-
-TypePtr Types::widen(Context ctx, const TypePtr &type) {
+TypePtr Types::widen(const GlobalState &gs, const TypePtr &type) {
     ENFORCE(type != nullptr);
     TypePtr ret;
     typecase(
-        type.get(), [&](AndType *andType) { ret = all(ctx, widen(ctx, andType->left), widen(ctx, andType->right)); },
-        [&](OrType *orType) { ret = any(ctx, widen(ctx, orType->left), widen(ctx, orType->right)); },
-        [&](ProxyType *proxy) { ret = Types::widen(ctx, proxy->underlying()); },
-        [&](AppliedType *appliedType) {
+        type, [&](const AndType &andType) { ret = all(gs, widen(gs, andType.left), widen(gs, andType.right)); },
+        [&](const OrType &orType) { ret = any(gs, widen(gs, orType.left), widen(gs, orType.right)); },
+        [&](const AppliedType &appliedType) {
             vector<TypePtr> newTargs;
-            newTargs.reserve(appliedType->targs.size());
-            for (const auto &t : appliedType->targs) {
-                newTargs.emplace_back(widen(ctx, t));
+            newTargs.reserve(appliedType.targs.size());
+            for (const auto &t : appliedType.targs) {
+                newTargs.emplace_back(widen(gs, t));
             }
-            ret = make_type<AppliedType>(appliedType->klass, newTargs);
+            ret = make_type<AppliedType>(appliedType.klass, move(newTargs));
         },
-        [&](Type *tp) { ret = type; });
+        [&](const TypePtr &) {
+            if (is_proxy_type(type)) {
+                ret = Types::widen(gs, type.underlying(gs));
+            } else {
+                ret = type;
+            }
+        });
     ENFORCE(ret);
     return ret;
 }
 
-core::SymbolRef Types::getRepresentedClass(core::Context ctx, const core::Type *ty) {
-    if (!ty->derivesFrom(ctx, core::Symbols::Module())) {
-        return core::Symbols::noSymbol();
+namespace {
+vector<TypePtr> unwrapTypeVector(Context ctx, const vector<TypePtr> &elems) {
+    vector<TypePtr> unwrapped;
+    unwrapped.reserve(elems.size());
+    for (auto &e : elems) {
+        unwrapped.emplace_back(Types::unwrapSelfTypeParam(ctx, e));
     }
-    core::SymbolRef singleton;
-    auto *s = core::cast_type<core::ClassType>(ty);
-    if (s != nullptr) {
-        singleton = s->symbol;
+    return unwrapped;
+}
+} // namespace
+
+TypePtr Types::unwrapSelfTypeParam(Context ctx, const TypePtr &type) {
+    ENFORCE(type != nullptr);
+
+    TypePtr ret;
+    typecase(
+        type, [&](const ClassType &klass) { ret = type; }, [&](const TypeVar &tv) { ret = type; },
+        [&](const LambdaParam &tv) { ret = type; }, [&](const SelfType &self) { ret = type; },
+        [&](const NamedLiteralType &lit) { ret = type; }, [&](const IntegerLiteralType &i) { ret = type; },
+        [&](const FloatLiteralType &i) { ret = type; },
+        [&](const AndType &andType) {
+            ret = AndType::make_shared(unwrapSelfTypeParam(ctx, andType.left), unwrapSelfTypeParam(ctx, andType.right));
+        },
+        [&](const OrType &orType) {
+            ret = OrType::make_shared(unwrapSelfTypeParam(ctx, orType.left), unwrapSelfTypeParam(ctx, orType.right));
+        },
+        [&](const ShapeType &shape) { ret = make_type<ShapeType>(shape.keys, unwrapTypeVector(ctx, shape.values)); },
+        [&](const TupleType &tuple) { ret = make_type<TupleType>(unwrapTypeVector(ctx, tuple.elems)); },
+        [&](const MetaType &meta) { ret = make_type<MetaType>(unwrapSelfTypeParam(ctx, meta.wrapped)); },
+        [&](const AppliedType &appliedType) {
+            ret = make_type<AppliedType>(appliedType.klass, unwrapTypeVector(ctx, appliedType.targs));
+        },
+        [&](const SelfTypeParam &param) {
+            auto sym = param.definition;
+            if (sym.owner(ctx) == ctx.owner) {
+                ENFORCE(isa_type<LambdaParam>(sym.resultType(ctx)));
+                ret = sym.resultType(ctx);
+            } else {
+                ret = type;
+            }
+        },
+        [&](const TypePtr &tp) {
+            if (type != nullptr) {
+                Exception::raise("unwrapSelfTypeParam: unhandled case type={}", type.toString(ctx));
+            } else {
+                Exception::raise("unwrapSelfTypeParam: unhandled case type=nullptr");
+            }
+        });
+
+    ENFORCE(ret != nullptr);
+
+    return ret;
+}
+
+core::ClassOrModuleRef Types::getRepresentedClass(const GlobalState &gs, const TypePtr &ty) {
+    if (!ty.derivesFrom(gs, core::Symbols::Module())) {
+        return core::Symbols::noClassOrModule();
+    }
+    core::ClassOrModuleRef singleton;
+    if (isa_type<ClassType>(ty)) {
+        auto s = cast_type_nonnull<ClassType>(ty);
+        singleton = s.symbol;
     } else {
-        auto *at = core::cast_type<core::AppliedType>(ty);
+        auto at = cast_type<AppliedType>(ty);
         if (at == nullptr) {
-            return core::Symbols::noSymbol();
+            return core::Symbols::noClassOrModule();
         }
 
         singleton = at->klass;
     }
-    return singleton.data(ctx)->attachedClass(ctx);
+    return singleton.data(gs)->attachedClass(gs);
 }
 
-DispatchArgs DispatchArgs::withSelfRef(const TypePtr &newSelfRef) {
-    return DispatchArgs{name, locs, args, newSelfRef, fullType, block};
+TypePtr Types::unwrapType(const GlobalState &gs, Loc loc, const TypePtr &tp) {
+    if (auto metaType = cast_type<MetaType>(tp)) {
+        return metaType->wrapped;
+    }
+
+    if (isa_type<ClassType>(tp)) {
+        auto classType = cast_type_nonnull<ClassType>(tp);
+        if (classType.symbol.data(gs)->derivesFrom(gs, core::Symbols::T_Enum())) {
+            // T::Enum instances are allowed to stand for themselves in type syntax positions.
+            // See the note in type_syntax.cc regarding T::Enum.
+            return tp;
+        }
+
+        auto attachedClass = classType.symbol.data(gs)->attachedClass(gs);
+        if (!attachedClass.exists()) {
+            if (auto e = gs.beginError(loc, errors::Infer::BareTypeUsage)) {
+                e.setHeader("Unexpected bare `{}` value found in type position", tp.show(gs));
+                if (classType.symbol == core::Symbols::T_Types_Base() ||
+                    classType.symbol.data(gs)->derivesFrom(gs, core::Symbols::T_Types_Base())) {
+                    // T::Types::Base is the parent class for runtime type objects.
+                    // Give a more helpful error message
+                    e.addErrorNote("Sorbet only allows statically-analyzable types in type positions.\n"
+                                   "    To compute new runtime types, you must explicitly wrap with `{}`",
+                                   "T.unsafe");
+                    auto locSource = loc.source(gs);
+                    if (locSource.has_value()) {
+                        e.replaceWith("Wrap in `T.unsafe`", loc, "T.unsafe({})", locSource.value());
+                    }
+                }
+            }
+
+            return Types::untypedUntracked();
+        }
+
+        return attachedClass.data(gs)->externalType();
+    }
+
+    if (auto appType = cast_type<AppliedType>(tp)) {
+        ClassOrModuleRef attachedClass = appType->klass.data(gs)->attachedClass(gs);
+        if (!attachedClass.exists()) {
+            if (auto e = gs.beginError(loc, errors::Infer::BareTypeUsage)) {
+                e.setHeader("Unexpected bare `{}` value found in type position", tp.show(gs));
+            }
+            return Types::untypedUntracked();
+        }
+
+        return attachedClass.data(gs)->externalType();
+    }
+
+    if (auto shapeType = cast_type<ShapeType>(tp)) {
+        vector<TypePtr> unwrappedValues;
+        unwrappedValues.reserve(shapeType->values.size());
+        for (auto &value : shapeType->values) {
+            unwrappedValues.emplace_back(unwrapType(gs, loc, value));
+        }
+        return make_type<ShapeType>(shapeType->keys, move(unwrappedValues));
+    } else if (auto tupleType = cast_type<TupleType>(tp)) {
+        vector<TypePtr> unwrappedElems;
+        unwrappedElems.reserve(tupleType->elems.size());
+        for (auto &elem : tupleType->elems) {
+            unwrappedElems.emplace_back(unwrapType(gs, loc, elem));
+        }
+        return make_type<TupleType>(move(unwrappedElems));
+    }
+
+    if (auto e = gs.beginError(loc, errors::Infer::BareTypeUsage)) {
+        e.setHeader("Unexpected bare `{}` value found in type position", tp.show(gs));
+    }
+    return Types::untypedUntracked();
 }
+
+// This method is actually special: not only is it called from dispatchCall in calls.cc, it's
+// also called directly by type_syntax parsing in resolver (because this method checks some
+// invariants of generics that we want to hold even in `typed: false` files).
+//
+// Unfortunately, this means that some errors are double reported (once by resolver, and then
+// again by infer).
+
+TypePtr Types::applyTypeArguments(const GlobalState &gs, const CallLocs &locs, uint16_t numPosArgs,
+                                  const InlinedVector<const TypeAndOrigins *, 2> &args, ClassOrModuleRef genericClass,
+                                  ErrorClass genericArgumentCountMismatchError,
+                                  ErrorClass genericArgumentKeywordArgsError) {
+    genericClass = genericClass.maybeUnwrapBuiltinGenericForwarder();
+
+    int arity;
+    if (genericClass == Symbols::Hash()) {
+        arity = 2;
+    } else {
+        arity = genericClass.data(gs)->typeArity(gs);
+    }
+
+    // This is something like Generic[T1,...,foo: bar...]
+    auto numKwArgs = args.size() - numPosArgs;
+    if (numKwArgs > 0) {
+        auto begin = locs.args[numPosArgs].beginPos();
+        auto end = locs.args.back().endPos();
+        core::Loc kwargsLoc{locs.file, begin, end};
+
+        if (auto e = gs.beginError(kwargsLoc, genericArgumentKeywordArgsError)) {
+            e.setHeader("Keyword arguments given to `{}`", genericClass.show(gs));
+            // offer an autocorrect to turn the keyword args into a hash if there is no double-splat
+            if (numKwArgs % 2 == 0 && kwargsLoc.exists()) {
+                e.replaceWith("Wrap with braces", kwargsLoc, "{{{}}}", kwargsLoc.source(gs).value());
+            }
+        }
+    }
+
+    if (numPosArgs != arity || arity == 0) {
+        auto squareBracketsLoc = core::Loc(locs.file, locs.fun.endPos(), locs.call.endPos());
+        auto errLoc =
+            !locs.args.empty() ? core::Loc(locs.file, locs.args.front().join(locs.args.back())) : squareBracketsLoc;
+        if (auto e = gs.beginError(errLoc, genericArgumentCountMismatchError)) {
+            if (arity == 0) {
+                if (genericClass.data(gs)->typeMembers().empty()) {
+                    e.setHeader("`{}` is not a generic class, but was given type parameters", genericClass.show(gs));
+                } else {
+                    e.setHeader("All type parameters for `{}` have already been fixed", genericClass.show(gs));
+                }
+                e.replaceWith("Remove square brackets", squareBracketsLoc, "");
+            } else {
+                e.setHeader("Wrong number of type parameters for `{}`. Expected: `{}`, got: `{}`",
+                            genericClass.show(gs), arity, numPosArgs);
+            }
+        }
+    }
+
+    if (genericClass.data(gs)->typeMembers().empty()) {
+        // TODO(neil): this should actually blame to an error recovery magic symbol
+        return Types::untypedUntracked();
+    }
+
+    vector<TypePtr> targs;
+    auto it = args.begin();
+    int i = -1;
+    targs.reserve(genericClass.data(gs)->typeMembers().size());
+    for (auto mem : genericClass.data(gs)->typeMembers()) {
+        ++i;
+
+        auto memData = mem.data(gs);
+
+        auto memType = cast_type<LambdaParam>(memData->resultType);
+        ENFORCE(memType != nullptr);
+
+        if (memData->flags.isFixed) {
+            // Fixed args are implicitly applied, and won't consume type
+            // arguments from the list that's supplied.
+            targs.emplace_back(memType->upperBound);
+        } else if (it != args.end()) {
+            auto loc = core::Loc(locs.file, locs.args[it - args.begin()]);
+            auto argType = unwrapType(gs, loc, (*it)->type);
+            bool validBounds = true;
+
+            // Validate type parameter bounds.
+            ErrorSection::Collector errorDetailsCollector;
+            if (!Types::isSubType(gs, argType, memType->upperBound, errorDetailsCollector)) {
+                validBounds = false;
+                if (auto e = gs.beginError(loc, errors::Resolver::GenericTypeParamBoundMismatch)) {
+                    auto argStr = argType.show(gs);
+                    e.setHeader("`{}` is not a subtype of upper bound of type member `{}`", argStr,
+                                mem.showFullName(gs));
+                    e.addErrorLine(memData->loc(), "`{}` is `{}` bounded by `{}` here", mem.showFullName(gs), "upper",
+                                   memType->upperBound.show(gs));
+                    e.addErrorSections(move(errorDetailsCollector));
+                }
+            }
+
+            ErrorSection::Collector errorDetailsCollector2;
+            if (!Types::isSubType(gs, memType->lowerBound, argType, errorDetailsCollector2)) {
+                validBounds = false;
+
+                if (auto e = gs.beginError(loc, errors::Resolver::GenericTypeParamBoundMismatch)) {
+                    auto argStr = argType.show(gs);
+                    e.setHeader("`{}` is not a supertype of lower bound of type member `{}`", argStr,
+                                mem.showFullName(gs));
+                    e.addErrorLine(memData->loc(), "`{}` is `{}` bounded by `{}` here", mem.showFullName(gs), "lower",
+                                   memType->lowerBound.show(gs));
+                    e.addErrorSections(move(errorDetailsCollector2));
+                }
+            }
+
+            if (validBounds) {
+                targs.emplace_back(argType);
+            } else {
+                // TODO(neil): this should actually blame to an error recovery magic symbol
+                targs.emplace_back(Types::untypedUntracked());
+            }
+
+            ++it;
+        } else if (genericClass == Symbols::Hash() && i == 2) {
+            auto tupleArgs = targs;
+            targs.emplace_back(make_type<TupleType>(tupleArgs));
+        } else {
+            // TODO(neil): this should actually blame to an error recovery magic symbol
+            targs.emplace_back(Types::untypedUntracked());
+        }
+    }
+
+    return make_type<MetaType>(make_type<AppliedType>(genericClass, move(targs)));
+}
+
+DispatchArgs::DispatchArgs(NameRef name, const CallLocs &locs, uint16_t numPosArgs,
+                           InlinedVector<const TypeAndOrigins *, 2> &args, const TypePtr &selfType,
+                           const TypeAndOrigins &fullType, const TypePtr &thisType, const SendAndBlockLink *block,
+                           Loc originForUninitialized, bool isPrivateOk, bool suppressErrors,
+                           NameRef enclosingMethodForSuper)
+    : name(name), locs(locs), numPosArgs(numPosArgs), args(args), selfType(selfType), fullType(fullType),
+      thisType(thisType), block(block), originForUninitialized(originForUninitialized), isPrivateOk(isPrivateOk),
+      suppressErrors(suppressErrors), enclosingMethodForSuper(enclosingMethodForSuper) {}
+
+Loc DispatchArgs::argsLoc(const GlobalState &gs) const {
+    if (!locs.args.empty()) {
+        // Note: there are some limitations here when the args themselves are parenthesized
+        return core::Loc(locs.file, locs.args.front().join(locs.args.back()));
+    }
+
+    Loc result;
+    if (this->block != nullptr) {
+        if (!this->block->loc.exists()) {
+            result = callLoc().copyEndWithZeroLength();
+        } else if (!locs.fun.exists()) {
+            result = core::Loc(locs.file, this->block->loc.copyWithZeroLength());
+        } else {
+            result = core::Loc(locs.file, funLoc().endPos(), this->block->loc.beginPos());
+            if (result.copyEndWithZeroLength().adjust(gs, -1, 0).source(gs) == " ") {
+                result = result.adjust(gs, 0, -1);
+            }
+        }
+    } else {
+        if (locs.fun.exists()) {
+            result = core::Loc(locs.file, locs.fun.endPos(), locs.call.endPos());
+        } else {
+            result = callLoc().copyEndWithZeroLength();
+        }
+    }
+
+    auto source = result.source(gs);
+    if (!source.has_value()) {
+        return result;
+    }
+
+    auto sourceView = source.value();
+    if (sourceView.size() < 2) {
+        return result;
+    }
+
+    if ((sourceView.front() == '(' || sourceView.front() == '[') &&
+        (sourceView.back() == ')' || sourceView.back() == ']')) {
+        result = result.adjust(gs, 1, -1);
+    }
+
+    return result;
+}
+
+DispatchArgs DispatchArgs::withSelfAndThisRef(const TypePtr &newSelfRef) const {
+    return DispatchArgs{name,        locs,           numPosArgs,
+                        args,        newSelfRef,     fullType,
+                        newSelfRef,  block,          originForUninitialized,
+                        isPrivateOk, suppressErrors, enclosingMethodForSuper};
+}
+
+DispatchArgs DispatchArgs::withThisRef(const TypePtr &newThisRef) const {
+    return DispatchArgs{name,        locs,           numPosArgs,
+                        args,        selfType,       fullType,
+                        newThisRef,  block,          originForUninitialized,
+                        isPrivateOk, suppressErrors, enclosingMethodForSuper};
+}
+
+DispatchResult DispatchResult::merge(const GlobalState &gs, DispatchResult::Combinator kind, DispatchResult &&left,
+                                     DispatchResult &&right) {
+    DispatchResult res;
+
+    switch (kind) {
+        case DispatchResult::Combinator::OR:
+            res.returnType = Types::any(gs, left.returnType, right.returnType);
+            break;
+
+        case DispatchResult::Combinator::AND:
+            res.returnType = Types::all(gs, left.returnType, right.returnType);
+            break;
+    }
+
+    res.main = std::move(left.main);
+    res.secondary = std::move(left.secondary);
+    res.secondaryKind = kind;
+
+    auto *it = &res;
+    while (it->secondary != nullptr) {
+        it = it->secondary.get();
+    }
+
+    it->secondary = make_unique<DispatchResult>(std::move(right));
+
+    return res;
+}
+
 } // namespace sorbet::core

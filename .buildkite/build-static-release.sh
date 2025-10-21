@@ -5,39 +5,63 @@ set -euo pipefail
 export JOB_NAME=build-static-release
 source .buildkite/tools/setup-bazel.sh
 
-unameOut="$(uname -s)"
-case "${unameOut}" in
-    Linux*)     platform="linux";;
-    Darwin*)    platform="mac";;
-    *)          exit 1
-esac
+kernel_name="$(uname -s | tr 'A-Z' 'a-z')"
+processor_name="$(uname -m)"
 
-if [[ "linux" == "$platform" ]]; then
-  CONFIG_OPTS="--config=release-linux"
-elif [[ "mac" == "$platform" ]]; then
-  CONFIG_OPTS="--config=release-mac"
-  command -v autoconf >/dev/null 2>&1 || brew install autoconf
-fi
+platform="${kernel_name}-${processor_name}"
+case "$platform" in
+  linux-x86_64)
+    CONFIG_OPTS="--config=release-linux"
+    ;;
+  linux-aarch64)
+    CONFIG_OPTS="--config=release-${platform}"
+    ;;
+  darwin-x86_64|darwin-arm64)
+    CONFIG_OPTS="--config=release-mac"
+    command -v autoconf >/dev/null 2>&1 || brew install autoconf
+    ;;
+  *)
+    echo >&2 "Building on $platform is not implemented"
+    exit 1
+    ;;
+esac
 
 echo will run with $CONFIG_OPTS
 
 ./bazel build //main:sorbet --strip=always $CONFIG_OPTS
 
+if [ "$kernel_name" != "darwin" ]; then
+  cp bazel-bin/main/sorbet sorbet_bin
+else
+  cp bazel-bin/main/sorbet "sorbet.$platform"
+
+  # TODO(jez) building on arm64 is not tested (no arm64 mac buildkite instances)
+  case "$processor_name" in
+    x86_64) cross_target=darwin-arm64  ;;
+    arm64)  cross_target=darwin-x86_64 ;;
+  esac
+
+  ./bazel build //main:sorbet --strip=always "$CONFIG_OPTS" --config="cross-to-$cross_target"
+  cp bazel-bin/main/sorbet "sorbet.$cross_target"
+
+  # TODO(jez) We might be able to replace this with `apple_universal_binary`?
+  # https://github.com/bazelbuild/rules_apple/blob/35a2fb854a47745deb035d3443008aa15a2c2b85/doc/rules-apple.md#apple_universal_binary
+  lipo -create -output sorbet_bin sorbet.darwin-*
+fi
+
 mkdir gems/sorbet-static/libexec/
-cp bazel-bin/main/sorbet gems/sorbet-static/libexec/
+cp sorbet_bin gems/sorbet-static/libexec/sorbet
+
+rbenv install --skip-existing
 
 pushd gems/sorbet-static
 git_commit_count=$(git rev-list --count HEAD)
-release_version="0.4.${git_commit_count}"
+release_version="0.6.${git_commit_count}"
 sed -i.bak "s/0\\.0\\.0/${release_version}/" sorbet-static.gemspec
-if [[ "mac" == "$platform" ]]; then
-    # Our binary should work on almost all OSes. The oldest v8 publishes is -14
-    # so I'm going with that for now.
-    for i in {14..19}; do
-        sed -i.bak "s/Gem::Platform::CURRENT/'universal-darwin-$i'/" sorbet-static.gemspec
-        gem build sorbet-static.gemspec
-        mv sorbet-static.gemspec.bak sorbet-static.gemspec
-    done
+if [[ "darwin" == "$kernel_name" ]]; then
+    sed -i.bak "s/Gem::Platform::CURRENT/'universal-darwin'/" sorbet-static.gemspec
+    gem build sorbet-static.gemspec
+    mv sorbet-static.gemspec.bak sorbet-static.gemspec
 else
     gem build sorbet-static.gemspec
 fi
@@ -68,10 +92,10 @@ rbenv exec gem uninstall --all --executables --ignore-dependencies minitest moch
 rbenv exec gem uninstall --all --executables --ignore-dependencies sorbet sorbet-static
 trap 'rbenv exec gem uninstall --all --executables --ignore-dependencies sorbet sorbet-static' EXIT
 
-if [[ "mac" == "$platform" ]]; then
-  rbenv exec gem install ../../gems/sorbet-static/sorbet-static-*-universal-darwin-18.gem
+if [[ "darwin" == "$kernel_name" ]]; then
+  rbenv exec gem install ../../gems/sorbet-static/sorbet-static-*-"universal-darwin".gem
 else
-  rbenv exec gem install ../../gems/sorbet-static/sorbet-static-*-x86_64-linux.gem
+  rbenv exec gem install ../../gems/sorbet-static/sorbet-static-*-"$processor_name"-linux.gem
 fi
 rbenv exec gem install sorbet-*.gem
 
@@ -101,9 +125,19 @@ rm -rf _out_
 mkdir -p _out_/gems
 
 mv gems/sorbet-static/sorbet-static-*.gem _out_/gems/
-if [[ "mac" == "$platform" ]]; then
+if [[ "$platform" == "linux-x86_64" ]]; then
   mv gems/sorbet/sorbet*.gem _out_/gems/
 fi
 
-mkdir -p _out_/$platform
-cp bazel-bin/main/sorbet _out_/$platform/
+if [ "$kernel_name" = "darwin" ]; then
+  mkdir -p _out_/darwin-universal
+  mv sorbet_bin _out_/darwin-universal/sorbet
+
+  for plat in {darwin-x86_64,darwin-arm64}; do
+    mkdir -p "_out_/$plat"
+    mv "sorbet.$plat" "_out_/$plat/sorbet"
+  done
+else
+  mkdir -p "_out_/$platform"
+  mv sorbet_bin "_out_/$platform/sorbet"
+fi

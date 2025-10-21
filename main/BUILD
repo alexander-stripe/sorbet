@@ -7,25 +7,27 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
+config_setting(
+    name = "mimalloc",
+    values = {
+        "define": "mimalloc=true",
+        "compilation_mode": "opt",
+    },
+    visibility = ["//visibility:public"],
+)
+
 cc_binary(
     name = "sorbet",
     srcs = [
         "main.cc",
     ],
-    # When changing this, you should also update the REQUIRED_STACK_SIZE variable in common/os/os.cc.
-    linkopts = select({
-        "//tools/config:darwindbg": [
-            "-Wl,-stack_size",
-            "-Wl,0x4000000",
-        ],
-        "//conditions:default": [],
-    }),
     linkstatic = select({
         "//tools/config:linkshared": 0,
         "//conditions:default": 1,
     }),
     malloc = select({
         ":jemalloc": "@jemalloc//:jemalloc",
+        ":mimalloc": "@mimalloc//:mimalloc",
         "//conditions:default": "@bazel_tools//tools/cpp:malloc",
     }),
     visibility = ["//visibility:public"],
@@ -69,8 +71,11 @@ cc_library(
         "//common/statsd",
         "//core",
         "//core/proto",
+        "//hashing",
         "//main/autogen",
+        "//main/cache",
         "//main/lsp",
+        "//main/minimize",
         "//main/options",
         "//main/pipeline",
         "//payload:interface",
@@ -92,6 +97,8 @@ cc_library(
     deps = [
         "//ast",
         "//core",
+        "//hashing:hashing-orig",
+        "//main/cache:cache-orig",
         "//main/options",
         "//main/pipeline:pipeline-orig",
         "//payload:interface",

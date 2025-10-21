@@ -27,12 +27,12 @@ namespace sorbet::rewriter {
  *    end
  *
  * which is sort of a lie in that each `test_` method should actually running in
- * its own instance where `.name` retuns `test_0001_bar` but I think it is
+ * its own instance where `.name` returns `test_0001_bar` but I think it is
  * close enough for our purposes.
  */
 class Minitest final {
 public:
-    static std::vector<std::unique_ptr<ast::Expression>> run(core::MutableContext ctx, ast::Send *send);
+    static std::vector<ast::ExpressionPtr> run(core::MutableContext ctx, bool isClass, ast::Send *send);
 
     Minitest() = delete;
 };

@@ -51,6 +51,19 @@ class Opus::Types::Test::Props::StructTest < Critic::Unit::UnitTest
       StructWithPredefinedHash.new(hash_field1: {a: 100, b: 200}, hash_field2: {a: 'foo', b: 200})
     end
   end
+
+  it 'uses the original value when value is invalid in a soft error environment' do
+    T::Configuration.call_validation_error_handler = proc do
+      # no raise
+    end
+
+    hash_field1 = {a: 'foo', b: 200}
+    doc = StructWithPredefinedHash.new(hash_field1: hash_field1)
+    assert_equal('foo', doc.hash_field1[:a])
+  ensure
+    T::Configuration.call_validation_error_handler = nil
+  end
+
   it 'can initialize a struct with a prop named "class" if without_accessors is true' do
     doc = StructWithClassProp.new(class: "the_class")
     assert_equal(StructWithClassProp, doc.class)
@@ -77,7 +90,7 @@ class Opus::Types::Test::Props::StructTest < Critic::Unit::UnitTest
     prop :foo5, T.nilable(T::Array[SubStruct])
   end
 
-  class StructWithReqiredField < T::Struct
+  class StructWithRequiredField < T::Struct
     prop :foo1, Integer
     prop :foo2, Integer
   end
@@ -106,10 +119,10 @@ class Opus::Types::Test::Props::StructTest < Critic::Unit::UnitTest
     it 'tstruct tnilable field type_object' do
       c = Class.new(T::Struct) do
         prop :foo, T.nilable(String)
-        prop :wday, T.nilable(String), enum: ['mon', 'tue']
+        prop :wday, T.nilable(String), enum: %w[mon tue]
       end
       assert_equal(T.nilable(String), c.props[:foo][:type_object])
-      assert_equal(T.nilable(T.enum(['mon', 'tue'])), c.props[:wday][:type_object])
+      assert_equal(T.nilable(T.all(String, T.deprecated_enum(%w[mon tue]))), c.props[:wday][:type_object])
     end
 
     it 'tstruct deserialize optional fields' do
@@ -133,30 +146,30 @@ class Opus::Types::Test::Props::StructTest < Critic::Unit::UnitTest
     end
 
     it 'tstruct need to initialize required fields' do
-      doc = StructWithReqiredField.new(foo1: 10, foo2: 20)
+      doc = StructWithRequiredField.new(foo1: 10, foo2: 20)
       assert_equal(10, doc.foo1)
       assert_equal(20, doc.foo2)
 
       assert_raises(ArgumentError) do
-        StructWithReqiredField.new(foo2: 20)
+        StructWithRequiredField.new(foo2: 20)
       end
       assert_raises(ArgumentError) do
-        StructWithReqiredField.new(foo1: 10)
+        StructWithRequiredField.new(foo1: 10)
       end
     end
 
     it 'tstruct deserialize different fields' do
-      doc = StructWithReqiredField.from_hash({'foo1' => 10, 'foo2' => 20})
+      doc = StructWithRequiredField.from_hash({'foo1' => 10, 'foo2' => 20})
       assert_equal(10, doc.foo1)
       assert_equal(20, doc.foo2)
 
       assert_raises(RuntimeError) do
-        StructWithReqiredField.from_hash({'foo2' => 20})
+        StructWithRequiredField.from_hash({'foo2' => 20})
       end
 
       # The code should behave for deserialization.
       assert_raises(RuntimeError) do
-        StructWithReqiredField.from_hash({'foo1' => 10})
+        StructWithRequiredField.from_hash({'foo1' => 10})
       end
     end
   end

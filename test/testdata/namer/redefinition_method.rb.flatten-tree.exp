@@ -1,23 +1,12 @@
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
+  class <emptyTree><<C <root>>> < (::<todo sym>)
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
-      begin
-        <emptyTree>
-        ::Sorbet::Private::Static.keep_for_ide(::Main)
-        <emptyTree>
-      end
+      <emptyTree>
     end
   end
   class ::Main<<C Main>> < (::<todo sym>)
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
-    <emptyTree>
-
     def foo<foo$1>(a, <blk>)
       a
     end
@@ -33,9 +22,12 @@ begin
     def self.<static-init>(<blk>)
       begin
         <self>.sig() do ||
-          <self>.params({:"a" => ::Integer}).returns(::Integer)
+          <self>.params(:a, ::Integer).returns(::Integer)
         end
-        ::Sorbet::Private::Static.keep_for_ide(::T::Sig)
+        <self>.extend(::T::Sig)
+        <runtime method definition of foo>
+        <runtime method definition of foo>
+        <runtime method definition of foo>
         <emptyTree>
       end
     end

@@ -1,12 +1,10 @@
-class <emptyTree><<C <root>>> < ()
+class <emptyTree><<C <root>>> < (::<todo sym>)
   class <emptyTree>::<C GoodUsages><<C <todo sym>>> < (::<todo sym>)
-    <self>.extend(<emptyTree>::<C T>::<C Sig>)
-
     ::T::Sig::WithoutRuntime.sig() do ||
       <self>.returns(::T.untyped())
     end
 
-    def both<<C <todo sym>>>(&<blk>)
+    def both<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -14,7 +12,7 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def self.both<<C <todo sym>>>(&<blk>)
+    def self.both<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -22,7 +20,7 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def foo<<C <todo sym>>>(&<blk>)
+    def foo<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -30,7 +28,7 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def self.foo<<C <todo sym>>>(&<blk>)
+    def self.foo<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -38,7 +36,7 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def self.no_instance<<C <todo sym>>>(&<blk>)
+    def self.no_instance<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -46,7 +44,7 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def self.bar<<C <todo sym>>>(&<blk>)
+    def self.bar<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -54,7 +52,7 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def self.no_instance_reader<<C <todo sym>>>(&<blk>)
+    def self.no_instance_reader<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -62,13 +60,31 @@ class <emptyTree><<C <root>>> < ()
       <self>.void()
     end
 
-    def usages<<C <todo sym>>>(&<blk>)
+    def usages<<todo method>>(&<blk>)
       begin
         <self>.both()
         <self>.no_instance()
         <self>.no_instance_reader()
       end
     end
+
+    <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+    <runtime method definition of both>
+
+    <runtime method definition of self.both>
+
+    <runtime method definition of foo>
+
+    <runtime method definition of self.foo>
+
+    <runtime method definition of self.no_instance>
+
+    <runtime method definition of self.bar>
+
+    <runtime method definition of self.no_instance_reader>
+
+    <runtime method definition of usages>
 
     <self>.both()
 
@@ -80,7 +96,7 @@ class <emptyTree><<C <root>>> < ()
   class <emptyTree>::<C IgnoredUsages><<C <todo sym>>> < (::<todo sym>)
     <self>.mattr_reader()
 
-    <self>.mattr_reader({:"instance_accessor" => false})
+    <self>.mattr_reader(:instance_accessor, false)
 
     <self>.mattr_reader("foo")
   end

@@ -9,279 +9,336 @@ namespace sorbet::ast {
 
 class MK {
 public:
-    static std::unique_ptr<Expression> EmptyTree() {
-        return std::make_unique<ast::EmptyTree>();
+    static ExpressionPtr EmptyTree() {
+        return make_expression<ast::EmptyTree>();
     }
 
-    static std::unique_ptr<Block> Block(core::Loc loc, std::unique_ptr<Expression> body, MethodDef::ARGS_store args) {
-        auto blk = std::make_unique<ast::Block>(loc, std::move(args), std::move(body));
-        return blk;
+    static ExpressionPtr Block(core::LocOffsets loc, ExpressionPtr body, MethodDef::PARAMS_store params) {
+        return make_expression<ast::Block>(loc, std::move(params), std::move(body));
     }
 
-    static std::unique_ptr<ast::Block> Block0(core::Loc loc, std::unique_ptr<Expression> body) {
-        MethodDef::ARGS_store args;
-        return Block(loc, std::move(body), std::move(args));
+    static ExpressionPtr Block0(core::LocOffsets loc, ExpressionPtr body) {
+        MethodDef::PARAMS_store params;
+        return Block(loc, std::move(body), std::move(params));
     }
 
-    static std::unique_ptr<ast::Block> Block1(core::Loc loc, std::unique_ptr<Expression> body,
-                                              std::unique_ptr<Expression> arg1) {
-        MethodDef::ARGS_store args;
-        args.emplace_back(move(arg1));
-        return Block(loc, std::move(body), std::move(args));
+    static ExpressionPtr Block1(core::LocOffsets loc, ExpressionPtr body, ExpressionPtr param1) {
+        MethodDef::PARAMS_store params;
+        params.emplace_back(std::move(param1));
+        return Block(loc, std::move(body), std::move(params));
     }
 
-    static std::unique_ptr<Expression> Send(core::Loc loc, std::unique_ptr<Expression> recv, core::NameRef fun,
-                                            Send::ARGS_store args, u4 flags = 0,
-                                            std::unique_ptr<ast::Block> blk = nullptr) {
-        auto send = std::make_unique<ast::Send>(loc, std::move(recv), fun, std::move(args), std::move(blk));
-        send->flags = flags;
+    template <typename... Args> static Send::ARGS_store SendArgs(Args &&...args) {
+        Send::ARGS_store store;
+        (store.emplace_back(std::forward<Args>(args)), ...);
+        return store;
+    }
+
+    static ExpressionPtr Send(core::LocOffsets loc, ExpressionPtr recv, core::NameRef fun, core::LocOffsets funLoc,
+                              uint16_t numPosArgs, Send::ARGS_store args, Send::Flags flags = {}) {
+        auto send = make_expression<ast::Send>(loc, std::move(recv), fun, funLoc, numPosArgs, std::move(args), flags);
         return send;
     }
 
-    static std::unique_ptr<Expression> Send0(core::Loc loc, std::unique_ptr<Expression> recv, core::NameRef fun) {
+    static ExpressionPtr Send0(core::LocOffsets loc, ExpressionPtr recv, core::NameRef fun, core::LocOffsets funLoc) {
         Send::ARGS_store nargs;
-        return Send(loc, std::move(recv), fun, std::move(nargs));
+        return Send(loc, std::move(recv), fun, funLoc, 0, std::move(nargs));
     }
 
-    static std::unique_ptr<Expression> Send0Block(core::Loc loc, std::unique_ptr<Expression> recv, core::NameRef fun,
-                                                  std::unique_ptr<ast::Block> blk) {
+    static ExpressionPtr Send0Block(core::LocOffsets loc, ExpressionPtr recv, core::NameRef fun,
+                                    core::LocOffsets funLoc, ExpressionPtr blk, Send::Flags flags = {}) {
         Send::ARGS_store nargs;
-        return Send(loc, std::move(recv), fun, std::move(nargs), 0, std::move(blk));
+        if (blk != nullptr) {
+            flags.hasBlock = true;
+            nargs.emplace_back(std::move(blk));
+        }
+        return Send(loc, std::move(recv), fun, funLoc, 0, std::move(nargs), flags);
     }
 
-    static std::unique_ptr<Expression> Send1(core::Loc loc, std::unique_ptr<Expression> recv, core::NameRef fun,
-                                             std::unique_ptr<Expression> arg1) {
-        Send::ARGS_store nargs;
-        nargs.emplace_back(std::move(arg1));
-        return Send(loc, std::move(recv), fun, std::move(nargs));
+    static ExpressionPtr Send1(core::LocOffsets loc, ExpressionPtr recv, core::NameRef fun, core::LocOffsets funLoc,
+                               ExpressionPtr arg1) {
+        return Send(loc, std::move(recv), fun, funLoc, 1, SendArgs(std::move(arg1)));
     }
 
-    static std::unique_ptr<Expression> Send2(core::Loc loc, std::unique_ptr<Expression> recv, core::NameRef fun,
-                                             std::unique_ptr<Expression> arg1, std::unique_ptr<Expression> arg2) {
-        Send::ARGS_store nargs;
-        nargs.emplace_back(std::move(arg1));
-        nargs.emplace_back(std::move(arg2));
-        return Send(loc, std::move(recv), fun, std::move(nargs));
+    static ExpressionPtr Send2(core::LocOffsets loc, ExpressionPtr recv, core::NameRef fun, core::LocOffsets funLoc,
+                               ExpressionPtr arg1, ExpressionPtr arg2) {
+        return Send(loc, std::move(recv), fun, funLoc, 2, SendArgs(std::move(arg1), std::move(arg2)));
     }
 
-    static std::unique_ptr<Expression> Send3(core::Loc loc, std::unique_ptr<Expression> recv, core::NameRef fun,
-                                             std::unique_ptr<Expression> arg1, std::unique_ptr<Expression> arg2,
-                                             std::unique_ptr<Expression> arg3) {
-        Send::ARGS_store nargs;
-        nargs.emplace_back(std::move(arg1));
-        nargs.emplace_back(std::move(arg2));
-        nargs.emplace_back(std::move(arg3));
-        return Send(loc, std::move(recv), fun, std::move(nargs));
+    static ExpressionPtr Send3(core::LocOffsets loc, ExpressionPtr recv, core::NameRef fun, core::LocOffsets funLoc,
+                               ExpressionPtr arg1, ExpressionPtr arg2, ExpressionPtr arg3) {
+        return Send(loc, std::move(recv), fun, funLoc, 3, SendArgs(std::move(arg1), std::move(arg2), std::move(arg3)));
     }
 
-    static std::unique_ptr<Literal> Literal(core::Loc loc, const core::TypePtr &tpe) {
-        return std::make_unique<ast::Literal>(loc, tpe);
+    static ExpressionPtr Send4(core::LocOffsets loc, ExpressionPtr recv, core::NameRef fun, core::LocOffsets funLoc,
+                               ExpressionPtr arg1, ExpressionPtr arg2, ExpressionPtr arg3, ExpressionPtr arg4) {
+        return Send(loc, std::move(recv), fun, funLoc, 3,
+                    SendArgs(std::move(arg1), std::move(arg2), std::move(arg3), std::move(arg4)));
     }
 
-    static std::unique_ptr<Expression> Return(core::Loc loc, std::unique_ptr<Expression> expr) {
-        return std::make_unique<ast::Return>(loc, std::move(expr));
+    static ExpressionPtr Literal(core::LocOffsets loc, const core::TypePtr &tpe) {
+        return make_expression<ast::Literal>(loc, tpe);
     }
 
-    static std::unique_ptr<Expression> Next(core::Loc loc, std::unique_ptr<Expression> expr) {
-        return std::make_unique<ast::Next>(loc, std::move(expr));
+    static ExpressionPtr Return(core::LocOffsets loc, ExpressionPtr expr) {
+        return make_expression<ast::Return>(loc, std::move(expr));
     }
 
-    static std::unique_ptr<Expression> Break(core::Loc loc, std::unique_ptr<Expression> expr) {
-        return std::make_unique<ast::Break>(loc, std::move(expr));
+    static ExpressionPtr Next(core::LocOffsets loc, ExpressionPtr expr) {
+        return make_expression<ast::Next>(loc, std::move(expr));
     }
 
-    static std::unique_ptr<Expression> Nil(core::Loc loc) {
-        return std::make_unique<ast::Literal>(loc, core::Types::nilClass());
+    static ExpressionPtr Break(core::LocOffsets loc, ExpressionPtr expr) {
+        return make_expression<ast::Break>(loc, std::move(expr));
     }
 
-    static std::unique_ptr<ConstantLit> Constant(core::Loc loc, core::SymbolRef symbol) {
+    static ExpressionPtr Nil(core::LocOffsets loc) {
+        return make_expression<ast::Literal>(loc, core::Types::nilClass());
+    }
+
+    static ExpressionPtr Constant(core::LocOffsets loc, core::SymbolRef symbol) {
         ENFORCE(symbol.exists());
-        return std::make_unique<ConstantLit>(loc, symbol, nullptr);
+        return make_expression<ConstantLit>(loc, symbol);
     }
 
-    static std::unique_ptr<Reference> Local(core::Loc loc, core::NameRef name) {
-        return std::make_unique<UnresolvedIdent>(loc, UnresolvedIdent::Local, name);
+    static ExpressionPtr Local(core::LocOffsets loc, core::NameRef name) {
+        return make_expression<UnresolvedIdent>(loc, UnresolvedIdent::Kind::Local, name);
     }
 
-    static std::unique_ptr<Reference> OptionalArg(core::Loc loc, std::unique_ptr<Reference> inner,
-                                                  std::unique_ptr<Expression> default_) {
-        return std::make_unique<ast::OptionalArg>(loc, std::move(inner), std::move(default_));
+    static ExpressionPtr OptionalParam(core::LocOffsets loc, ExpressionPtr inner, ExpressionPtr default_) {
+        return make_expression<ast::OptionalParam>(loc, std::move(inner), std::move(default_));
     }
 
-    static std::unique_ptr<Reference> KeywordArg(core::Loc loc, std::unique_ptr<Reference> inner) {
-        return std::make_unique<ast::KeywordArg>(loc, std::move(inner));
+    static ExpressionPtr KeywordArg(core::LocOffsets loc, core::NameRef name) {
+        return make_expression<ast::KeywordArg>(loc, Local(loc, name));
     }
 
-    static std::unique_ptr<Reference> RestArg(core::Loc loc, std::unique_ptr<Reference> inner) {
-        return std::make_unique<ast::RestArg>(loc, std::move(inner));
+    static ExpressionPtr KeywordArgWithDefault(core::LocOffsets loc, core::NameRef name, ExpressionPtr default_) {
+        return OptionalParam(loc, KeywordArg(loc, name), std::move(default_));
     }
 
-    static std::unique_ptr<Reference> BlockArg(core::Loc loc, std::unique_ptr<Reference> inner) {
-        return std::make_unique<ast::BlockArg>(loc, std::move(inner));
+    static ExpressionPtr RestParam(core::LocOffsets loc, ExpressionPtr inner) {
+        return make_expression<ast::RestParam>(loc, std::move(inner));
     }
 
-    static std::unique_ptr<Reference> ShadowArg(core::Loc loc, std::unique_ptr<Reference> inner) {
-        return std::make_unique<ast::ShadowArg>(loc, std::move(inner));
+    static ExpressionPtr BlockParam(core::LocOffsets loc, ExpressionPtr inner) {
+        return make_expression<ast::BlockParam>(loc, std::move(inner));
     }
 
-    static std::unique_ptr<Reference> Instance(core::Loc loc, core::NameRef name) {
-        return std::make_unique<UnresolvedIdent>(loc, UnresolvedIdent::Instance, name);
+    static ExpressionPtr ShadowArg(core::LocOffsets loc, ExpressionPtr inner) {
+        return make_expression<ast::ShadowArg>(loc, std::move(inner));
     }
 
-    static std::unique_ptr<Expression> cpRef(Reference &name) {
-        if (auto *nm = cast_tree<UnresolvedIdent>(&name)) {
-            return std::make_unique<UnresolvedIdent>(name.loc, nm->kind, nm->name);
-        } else if (auto *nm = cast_tree<ast::Local>(&name)) {
-            return std::make_unique<ast::Local>(name.loc, nm->localVariable);
+    static ExpressionPtr Instance(core::LocOffsets loc, core::NameRef name) {
+        return make_expression<UnresolvedIdent>(loc, UnresolvedIdent::Kind::Instance, name);
+    }
+
+    static ExpressionPtr cpRef(ExpressionPtr &name) {
+        if (auto nm = cast_tree<UnresolvedIdent>(name)) {
+            return make_expression<UnresolvedIdent>(nm->loc, nm->kind, nm->name);
+        } else if (auto nm = cast_tree<ast::Local>(name)) {
+            return make_expression<ast::Local>(nm->loc, nm->localVariable);
+        } else if (auto self = cast_tree<ast::Self>(name)) {
+            return make_expression<ast::Self>(self->loc);
         }
         Exception::notImplemented();
     }
 
-    static std::unique_ptr<Expression> Assign(core::Loc loc, std::unique_ptr<Expression> lhs,
-                                              std::unique_ptr<Expression> rhs) {
-        if (auto *s = cast_tree<ast::Send>(lhs.get())) {
+    static ExpressionPtr Assign(core::LocOffsets loc, ExpressionPtr lhs, ExpressionPtr rhs) {
+        if (auto s = cast_tree<ast::Send>(lhs)) {
             // the LHS might be a send of the form x.y=(), in which case we add the RHS to the arguments list and get
             // x.y=(rhs)
-            s->args.emplace_back(std::move(rhs));
+            s->addPosArg(std::move(rhs));
             return lhs;
-        } else if (auto *seq = cast_tree<ast::InsSeq>(lhs.get())) {
+        } else if (auto seq = cast_tree<ast::InsSeq>(lhs)) {
             // the LHS might be a sequence, which means that it's the result of a safe navigation operator, like
             //   { $t = x; if $t == nil then nil else $t.y=() }
             // in which case we just need to dril down into the else-case of the condition and add the rhs to the send
             //   { $t = x; if $t == nil then nil else $t.y=(rhs)
-            if (auto *cond = cast_tree<ast::If>(seq->expr.get())) {
-                if (auto *s = cast_tree<ast::Send>(cond->elsep.get())) {
-                    s->args.emplace_back(std::move(rhs));
+            if (auto cond = cast_tree<ast::If>(seq->expr)) {
+                if (auto s = cast_tree<ast::Send>(cond->elsep)) {
+                    s->addPosArg(std::move(rhs));
                     return lhs;
                 }
             }
         }
 
         // otherwise, just assign to it!
-        return std::make_unique<ast::Assign>(loc, std::move(lhs), std::move(rhs));
+        return make_expression<ast::Assign>(loc, std::move(lhs), std::move(rhs));
     }
 
-    static std::unique_ptr<Expression> Assign(core::Loc loc, core::NameRef name, std::unique_ptr<Expression> rhs) {
+    static ExpressionPtr Assign(core::LocOffsets loc, core::NameRef name, ExpressionPtr rhs) {
         return Assign(loc, Local(loc, name), std::move(rhs));
     }
 
-    static std::unique_ptr<Expression> If(core::Loc loc, std::unique_ptr<Expression> cond,
-                                          std::unique_ptr<Expression> thenp, std::unique_ptr<Expression> elsep) {
-        return std::make_unique<ast::If>(loc, std::move(cond), std::move(thenp), std::move(elsep));
+    static ExpressionPtr If(core::LocOffsets loc, ExpressionPtr cond, ExpressionPtr thenp, ExpressionPtr elsep) {
+        return make_expression<ast::If>(loc, std::move(cond), std::move(thenp), std::move(elsep));
     }
 
-    static std::unique_ptr<Expression> While(core::Loc loc, std::unique_ptr<Expression> cond,
-                                             std::unique_ptr<Expression> body) {
-        return std::make_unique<ast::While>(loc, std::move(cond), std::move(body));
+    static ExpressionPtr While(core::LocOffsets loc, ExpressionPtr cond, ExpressionPtr body) {
+        return make_expression<ast::While>(loc, std::move(cond), std::move(body));
     }
 
-    static std::unique_ptr<Expression> Self(core::Loc loc) {
-        return std::make_unique<ast::Local>(loc, core::LocalVariable::selfVariable());
+    static ExpressionPtr Self(core::LocOffsets loc) {
+        return make_expression<ast::Self>(loc);
     }
 
-    static std::unique_ptr<Expression> InsSeq(core::Loc loc, InsSeq::STATS_store stats,
-                                              std::unique_ptr<Expression> expr) {
+    static ExpressionPtr InsSeq(core::LocOffsets loc, InsSeq::STATS_store stats, ExpressionPtr expr) {
         if (!stats.empty()) {
-            return std::make_unique<ast::InsSeq>(loc, std::move(stats), std::move(expr));
+            return make_expression<ast::InsSeq>(loc, std::move(stats), std::move(expr));
         }
         return expr;
     }
 
-    static std::unique_ptr<Expression> Splat(core::Loc loc, std::unique_ptr<Expression> arg) {
-        auto to_a = Send0(loc, std::move(arg), core::Names::to_a());
-        return Send1(loc, Constant(loc, core::Symbols::Magic()), core::Names::splat(), std::move(to_a));
+    static ExpressionPtr Splat(core::LocOffsets loc, ExpressionPtr arg) {
+        return Send1(loc, Magic(loc), core::Names::splat(), loc, std::move(arg));
     }
 
-    static std::unique_ptr<Expression> CallWithSplat(core::Loc loc, std::unique_ptr<Expression> recv,
-                                                     core::NameRef name, std::unique_ptr<Expression> args) {
-        return Send3(loc, Constant(loc, core::Symbols::Magic()), core::Names::callWithSplat(), std::move(recv),
-                     MK::Symbol(loc, name), std::move(args));
+    // If `expr` is a Splat, returns the expression being splatted, otherwise nullptr.
+    static ast::ExpressionPtr extractSplattedExpression(ExpressionPtr &expr) {
+        auto splat = cast_tree<ast::Send>(expr);
+        if (splat == nullptr) {
+            return nullptr;
+        }
+
+        if (splat->fun != core::Names::splat()) {
+            return nullptr;
+        }
+
+        ENFORCE(isMagicClass(splat->recv), "Splat Send should have Magic as the receiver");
+        ENFORCE(splat->numPosArgs() == 1, "Splat Send should have exactly 1 argument");
+
+        return std::move(splat->getPosArg(0));
     }
 
-    static std::unique_ptr<Expression> InsSeq1(core::Loc loc, std::unique_ptr<Expression> stat,
-                                               std::unique_ptr<Expression> expr) {
+    static ExpressionPtr CallWithSplat(core::LocOffsets loc, ExpressionPtr recv, core::NameRef name,
+                                       core::LocOffsets funLoc, ExpressionPtr splat) {
+        return Send4(loc, Magic(loc), core::Names::callWithSplat(), loc, std::move(recv), MK::Symbol(loc, name),
+                     std::move(splat), MK::Nil(loc.copyWithZeroLength()));
+    }
+
+    static ExpressionPtr InsSeq1(core::LocOffsets loc, ExpressionPtr stat, ExpressionPtr expr) {
         InsSeq::STATS_store stats;
         stats.emplace_back(std::move(stat));
         return InsSeq(loc, std::move(stats), std::move(expr));
     }
 
-    static std::unique_ptr<Expression> True(core::Loc loc) {
-        return std::make_unique<ast::Literal>(loc, core::Types::trueClass());
+    static ExpressionPtr True(core::LocOffsets loc) {
+        return make_expression<ast::Literal>(loc, core::Types::trueClass());
     }
 
-    static std::unique_ptr<Expression> False(core::Loc loc) {
-        return std::make_unique<ast::Literal>(loc, core::Types::falseClass());
+    static ExpressionPtr False(core::LocOffsets loc) {
+        return make_expression<ast::Literal>(loc, core::Types::falseClass());
     }
 
-    static std::unique_ptr<UnresolvedConstantLit> UnresolvedConstant(core::Loc loc, std::unique_ptr<Expression> scope,
-                                                                     core::NameRef name) {
-        return std::make_unique<UnresolvedConstantLit>(loc, std::move(scope), name);
+    static ExpressionPtr UnresolvedConstant(core::LocOffsets loc, ExpressionPtr scope, core::NameRef name) {
+        return make_expression<UnresolvedConstantLit>(loc, std::move(scope), name);
     }
 
-    static std::unique_ptr<Expression> Int(core::Loc loc, int64_t val) {
-        return std::make_unique<ast::Literal>(loc, core::make_type<core::LiteralType>(val));
-    }
-
-    static std::unique_ptr<Expression> Float(core::Loc loc, double val) {
-        return std::make_unique<ast::Literal>(loc, core::make_type<core::LiteralType>(val));
-    }
-
-    static std::unique_ptr<Expression> Symbol(core::Loc loc, core::NameRef name) {
-        return std::make_unique<ast::Literal>(loc, core::make_type<core::LiteralType>(core::Symbols::Symbol(), name));
-    }
-
-    static std::unique_ptr<Expression> String(core::Loc loc, core::NameRef value) {
-        return std::make_unique<ast::Literal>(loc, core::make_type<core::LiteralType>(core::Symbols::String(), value));
-    }
-
-    static std::unique_ptr<MethodDef> Method(core::Loc loc, core::Loc declLoc, core::NameRef name,
-                                             MethodDef::ARGS_store args, std::unique_ptr<Expression> rhs,
-                                             u4 flags = 0) {
-        if (args.empty() || (!isa_tree<ast::Local>(args.back().get()) && !isa_tree<ast::BlockArg>(args.back().get()))) {
-            auto blkLoc = core::Loc::none(declLoc.file());
-            args.emplace_back(std::make_unique<ast::BlockArg>(blkLoc, MK::Local(blkLoc, core::Names::blkArg())));
+    static ExpressionPtr UnresolvedConstantParts(core::LocOffsets loc, absl::Span<const core::NameRef> parts) {
+        auto result = EmptyTree();
+        for (const auto part : parts) {
+            result = UnresolvedConstant(loc, std::move(result), part);
         }
-        return std::make_unique<MethodDef>(loc, declLoc, core::Symbols::todo(), name, std::move(args), std::move(rhs),
-                                           flags);
+        return result;
     }
 
-    static std::unique_ptr<Expression> Method0(core::Loc loc, core::Loc declLoc, core::NameRef name,
-                                               std::unique_ptr<Expression> rhs, u4 flags = 0) {
-        MethodDef::ARGS_store args;
-        return Method(loc, declLoc, name, std::move(args), std::move(rhs), flags);
+    static ExpressionPtr Int(core::LocOffsets loc, int64_t val) {
+        return make_expression<ast::Literal>(loc, core::make_type<core::IntegerLiteralType>(val));
     }
 
-    static std::unique_ptr<Expression> Method1(core::Loc loc, core::Loc declLoc, core::NameRef name,
-                                               std::unique_ptr<Expression> arg0, std::unique_ptr<Expression> rhs,
-                                               u4 flags = 0) {
-        MethodDef::ARGS_store args;
-        args.emplace_back(std::move(arg0));
-        return Method(loc, declLoc, name, std::move(args), std::move(rhs), flags);
+    static ExpressionPtr Float(core::LocOffsets loc, double val) {
+        return make_expression<ast::Literal>(loc, core::make_type<core::FloatLiteralType>(val));
     }
 
-    static std::unique_ptr<ClassDef> Class(core::Loc loc, core::Loc declLoc, std::unique_ptr<Expression> name,
-                                           ClassDef::ANCESTORS_store ancestors, ClassDef::RHS_store rhs,
-                                           ClassDefKind kind) {
-        return std::make_unique<ClassDef>(loc, declLoc, core::Symbols::todo(), std::move(name), std::move(ancestors),
-                                          std::move(rhs), kind);
+    static ExpressionPtr Symbol(core::LocOffsets loc, core::NameRef name) {
+        return make_expression<ast::Literal>(loc,
+                                             core::make_type<core::NamedLiteralType>(core::Symbols::Symbol(), name));
     }
 
-    static std::unique_ptr<Expression> Array(core::Loc loc, Array::ENTRY_store entries) {
-        return std::make_unique<ast::Array>(loc, std::move(entries));
+    static ExpressionPtr String(core::LocOffsets loc, core::NameRef value) {
+        return make_expression<ast::Literal>(loc,
+                                             core::make_type<core::NamedLiteralType>(core::Symbols::String(), value));
     }
 
-    static std::unique_ptr<Expression> Hash(core::Loc loc, Hash::ENTRY_store keys, Hash::ENTRY_store values) {
-        return std::make_unique<ast::Hash>(loc, std::move(keys), std::move(values));
+    static ExpressionPtr Method(core::LocOffsets loc, core::LocOffsets declLoc, core::NameRef name,
+                                MethodDef::PARAMS_store params, ExpressionPtr rhs,
+                                MethodDef::Flags flags = MethodDef::Flags()) {
+        if (params.empty() || (!isa_tree<ast::Local>(params.back()) && !isa_tree<ast::BlockParam>(params.back()))) {
+            auto blkLoc = core::LocOffsets::none();
+            params.emplace_back(make_expression<ast::BlockParam>(blkLoc, MK::Local(blkLoc, core::Names::blkArg())));
+        }
+        return make_expression<MethodDef>(loc, declLoc, core::Symbols::todoMethod(), name, std::move(params),
+                                          std::move(rhs), flags);
     }
 
-    static std::unique_ptr<Expression> Hash0(core::Loc loc) {
+    static ExpressionPtr Method0(core::LocOffsets loc, core::LocOffsets declLoc, core::NameRef name, ExpressionPtr rhs,
+                                 MethodDef::Flags flags = MethodDef::Flags()) {
+        MethodDef::PARAMS_store params;
+        return Method(loc, declLoc, name, std::move(params), std::move(rhs), flags);
+    }
+
+    static ExpressionPtr Method1(core::LocOffsets loc, core::LocOffsets declLoc, core::NameRef name,
+                                 ExpressionPtr param0, ExpressionPtr rhs, MethodDef::Flags flags = MethodDef::Flags()) {
+        MethodDef::PARAMS_store params;
+        params.emplace_back(std::move(param0));
+        return Method(loc, declLoc, name, std::move(params), std::move(rhs), flags);
+    }
+
+    static ExpressionPtr SyntheticMethod(core::LocOffsets loc, core::LocOffsets declLoc, core::NameRef name,
+                                         MethodDef::PARAMS_store params, ExpressionPtr rhs,
+                                         MethodDef::Flags flags = MethodDef::Flags()) {
+        flags.isRewriterSynthesized = true;
+        return Method(loc, declLoc, name, std::move(params), std::move(rhs), flags);
+    }
+
+    static ExpressionPtr SyntheticMethod0(core::LocOffsets loc, core::LocOffsets declLoc, core::NameRef name,
+                                          ExpressionPtr rhs, MethodDef::Flags flags = MethodDef::Flags()) {
+        MethodDef::PARAMS_store params;
+        return SyntheticMethod(loc, declLoc, name, std::move(params), std::move(rhs), flags);
+    }
+
+    static ExpressionPtr SyntheticMethod1(core::LocOffsets loc, core::LocOffsets declLoc, core::NameRef name,
+                                          ExpressionPtr param0, ExpressionPtr rhs,
+                                          MethodDef::Flags flags = MethodDef::Flags()) {
+        MethodDef::PARAMS_store params;
+        params.emplace_back(std::move(param0));
+        return SyntheticMethod(loc, declLoc, name, std::move(params), std::move(rhs), flags);
+    }
+
+    static ExpressionPtr ClassOrModule(core::LocOffsets loc, core::LocOffsets declLoc, ExpressionPtr name,
+                                       ClassDef::ANCESTORS_store ancestors, ClassDef::RHS_store rhs,
+                                       ClassDef::Kind kind) {
+        return make_expression<ClassDef>(loc, declLoc, core::Symbols::todo(), std::move(name), std::move(ancestors),
+                                         std::move(rhs), kind);
+    }
+
+    static ExpressionPtr Class(core::LocOffsets loc, core::LocOffsets declLoc, ExpressionPtr name,
+                               ClassDef::ANCESTORS_store ancestors, ClassDef::RHS_store rhs) {
+        return MK::ClassOrModule(loc, declLoc, std::move(name), std::move(ancestors), std::move(rhs),
+                                 ClassDef::Kind::Class);
+    }
+
+    static ExpressionPtr Module(core::LocOffsets loc, core::LocOffsets declLoc, ExpressionPtr name,
+                                ClassDef::RHS_store rhs) {
+        return MK::ClassOrModule(loc, declLoc, std::move(name), {}, std::move(rhs), ClassDef::Kind::Module);
+    }
+
+    static ExpressionPtr Array(core::LocOffsets loc, Array::ENTRY_store entries) {
+        return make_expression<ast::Array>(loc, std::move(entries));
+    }
+
+    static ExpressionPtr Hash(core::LocOffsets loc, Hash::ENTRY_store keys, Hash::ENTRY_store values) {
+        return make_expression<ast::Hash>(loc, std::move(keys), std::move(values));
+    }
+
+    static ExpressionPtr Hash0(core::LocOffsets loc) {
         Hash::ENTRY_store keys;
         Hash::ENTRY_store values;
         return Hash(loc, std::move(keys), std::move(values));
     }
 
-    static std::unique_ptr<Expression> Hash1(core::Loc loc, std::unique_ptr<Expression> key,
-                                             std::unique_ptr<Expression> value) {
+    static ExpressionPtr Hash1(core::LocOffsets loc, ExpressionPtr key, ExpressionPtr value) {
         Hash::ENTRY_store keys;
         Hash::ENTRY_store values;
         keys.emplace_back(std::move(key));
@@ -289,127 +346,332 @@ public:
         return Hash(loc, std::move(keys), std::move(values));
     }
 
-    static std::unique_ptr<Expression> Sig(core::Loc loc, std::unique_ptr<Expression> hash,
-                                           std::unique_ptr<Expression> ret) {
-        auto params = Send1(loc, Self(loc), core::Names::params(), std::move(hash));
-        auto returns = Send1(loc, std::move(params), core::Names::returns(), std::move(ret));
-        auto sig = Send0(loc, Constant(loc, core::Symbols::T_Sig_WithoutRuntime()), core::Names::sig());
-        auto sigSend = ast::cast_tree<ast::Send>(sig.get());
-        sigSend->block = Block0(loc, std::move(returns));
-        sigSend->flags |= ast::Send::REWRITER_SYNTHESIZED;
-        return sig;
-    }
+private:
+    static ExpressionPtr Params(core::LocOffsets loc, ExpressionPtr recv, Send::ARGS_store args) {
+        ENFORCE(args.size() % 2 == 0, "Sig params must be arg name/type pairs");
 
-    static std::unique_ptr<Expression> SigVoid(core::Loc loc, std::unique_ptr<Expression> hash) {
-        auto params = Send1(loc, Self(loc), core::Names::params(), std::move(hash));
-        auto void_ = Send0(loc, std::move(params), core::Names::void_());
-        auto sig = Send0(loc, Constant(loc, core::Symbols::T_Sig_WithoutRuntime()), core::Names::sig());
-        auto sigSend = ast::cast_tree<ast::Send>(sig.get());
-        sigSend->block = Block0(loc, std::move(void_));
-        sigSend->flags |= ast::Send::REWRITER_SYNTHESIZED;
-        return sig;
-    }
-
-    static std::unique_ptr<Expression> Sig0(core::Loc loc, std::unique_ptr<Expression> ret) {
-        auto returns = Send1(loc, Self(loc), core::Names::returns(), std::move(ret));
-        auto sig = Send0(loc, Constant(loc, core::Symbols::T_Sig_WithoutRuntime()), core::Names::sig());
-        auto sigSend = ast::cast_tree<ast::Send>(sig.get());
-        sigSend->block = Block0(loc, std::move(returns));
-        sigSend->flags |= ast::Send::REWRITER_SYNTHESIZED;
-        return sig;
-    }
-
-    static std::unique_ptr<Expression> Sig1(core::Loc loc, std::unique_ptr<Expression> key,
-                                            std::unique_ptr<Expression> value, std::unique_ptr<Expression> ret) {
-        return Sig(loc, Hash1(loc, std::move(key), std::move(value)), std::move(ret));
-    }
-
-    static std::unique_ptr<Expression> Cast(core::Loc loc, std::unique_ptr<Expression> type) {
-        if (auto *send = cast_tree<ast::Send>(type.get())) {
-            if (send->fun == core::Names::untyped()) {
-                return Unsafe(loc, Nil(loc));
-            }
+        if (args.size() > 0) {
+            recv = Send(loc, std::move(recv), core::Names::params(), loc, 0, std::move(args));
         }
-        return Send2(loc, T(loc), core::Names::cast(), Unsafe(loc, Nil(loc)), std::move(type));
+
+        return recv;
     }
 
-    static std::unique_ptr<Expression> T(core::Loc loc) {
+public:
+    static ExpressionPtr Sig(core::LocOffsets loc, Send::ARGS_store args, ExpressionPtr ret,
+                             ExpressionPtr recv_ = nullptr) {
+        auto recv = recv_ ? std::move(recv_) : Self(loc);
+        auto params = Params(loc, std::move(recv), std::move(args));
+        auto returns = Send1(loc, std::move(params), core::Names::returns(), loc, std::move(ret));
+
+        Send::Flags flags;
+        flags.isRewriterSynthesized = true;
+        return Send0Block(loc, Constant(loc, core::Symbols::T_Sig_WithoutRuntime()), core::Names::sig(), loc,
+                          Block0(loc, std::move(returns)), flags);
+    }
+
+    static ExpressionPtr SigVoid(core::LocOffsets loc, Send::ARGS_store args, ExpressionPtr recv_ = nullptr) {
+        auto recv = recv_ ? std::move(recv_) : Self(loc);
+        auto params = Params(loc, std::move(recv), std::move(args));
+        auto void_ = Send0(loc, std::move(params), core::Names::void_(), loc);
+        Send::Flags flags;
+        flags.isRewriterSynthesized = true;
+        return Send0Block(loc, Constant(loc, core::Symbols::T_Sig_WithoutRuntime()), core::Names::sig(), loc,
+                          Block0(loc, std::move(void_)), flags);
+    }
+
+    static ExpressionPtr Sig0(core::LocOffsets loc, ExpressionPtr ret, ExpressionPtr recv_ = nullptr) {
+        auto recv = recv_ ? std::move(recv_) : Self(loc);
+        auto returns = Send1(loc, std::move(recv), core::Names::returns(), loc, std::move(ret));
+        Send::Flags flags;
+        flags.isRewriterSynthesized = true;
+        return Send0Block(loc, Constant(loc, core::Symbols::T_Sig_WithoutRuntime()), core::Names::sig(), loc,
+                          Block0(loc, std::move(returns)), flags);
+    }
+
+    static ExpressionPtr Sig1(core::LocOffsets loc, ExpressionPtr key, ExpressionPtr value, ExpressionPtr ret,
+                              ExpressionPtr recv_ = nullptr) {
+        return Sig(loc, SendArgs(std::move(key), std::move(value)), std::move(ret), std::move(recv_));
+    }
+
+    static ExpressionPtr Override(core::LocOffsets loc, Send::ARGS_store args) {
+        return Send(loc, Self(loc), core::Names::override_(), loc, 0, std::move(args));
+    }
+
+    static ExpressionPtr OverrideStrict(core::LocOffsets loc) {
+        Send::ARGS_store args;
+        return Override(loc, std::move(args));
+    }
+
+    static ExpressionPtr OverrideAllowIncompatible(core::LocOffsets loc, core::LocOffsets allowLoc, ExpressionPtr arg) {
+        Send::ARGS_store args;
+        args.push_back(Symbol(allowLoc, core::Names::allowIncompatible()));
+        args.push_back(std::move(arg));
+        return Override(loc, std::move(args));
+    }
+
+    static ExpressionPtr T(core::LocOffsets loc) {
         return Constant(loc, core::Symbols::T());
     }
 
-    static std::unique_ptr<Expression> Let(core::Loc loc, std::unique_ptr<Expression> value,
-                                           std::unique_ptr<Expression> type) {
-        return Send2(loc, T(loc), core::Names::let(), std::move(value), std::move(type));
+    static ExpressionPtr SyntheticBind(core::LocOffsets loc, ExpressionPtr value, ExpressionPtr type) {
+        return ast::make_expression<ast::Cast>(loc, core::Types::todo(), std::move(value), core::Names::syntheticBind(),
+                                               std::move(type));
     }
 
-    static std::unique_ptr<Expression> AssertType(core::Loc loc, std::unique_ptr<Expression> value,
-                                                  std::unique_ptr<Expression> type) {
-        return Send2(loc, T(loc), core::Names::assertType(), std::move(value), std::move(type));
+    static ExpressionPtr AssumeType(core::LocOffsets loc, ExpressionPtr value, ExpressionPtr type) {
+        return ast::make_expression<ast::Cast>(loc, core::Types::todo(), std::move(value), core::Names::assumeType(),
+                                               std::move(type));
     }
 
-    static std::unique_ptr<Expression> Unsafe(core::Loc loc, std::unique_ptr<Expression> inner) {
-        return Send1(loc, T(loc), core::Names::unsafe(), std::move(inner));
+    static ExpressionPtr ClassOf(core::LocOffsets loc, ExpressionPtr value) {
+        return Send1(loc, T(loc), core::Names::classOf(), loc, std::move(value));
     }
 
-    static std::unique_ptr<Expression> Untyped(core::Loc loc) {
-        return Send0(loc, T(loc), core::Names::untyped());
+    static ExpressionPtr All(core::LocOffsets loc, Send::ARGS_store args) {
+        return Send(loc, T(loc), core::Names::all(), loc.copyWithZeroLength(), args.size(), std::move(args));
     }
 
-    static std::unique_ptr<Expression> Nilable(core::Loc loc, std::unique_ptr<Expression> arg) {
-        return Send1(loc, T(loc), core::Names::nilable(), std::move(arg));
+    static ExpressionPtr Any(core::LocOffsets loc, Send::ARGS_store args) {
+        return Send(loc, T(loc), core::Names::any(), loc.copyWithZeroLength(), args.size(), std::move(args));
     }
 
-    static std::unique_ptr<Expression> KeepForIDE(std::unique_ptr<Expression> arg) {
-        auto loc = core::Loc::none(arg->loc.file());
-        return Send1(loc, Constant(loc, core::Symbols::Sorbet_Private_Static()), core::Names::keepForIde(),
-                     std::move(arg));
+    static ExpressionPtr Anything(core::LocOffsets loc) {
+        return Send0(loc, T(loc), core::Names::anything(), loc.copyWithZeroLength());
     }
 
-    static std::unique_ptr<Expression> KeepForTypechecking(std::unique_ptr<Expression> arg) {
-        auto loc = core::Loc::none(arg->loc.file());
-        return Send1(loc, Constant(loc, core::Symbols::Sorbet_Private_Static()), core::Names::keepForTypechecking(),
-                     std::move(arg));
+    static ExpressionPtr AttachedClass(core::LocOffsets loc) {
+        return Send0(loc, T(loc), core::Names::attachedClass(), loc.copyWithZeroLength());
     }
 
-    static std::unique_ptr<Expression> SelfNew(core::Loc loc, ast::Send::ARGS_store args, u4 flags = 0,
-                                               std::unique_ptr<ast::Block> block = nullptr) {
-        auto magic = Constant(loc, core::Symbols::Magic());
-        return Send(loc, std::move(magic), core::Names::selfNew(), std::move(args), flags, std::move(block));
+    static ExpressionPtr Cast(core::LocOffsets loc, ExpressionPtr value, ExpressionPtr type) {
+        return ast::make_expression<ast::Cast>(loc, core::Types::todo(), std::move(value), core::Names::cast(),
+                                               std::move(type));
     }
 
-    static bool isMagicClass(ast::Expression *expr) {
-        if (auto *recv = cast_tree<ConstantLit>(expr)) {
-            return recv->symbol == core::Symbols::Magic();
+    static ExpressionPtr Let(core::LocOffsets loc, ExpressionPtr value, ExpressionPtr type) {
+        return ast::make_expression<ast::Cast>(loc, core::Types::todo(), std::move(value), core::Names::let(),
+                                               std::move(type));
+    }
+
+    static ExpressionPtr AssertType(core::LocOffsets loc, ExpressionPtr value, ExpressionPtr type) {
+        return ast::make_expression<ast::Cast>(loc, core::Types::todo(), std::move(value), core::Names::assertType(),
+                                               std::move(type));
+    }
+
+    static ExpressionPtr NoReturn(core::LocOffsets loc) {
+        return Send0(loc, T(loc), core::Names::noreturn(), loc.copyWithZeroLength());
+    }
+
+    static ExpressionPtr SelfType(core::LocOffsets loc) {
+        return Send0(loc, T(loc), core::Names::selfType(), loc.copyWithZeroLength());
+    }
+
+    static ExpressionPtr Unsafe(core::LocOffsets loc, ExpressionPtr inner) {
+        return Send1(loc, T(loc), core::Names::unsafe(), loc, std::move(inner));
+    }
+
+    static ExpressionPtr Untyped(core::LocOffsets loc) {
+        return Send0(loc, T(loc), core::Names::untyped(), loc);
+    }
+
+    static ExpressionPtr UntypedNil(core::LocOffsets loc) {
+        return Unsafe(loc, Nil(loc));
+    }
+
+    static ExpressionPtr Nilable(core::LocOffsets loc, ExpressionPtr arg) {
+        return Send1(loc, T(loc), core::Names::nilable(), loc, std::move(arg));
+    }
+
+    static ExpressionPtr T_Array(core::LocOffsets loc) {
+        return UnresolvedConstantParts(loc, {core::Names::Constants::T(), core::Names::Constants::Array()});
+    }
+
+    static ExpressionPtr T_Boolean(core::LocOffsets loc) {
+        static constexpr core::NameRef parts[2] = {core::Names::Constants::T(), core::Names::Constants::Boolean()};
+        return UnresolvedConstantParts(loc, parts);
+    }
+
+    static ExpressionPtr T_Class(core::LocOffsets loc) {
+        return UnresolvedConstantParts(loc, {core::Names::Constants::T(), core::Names::Constants::Class()});
+    }
+
+    static ExpressionPtr T_Hash(core::LocOffsets loc) {
+        return UnresolvedConstantParts(loc, {core::Names::Constants::T(), core::Names::Constants::Hash()});
+    }
+
+    static ExpressionPtr T_Enumerable(core::LocOffsets loc) {
+        return UnresolvedConstantParts(loc, {core::Names::Constants::T(), core::Names::Constants::Enumerable()});
+    }
+
+    static ExpressionPtr T_Enumerator(core::LocOffsets loc) {
+        return UnresolvedConstantParts(loc, {core::Names::Constants::T(), core::Names::Constants::Enumerator()});
+    }
+
+    static ExpressionPtr T_Enumerator_Lazy(core::LocOffsets loc) {
+        return UnresolvedConstantParts(
+            loc, {core::Names::Constants::T(), core::Names::Constants::Enumerator(), core::Names::Constants::Lazy()});
+    }
+
+    static ExpressionPtr T_Enumerator_Chain(core::LocOffsets loc) {
+        return UnresolvedConstantParts(
+            loc, {core::Names::Constants::T(), core::Names::Constants::Enumerator(), core::Names::Constants::Chain()});
+    }
+
+    static ExpressionPtr T_Proc(core::LocOffsets loc, Send::ARGS_store args, ExpressionPtr ret) {
+        auto proc = Send0(loc, T(loc), core::Names::proc(), loc.copyWithZeroLength());
+        auto params = Params(loc, std::move(proc), std::move(args));
+        return Send1(loc, std::move(params), core::Names::returns(), loc.copyWithZeroLength(), std::move(ret));
+    }
+
+    static ExpressionPtr T_ProcVoid(core::LocOffsets loc, Send::ARGS_store args) {
+        auto proc = Send0(loc, T(loc), core::Names::proc(), loc.copyWithZeroLength());
+        auto params = Params(loc, std::move(proc), std::move(args));
+        return Send0(loc, std::move(params), core::Names::void_(), loc.copyWithZeroLength());
+    }
+
+    static ExpressionPtr T_Range(core::LocOffsets loc) {
+        return UnresolvedConstantParts(loc, {core::Names::Constants::T(), core::Names::Constants::Range()});
+    }
+
+    static ExpressionPtr T_Set(core::LocOffsets loc) {
+        return UnresolvedConstantParts(loc, {core::Names::Constants::T(), core::Names::Constants::Set()});
+    }
+
+    static ExpressionPtr ZSuper(core::LocOffsets loc, core::NameRef method) {
+        Send::Flags flags;
+        flags.isPrivateOk = true;
+        return Send(loc, Self(loc), method, loc, 1,
+                    SendArgs(make_expression<ast::ZSuperArgs>(loc.copyEndWithZeroLength())), flags);
+    }
+
+    static ExpressionPtr Magic(core::LocOffsets loc) {
+        return Constant(loc, core::Symbols::Magic());
+    }
+
+    static ExpressionPtr RuntimeMethodDefinition(core::LocOffsets loc, core::NameRef name, bool isSelfMethod) {
+        return make_expression<ast::RuntimeMethodDefinition>(loc, name, isSelfMethod);
+    }
+
+    static ExpressionPtr RaiseUnimplemented(core::LocOffsets loc) {
+        auto kernel = Constant(loc, core::Symbols::Kernel());
+        auto msg = String(loc, core::Names::rewriterRaiseUnimplemented());
+        // T.unsafe so that Sorbet doesn't know this unconditionally raises (avoids introducing dead code errors)
+        auto ret = Send1(loc, Unsafe(loc, std::move(kernel)), core::Names::raise(), loc, std::move(msg));
+        cast_tree<ast::Send>(ret)->flags.isRewriterSynthesized = true;
+        return ret;
+    }
+
+    static ExpressionPtr RaiseTypedUnimplemented(core::LocOffsets loc) {
+        auto kernel = Constant(loc, core::Symbols::Kernel());
+        auto msg = String(loc, core::Names::rewriterRaiseUnimplemented());
+        auto ret = Send1(loc, std::move(kernel), core::Names::raise(), loc, std::move(msg));
+        cast_tree<ast::Send>(ret)->flags.isRewriterSynthesized = true;
+        return ret;
+    }
+
+    static bool isRootScope(const ast::ExpressionPtr &scope) {
+        if (ast::isa_tree<ast::EmptyTree>(scope)) {
+            return true;
+        }
+        auto root = ast::cast_tree<ast::ConstantLit>(scope);
+        return root != nullptr && root->symbol() == core::Symbols::root();
+    }
+
+    static bool isMagicClass(const ExpressionPtr &expr) {
+        if (auto recv = cast_tree<ConstantLit>(expr)) {
+            return recv->symbol() == core::Symbols::Magic();
         } else {
             return false;
         }
     }
 
-    static bool isSelfNew(ast::Send *send) {
-        if (send->fun != core::Names::selfNew()) {
-            return false;
+    static bool isSorbetPrivateStatic(const ast::ExpressionPtr &expr) {
+        if (auto recv = cast_tree<ConstantLit>(expr)) {
+            return recv->symbol() == core::Symbols::Sorbet_Private_Static();
         }
 
-        return isMagicClass(send->recv.get());
+        return false;
     }
 
-    static class Local *arg2Local(Expression *arg) {
+    static bool isSelfNew(ast::Send *send) {
+        return send->fun == core::Names::new_() && send->recv.isSelfReference();
+    }
+
+    /*
+     * Is this an expression that refers to resolved or unresolved `::T` constant?
+     *
+     * When considering unresolved `::T`, we only consider `::T` with no scope (i.e. `T`) and `::T` with the root
+     * scope (i.e. `::T`). This might not actually refer to the `T` that we define for users, but we don't know that
+     * information at the AST level.
+     */
+    static bool isT(const ast::ExpressionPtr &expr) {
+        bool result = false;
+
+        typecase(
+            expr,
+            [&](const ast::UnresolvedConstantLit &t) {
+                // When the `T` was written by the user, we get an UnresolvedConstantLit.
+                result = t.cnst == core::Names::Constants::T() && ast::MK::isRootScope(t.scope);
+            },
+            [&](const ast::ConstantLit &c) {
+                // When the `T` was inserted by `ast::MK::T()`, we get a ConstantLit.
+                result = c.symbol() == core::Symbols::T();
+            },
+            [&](const ast::ExpressionPtr &e) { result = false; });
+
+        return result;
+    }
+
+    static bool isTNilable(const ast::ExpressionPtr &expr) {
+        auto nilable = ast::cast_tree<ast::Send>(expr);
+        return nilable != nullptr && nilable->fun == core::Names::nilable() && isT(nilable->recv);
+    }
+
+    static bool isTUntyped(const ast::ExpressionPtr &expr) {
+        auto send = ast::cast_tree<ast::Send>(expr);
+        return send != nullptr && send->fun == core::Names::untyped() && isT(send->recv);
+    }
+
+    static core::NameRef arg2Name(const ExpressionPtr &arg) {
+        auto *cursor = &arg;
         while (true) {
-            if (auto *local = cast_tree<class Local>(arg)) {
+            if (auto local = cast_tree<UnresolvedIdent>(*cursor)) {
+                ENFORCE(local->kind == UnresolvedIdent::Kind::Local);
+                return local->name;
+            }
+
+            // Recurse into structure to find the UnresolvedIdent
+            typecase(
+                *cursor, [&](const class RestParam &rest) { cursor = &rest.expr; },
+                [&](const class KeywordArg &kw) { cursor = &kw.expr; },
+                [&](const class OptionalParam &opt) { cursor = &opt.expr; },
+                [&](const class BlockParam &blk) { cursor = &blk.expr; },
+                [&](const class ShadowArg &shadow) { cursor = &shadow.expr; },
+                // ENFORCES are last so that we don't pay the price of casting in the fast path.
+                [&](const ast::Local &opt) { ENFORCE(false, "Should only be called before local_vars.cc"); },
+                [&](const ExpressionPtr &expr) { ENFORCE(false, "Unexpected node type in argument position."); });
+        }
+    }
+
+    static ast::Local const *arg2Local(const ast::ExpressionPtr &arg) {
+        auto *cursor = &arg;
+        while (true) {
+            if (auto local = ast::cast_tree<ast::Local>(*cursor)) {
                 // Buried deep within every argument is a Local
                 return local;
             }
 
             // Recurse into structure to find the Local
             typecase(
-                arg, [&](class RestArg *rest) { arg = rest->expr.get(); },
-                [&](class KeywordArg *kw) { arg = kw->expr.get(); },
-                [&](class OptionalArg *opt) { arg = opt->expr.get(); },
-                [&](class BlockArg *blk) { arg = blk->expr.get(); },
-                [&](class ShadowArg *shadow) { arg = shadow->expr.get(); },
+                *cursor, [&](const class RestParam &rest) { cursor = &rest.expr; },
+                [&](const class KeywordArg &kw) { cursor = &kw.expr; },
+                [&](const class OptionalParam &opt) { cursor = &opt.expr; },
+                [&](const class BlockParam &blk) { cursor = &blk.expr; },
+                [&](const class ShadowArg &shadow) { cursor = &shadow.expr; },
                 // ENFORCES are last so that we don't pay the price of casting in the fast path.
-                [&](UnresolvedIdent *opt) { ENFORCE(false, "Namer should have created a Local for this arg."); },
-                [&](Expression *expr) { ENFORCE(false, "Unexpected node type in argument position."); });
+                [&](const UnresolvedIdent &opt) { ENFORCE(false, "Namer should have created a Local for this arg."); },
+                [&](const ExpressionPtr &expr) { ENFORCE(false, "Unexpected node type in argument position."); });
         }
     }
 };
@@ -417,7 +679,7 @@ public:
 class BehaviorHelpers final {
 public:
     // Recursively check if all children of an expression are EmptyTree's or InsSeq's that only contain EmptyTree's
-    static bool checkEmptyDeep(const std::unique_ptr<Expression> &);
+    static bool checkEmptyDeep(const ExpressionPtr &);
 
     // Does a class/module definition define "behavior"? A class definition that only serves as a
     // namespace for inner-definitions is not considered to have behavior.
@@ -428,7 +690,8 @@ public:
     //     def m; end <-- Behavior in A::B
     //   end
     // end
-    static bool checkClassDefinesBehavior(const std::unique_ptr<ClassDef> &);
+    static bool checkClassDefinesBehavior(const ExpressionPtr &);
+    static bool checkClassDefinesBehavior(const ast::ClassDef &);
 };
 
 } // namespace sorbet::ast

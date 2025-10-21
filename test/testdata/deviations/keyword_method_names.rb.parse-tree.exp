@@ -2,64 +2,237 @@ Begin {
   stmts = [
     DefMethod {
       name = <U method_named_alias>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U alias>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U alias>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Alias {
+            from = Symbol {
+              val = <U foo>
+            }
+            to = Symbol {
+              val = <U bar>
+            }
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_and>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U and>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U and>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Const {
+            scope = NULL
+            name = <C <U <ErrorNode>>>
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_begin>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U begin>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U begin>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Kwbegin {
+            stmts = [
+            ]
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_break>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U break>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U break>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Break {
+            exprs = [
+            ]
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_case>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U case>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U case>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Case {
+            condition = Const {
+              scope = NULL
+              name = <C <U <ErrorNode>>>
+            }
+            whens = [
+              When {
+                patterns = [
+                  Const {
+                    scope = NULL
+                    name = <C <U <ErrorNode>>>
+                  }
+                ]
+                body = NULL
+              }
+            ]
+            else_ = NULL
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_class>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -68,9 +241,9 @@ Begin {
     }
     DefMethod {
       name = <U method_named_defined?>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -79,9 +252,9 @@ Begin {
     }
     DefMethod {
       name = <U method_named_do>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -90,9 +263,9 @@ Begin {
     }
     DefMethod {
       name = <U method_named_else>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -120,9 +293,9 @@ Begin {
     }
     DefMethod {
       name = <U method_named_elsif>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -131,34 +304,90 @@ Begin {
     }
     DefMethod {
       name = <U method_named_ensure>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
       body = Ensure {
-        body = NULL
+        body = Begin {
+          stmts = [
+            Send {
+              receiver = LVar {
+                name = <U x>
+              }
+              method = <U ensure>
+              args = [
+              ]
+            }
+            Send {
+              receiver = LVar {
+                name = <U x>
+              }
+              method = <U ensure>
+              args = [
+              ]
+            }
+            Send {
+              receiver = LVar {
+                name = <U x>
+              }
+              method = <U <method-name-missing>>
+              args = [
+              ]
+            }
+          ]
+        }
         ensure = NULL
       }
     }
     DefMethod {
       name = <U method_named_false>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U false>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U false>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          False {
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_for>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -167,20 +396,55 @@ Begin {
     }
     DefMethod {
       name = <U method_named_if>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U if>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U if>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          If {
+            condition = Const {
+              scope = NULL
+              name = <C <U <ErrorNode>>>
+            }
+            then_ = NULL
+            else_ = NULL
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_in>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -189,9 +453,9 @@ Begin {
     }
     DefMethod {
       name = <U method_named_module>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -200,31 +464,91 @@ Begin {
     }
     DefMethod {
       name = <U method_named_next>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U next>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U next>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Next {
+            exprs = [
+            ]
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_nil>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U nil>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U nil>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Nil {
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_not>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -233,9 +557,9 @@ Begin {
     }
     DefMethod {
       name = <U method_named_or>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -244,75 +568,259 @@ Begin {
     }
     DefMethod {
       name = <U method_named_redo>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U redo>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U redo>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Redo {
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_rescue>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Rescue {
+        body = Begin {
+          stmts = [
+            Send {
+              receiver = LVar {
+                name = <U x>
+              }
+              method = <U rescue>
+              args = [
+              ]
+            }
+            Send {
+              receiver = LVar {
+                name = <U x>
+              }
+              method = <U rescue>
+              args = [
+              ]
+            }
+            Send {
+              receiver = LVar {
+                name = <U x>
+              }
+              method = <U <method-name-missing>>
+              args = [
+              ]
+            }
+          ]
+        }
+        rescue = [
+          Resbody {
+            exception = NULL
+            var = NULL
+            body = NULL
+          }
+        ]
+        else_ = NULL
+      }
     }
     DefMethod {
       name = <U method_named_retry>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U retry>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U retry>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Retry {
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_return>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U return>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U return>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Return {
+            exprs = [
+            ]
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_self>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U self>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U self>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Self {
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_super>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U super>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U super>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          ZSuper {
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_then>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -321,42 +829,140 @@ Begin {
     }
     DefMethod {
       name = <U method_named_true>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U true>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U true>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          True {
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_unless>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U unless>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U unless>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          If {
+            condition = Const {
+              scope = NULL
+              name = <C <U <ErrorNode>>>
+            }
+            then_ = NULL
+            else_ = NULL
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_until>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U until>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U until>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Until {
+            cond = Const {
+              scope = NULL
+              name = <C <U <ErrorNode>>>
+            }
+            body = NULL
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_when>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
@@ -365,36 +971,128 @@ Begin {
     }
     DefMethod {
       name = <U method_named_while>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U while>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U while>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          While {
+            cond = Const {
+              scope = NULL
+              name = <C <U <ErrorNode>>>
+            }
+            body = NULL
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_yield>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U yield>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U yield>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+          Yield {
+            exprs = [
+            ]
+          }
+        ]
+      }
     }
     DefMethod {
       name = <U method_named_end>
-      args = Args {
-        args = [
-          Arg {
+      params = Params {
+        params = [
+          Param {
             name = <U x>
           }
         ]
       }
-      body = NULL
+      body = Begin {
+        stmts = [
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U end>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U end>
+            args = [
+            ]
+          }
+          Send {
+            receiver = LVar {
+              name = <U x>
+            }
+            method = <U <method-name-missing>>
+            args = [
+            ]
+          }
+        ]
+      }
     }
   ]
 }

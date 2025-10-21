@@ -1,50 +1,66 @@
 #ifndef SORBET_AST_LOC_H
 #define SORBET_AST_LOC_H
 
-#include "Files.h"
+#include "core/Files.h"
+#include "core/LocOffsets.h"
 
 namespace sorbet::core {
 namespace serialize {
 class SerializerImpl;
 }
 class GlobalState;
+class Context;
+class MutableContext;
 
 class Loc final {
     struct {
-        unsigned int beginLoc : 24;
-        unsigned int endLoc : 24;
-        unsigned int fileRef : 16;
-    } __attribute__((packed, aligned(8))) storage;
+        LocOffsets offsets;
+        core::FileRef fileRef;
+    } storage;
     template <typename H> friend H AbslHashValue(H h, const Loc &m);
     friend class sorbet::core::serialize::SerializerImpl;
 
-    static constexpr int INVALID_POS_LOC = 0xffffff;
-
     void setFile(core::FileRef file) {
-        storage.fileRef = file.id();
+        storage.fileRef = file;
     }
 
 public:
     static Loc none(FileRef file = FileRef()) {
-        return Loc{file, INVALID_POS_LOC, INVALID_POS_LOC};
+        return Loc{file, LocOffsets::none()};
     }
 
     bool exists() const {
-        return storage.fileRef != 0 && storage.endLoc != INVALID_POS_LOC && storage.beginLoc != INVALID_POS_LOC;
+        return storage.fileRef != 0 && storage.offsets.exists();
+    }
+    bool empty() const {
+        ENFORCE_NO_TIMER(exists());
+        return storage.offsets.empty();
     }
 
     Loc join(Loc other) const;
 
-    u4 beginPos() const {
-        return storage.beginLoc;
+    // For a given Loc, returns a zero-length version that starts at the same location.
+    Loc copyWithZeroLength() const {
+        return {this->storage.fileRef, this->storage.offsets.copyWithZeroLength()};
+    }
+    // As above, but returns a zero-length version that starts at the end of the Loc.
+    Loc copyEndWithZeroLength() const {
+        return {this->storage.fileRef, this->storage.offsets.copyEndWithZeroLength()};
+    }
+
+    uint32_t beginPos() const {
+        return storage.offsets.beginLoc;
     };
 
-    u4 endPos() const {
-        return storage.endLoc;
+    uint32_t endPos() const {
+        return storage.offsets.endLoc;
+    }
+    const LocOffsets &offsets() const {
+        return storage.offsets;
     }
 
     FileRef file() const {
-        return FileRef(storage.fileRef);
+        return storage.fileRef;
     }
 
     bool isTombStoned(const GlobalState &gs) const {
@@ -52,17 +68,17 @@ public:
         if (!f.exists()) {
             return false;
         } else {
-            return file().data(gs).sourceType == File::TombStone;
+            return file().data(gs).sourceType == File::Type::TombStone;
         }
     }
 
-    inline Loc(FileRef file, u4 begin, u4 end) : storage{begin, end, file.id()} {
-        ENFORCE(begin <= INVALID_POS_LOC);
-        ENFORCE(end <= INVALID_POS_LOC);
-        ENFORCE(begin <= end);
+    inline Loc(FileRef file, uint32_t begin, uint32_t end) : storage{{begin, end}, file} {
+        ENFORCE_NO_TIMER(storage.offsets.exists());
     }
 
-    Loc() : Loc(0, INVALID_POS_LOC, INVALID_POS_LOC){};
+    inline Loc(FileRef file, LocOffsets offsets) : storage{offsets, file} {}
+
+    Loc() : Loc(0, LocOffsets::none()){};
 
     Loc &operator=(const Loc &rhs) = default;
     Loc &operator=(Loc &&rhs) = default;
@@ -70,54 +86,64 @@ public:
     Loc(Loc &&rhs) = default;
 
     struct Detail {
-        u4 line, column;
+        // 1-indexed, like would be reported in a text editor (useful for error messages)
+        uint32_t line, column;
     };
 
     bool contains(const Loc &other) const;
-    std::pair<Detail, Detail> position(const GlobalState &gs) const;
+    std::pair<Detail, Detail> toDetails(const GlobalState &gs) const;
     std::string toStringWithTabs(const GlobalState &gs, int tabs = 0) const;
     std::string toString(const GlobalState &gs) const {
         return toStringWithTabs(gs);
     }
     std::string showRaw(const GlobalState &gs) const;
-    std::string filePosToString(const GlobalState &gs) const;
-    std::string source(const GlobalState &gs) const;
+    std::string fileShortPosToString(const GlobalState &gs) const;
+    std::string filePosToString(const GlobalState &gs, bool showFull = false) const;
+    std::optional<std::string_view> source(const GlobalState &gs) const;
 
     bool operator==(const Loc &rhs) const;
 
     bool operator!=(const Loc &rhs) const;
-    static std::optional<u4> pos2Offset(const File &file, Detail pos);
-    static Detail offset2Pos(const File &file, u4 off);
+    static std::optional<uint32_t> detail2Pos(const File &file, Detail detail);
+    static Detail pos2Detail(const File &file, uint32_t off);
     static std::optional<Loc> fromDetails(const GlobalState &gs, FileRef fileRef, Detail begin, Detail end);
-    std::pair<u4, u4> getAs2u4() const {
-        auto low = (((u4)storage.beginLoc) << 8) + ((((u4)storage.fileRef) >> 8) & ((1 << 8) - 1));
-        auto high = (((u4)storage.endLoc) << 8) + ((((u4)storage.fileRef)) & ((1 << 8) - 1));
-        return {low, high};
-    };
 
-    // Intentionally not a constructor because we don't want to ever be able to call it unintentionally
-    void setFrom2u4(u4 low, u4 high) {
-        storage.fileRef = (high & ((1 << 8) - 1)) + ((low & ((1 << 8) - 1)) << 8);
-        storage.endLoc = high >> 8;
-        storage.beginLoc = low >> 8;
-    }
+    // Create a new Loc by adjusting the beginPos and endPos of this Loc, like this:
+    //
+    //     Loc{file(), beginPos() + beginAdjust, endPos() + endAdjust}
+    //
+    // but takes care to check that the resulting Loc is a valid slice of the source() buffer,
+    // taking care to avoid integer overflow / underflow.
+    //
+    // For example:
+    //
+    //     `loc.adjust(gs, -1, 0).exists() == false` if `loc.beginPos() == 0`
+    //     `loc.adjust(gs, 0, 1).exists() == false` if `loc.endPos() == loc.file().data(gs).source().size()`
+    //
+    // etc.
+    Loc adjust(const GlobalState &gs, int32_t beginAdjust, int32_t endAdjust) const;
+
+    // Like `Loc::adjust`, but takes a start offset and length, instead of independently adjusting
+    // the begin and end positions.
+    Loc adjustLen(const GlobalState &gs, int32_t beginAdjust, int32_t len) const;
 
     // For a given Loc, returns
     //
     // - the Loc corresponding to the first non-whitespace character on this line, and
-    // - how many characters of the start of this line are whitespace.
+    // - how many characters of the start of this line are whitespace (the indentation level).
     //
-    std::pair<Loc, u4> findStartOfLine(const GlobalState &gs) const;
+    std::pair<Loc, uint32_t> findStartOfIndentation(const GlobalState &gs) const;
 
-    // For a given Loc, returns a zero-length version that starts at the same location.
-    Loc copyWithZeroLength() const {
-        return Loc(file(), beginPos(), beginPos());
-    }
+    // If the given loc spans multiple lines, return a new location which has been truncated to
+    // one line (excluding the newline character which ends the first line).
+    //
+    // Otherwise, return the current loc unchanged.
+    Loc truncateToFirstLine(const GlobalState &gs) const;
 };
-CheckSize(Loc, 8, 8);
+CheckSize(Loc, 12, 4);
 
 template <typename H> H AbslHashValue(H h, const Loc &m) {
-    return H::combine(std::move(h), m.storage.beginLoc, m.storage.endLoc, m.storage.fileRef);
+    return H::combine(std::move(h), m.storage.offsets.beginLoc, m.storage.offsets.endLoc, m.storage.fileRef.id());
 }
 } // namespace sorbet::core
 

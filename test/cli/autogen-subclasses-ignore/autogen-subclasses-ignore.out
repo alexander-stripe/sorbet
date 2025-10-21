@@ -1,5 +1,0 @@
---- autogen-subclasses-ignore-absolute ---
-
---- autogen-subclasses-ignore-relative ---
-Opus::Parent
- Opus::Child

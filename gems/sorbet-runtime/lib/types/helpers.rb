@@ -2,13 +2,22 @@
 # typed: true
 
 # Use as a mixin with extend (`extend T::Helpers`).
-# Docs at https://confluence.corp.stripe.com/display/PRODINFRA/Ruby+Types
+# Docs at https://sorbet.org/docs/
 module T::Helpers
+  extend T::Sig
+
   Private = T::Private
 
   ### Class/Module Helpers ###
 
   def abstract!
+    if defined?(super)
+      # This is to play nicely with Rails' AbstractController::Base,
+      # which also defines an `abstract!` method.
+      # https://api.rubyonrails.org/classes/AbstractController/Base.html#method-c-abstract-21
+      super
+    end
+
     Private::Abstract::Declare.declare_abstract(self, type: :abstract)
   end
 
@@ -33,7 +42,24 @@ module T::Helpers
   #  end
   #
   # Except that it is statically analyzed by sorbet.
-  def mixes_in_class_methods(mod)
-    Private::Mixins.declare_mixes_in_class_methods(self, mod)
+  def mixes_in_class_methods(mod, *mods)
+    Private::Mixins.declare_mixes_in_class_methods(self, [mod].concat(mods))
   end
+
+  # Specify an inclusion or inheritance requirement for `self`.
+  #
+  # Example:
+  #
+  #   module MyHelper
+  #     extend T::Helpers
+  #
+  #     requires_ancestor { Kernel }
+  #   end
+  #
+  #   class MyClass < BasicObject # error: `MyClass` must include `Kernel` (required by `MyHelper`)
+  #     include MyHelper
+  #   end
+  #
+  # TODO: implement the checks in sorbet-runtime.
+  def requires_ancestor(&block); end
 end

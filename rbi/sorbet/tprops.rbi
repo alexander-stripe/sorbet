@@ -1,4 +1,4 @@
-# typed: strict
+# typed: true
 
 # The vast majority Most of the methods defined below are arguably private
 # APIs, but are actually not private because they're used by Chalk::ODM.
@@ -12,15 +12,19 @@ end
 class T::Struct < T::InexactStruct
 end
 
+class T::ImmutableStruct < T::InexactStruct
+end
+
 module T::Props
   extend T::Helpers
   mixes_in_class_methods(T::Props::ClassMethods)
 end
 
 module T::Props::ClassMethods
-  sig {params(name: T.any(Symbol, String), cls_or_args: T.untyped, args: T::Hash[Symbol, T.untyped]).void}
-  def const(name, cls_or_args, args={}, &blk); end
-  def prop(name, cls, rules = nil); end
+  sig {params(name: Symbol, cls_or_args: T.untyped, args: T.untyped).void}
+  def const(name, cls_or_args, **args); end
+  sig {params(name: Symbol, cls: T.untyped, rules: T.untyped).void}
+  def prop(name, cls, **rules); end
   def decorator; end
   def decorator_class; end
   def plugin(mod); end
@@ -34,57 +38,46 @@ module T::Props::CustomType
   def deserialize(_mongo_scalar); end
   def instance?(_value); end
   def self.scalar_type?(val); end
-  def self.valid_serialization?(val, type = nil); end
+  def self.valid_serialization?(val); end
   def serialize(_instance); end
   def valid?(value); end
   include Kernel
 end
 
+module T::Props::GeneratedCodeValidation
+  def self.validate_serialize(source); end
+  def self.validate_deserialize(source); end
+end
+
 class T::Props::Decorator
   Rules = T.type_alias {T::Hash[Symbol, T.untyped]}
-  DecoratedClass = T.type_alias {T.untyped} # T.class_of(T::Props), but that produces circular reference errors in some circumstances
   DecoratedInstance = T.type_alias {T.untyped} # Would be T::Props, but that produces circular reference errors in some circumstances
-  PropType = T.type_alias {T.any(T::Types::Base, T::Props::CustomType)}
+  PropType = T.type_alias {T::Types::Base}
   PropTypeOrClass = T.type_alias {T.any(PropType, Module)}
 end
 
 class T::Props::Decorator
-  def add_prop_definition(*args, &blk); end
-  def all_props(*args, &blk); end
-  def array_subdoc_type(*args, &blk); end
-  def check_prop_type(*args, &blk); end
-  def convert_type_to_class(*args, &blk); end
+  def add_prop_definition(prop, rules); end
+  def all_props; end
   def decorated_class; end
-  def define_foreign_method(*args, &blk); end
-  def define_getter_and_setter(*args, &blk); end
-  def foreign_prop_get(*args, &blk); end
-  def get(*args, &blk); end
-  def handle_foreign_hint_only_option(*args, &blk); end
-  def handle_foreign_option(*args, &blk); end
-  def handle_redaction_option(*args, &blk); end
-  def hash_key_custom_type(*args, &blk); end
-  def hash_value_subdoc_type(*args, &blk); end
+  def foreign_prop_get(instance, prop, foreign_class, rules = {}, opts = {}); end
   def initialize(klass); end
-  def is_nilable?(*args, &blk); end
   def model_inherited(child); end
-  def mutate_prop_backdoor!(*args, &blk); end
   def plugin(mod); end
-  def prop_defined(*args, &blk); end
-  def prop_get(*args, &blk); end
-  def prop_rules(*args, &blk); end
-  def prop_set(*args, &blk); end
-  def prop_validate_definition!(*args, &blk); end
+  def prop_defined(name, cls, rules = {}); end
+  def prop_get_logic(instance, prop, value); end
+  def prop_get(instance, prop, rules = {}); end
+  def prop_get_if_set(instance, prop, rules = {}); end
+  alias_method :get, :prop_get_if_set
+  def prop_rules(prop); end
+  def prop_set(instance, prop, value, rules = {}); end
+  alias_method :set, :prop_set
+  def prop_validate_definition!(name, cls, rules, type); end
   def props; end
   def self.method_added(name); end
   def self.singleton_method_added(name); end
-  def set(*args, &blk); end
-  def shallow_clone_ok(*args, &blk); end
-  def smart_coerce(*args, &blk); end
-  def valid_props(*args, &blk); end
-  def validate_foreign_option(*args, &blk); end
-  def validate_not_missing_sensitivity(*args, &blk); end
-  def validate_prop_name(name); end
-  def validate_prop_value(*args, &blk); end
+  def valid_rule_key?(key); end
+  def validate_prop_value(prop, val); end
   extend T::Sig
 end
 
@@ -100,6 +93,10 @@ end
 module T::Props::Plugin
   extend T::Helpers
   include T::Props
+  mixes_in_class_methods(T::Props::Plugin::ClassMethods)
+end
+
+module T::Props::Plugin::ClassMethods
 end
 
 module T::Props::Utils
@@ -119,10 +116,9 @@ module T::Props::Optional::DecoratorMethods
   def compute_derived_rules(rules); end
   def get_default(rules, instance_class); end
   def has_default?(rules); end
-  def mutate_prop_backdoor!(prop, key, value); end
   def prop_optional?(prop); end
   def prop_validate_definition!(name, cls, rules, type); end
-  def valid_props; end
+  def valid_rule_key?(key); end
 end
 
 module T::Props::WeakConstructor
@@ -142,22 +138,21 @@ module T::Props::PrettyPrintable
 end
 
 module T::Props::PrettyPrintable::DecoratorMethods
-  def inspect_instance(instance, multiline: false, indent: '  ', &blk); end
-  def inspect_instance_components(instance, multiline:, indent:, &blk); end
-  def inspect_prop_value(instance, prop, multiline:, indent:, &blk); end
-  def join_props_with_pretty_values(pretty_kvs, multiline:, indent: '  ', &blk); end
+  def inspect_instance(instance, multiline: false, indent: '  '); end
+  def inspect_instance_components(instance, multiline:, indent:); end
+  def inspect_prop_value(instance, prop, multiline:, indent:); end
+  def join_props_with_pretty_values(pretty_kvs, multiline:, indent: '  '); end
   def self.method_added(name); end
   def self.singleton_method_added(name); end
-  def valid_props(&blk); end
+  def valid_rule_key?(key); end
   extend T::Sig
 end
 
 module T::Props::Serializable
   def deserialize(hash, strict = nil); end
   def recursive_stringify_keys(obj); end
-  def required_prop_missing_from_deserialize(prop); end
-  def required_prop_missing_from_deserialize?(prop); end
   def serialize(strict = nil); end
+  sig {params(changed_props: T.untyped).returns(T.self_type)}
   def with(changed_props); end
   def with_existing_hash(changed_props, existing_hash:); end
   include T::Props::Optional
@@ -178,7 +173,7 @@ module T::Props::Serializable::DecoratorMethods
   def prop_validate_definition!(name, cls, rules, type); end
   def required_props; end
   def serialized_form_prop(serialized_form); end
-  def valid_props; end
+  def valid_rule_key?(key); end
 end
 
 module T::Props::Serializable::ClassMethods
@@ -200,8 +195,29 @@ module T::Props::TypeValidation::DecoratorMethods
   def self.method_added(name); end
   def self.singleton_method_added(name); end
   def type_error_message(*args, &blk); end
-  def valid_props(*args, &blk); end
+  def valid_rule_key?(key); end
   def validate_type(*args, &blk); end
   extend T::Sig
 end
 
+module T::Props::HasLazilySpecializedMethods
+  class SourceEvaluationDisabled < RuntimeError; end
+  def self.disable_lazy_evaluation!; end
+end
+
+module T::Props::HasLazilySpecializedMethods::DecoratorMethods
+  def lazily_defined_methods; end
+  def lazily_defined_vm_methods; end
+  def eval_lazily_defined_method!(name); end
+  def eval_lazily_defined_vm_method!(name); end
+  def enqueue_lazy_method_definition!(name, &blk); end
+  def enqueue_lazy_vm_method_definition!(name, &blk); end
+  def eagerly_define_lazy_methods!; end
+  def eagerly_define_lazy_vm_methods!; end
+end
+
+module T::Props::GeneratedCodeValidation
+  class ValidationError < RuntimeError; end
+  def self.validate_deserialize(source); end
+  def self.validate_serialize(source); end
+end

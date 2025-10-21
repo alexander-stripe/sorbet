@@ -1,0 +1,3 @@
+s(:def, :foo,
+  s(:params),
+  s(:int, "42"))

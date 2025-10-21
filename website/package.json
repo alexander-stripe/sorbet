@@ -10,16 +10,19 @@
     "version": "docusaurus-version",
     "rename-version": "docusaurus-rename-version",
     "prettier": "prettier --write './**/*.js' './**/*.css' './**/*.md'",
-    "prettier-check": "prettier --check './**/*.js' './**/*.css' './**/*.md'"
+    "prettier-check": "prettier --check './**/*.js' './**/*.css' './**/*.md'",
+    "prettier-lint": "prettier --list-different './**/*.js' './**/*.css' './**/*.md'"
   },
   "devDependencies": {
-    "docusaurus": "^1.10.0",
-    "prettier": "1.18.2"
+    "docusaurus": "^1.14.0",
+    "prettier": "*"
   },
   "dependencies": {
     "classnames": "^2.2.6"
   },
   "resolutions": {
-    "**/underscore.string": "^3.3.5"
+    "**/underscore.string": "^3.3.5",
+    "**/minimist": "^1.2.2",
+    "**/kind-of": "^6.0.3"
   }
 }

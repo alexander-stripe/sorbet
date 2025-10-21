@@ -8,6 +8,38 @@ module Opus::Types::Test
     class Base; end
     class Sub < Base; end
     class WithMixin; include Mixin1; end
+    module Mixin1Child; include Mixin1; end
+    class ReloadedClass; end
+
+    class ::MyEnum < ::T::Enum
+      enums do
+        A = new
+        B = new
+        C = new
+      end
+    end
+
+    private def counting_allocations
+      before = GC.stat[:total_allocated_objects]
+      yield
+      GC.stat[:total_allocated_objects] - before - 1 # Subtract one for the allocation by GC.stat itself
+    end
+
+    private def check_alloc_counts
+      @check_alloc_counts = Gem::Version.new(RUBY_VERSION) < Gem::Version.new('3.0')
+    end
+
+    # this checks that both the recursive and nonrecursive path should
+    # have the same behavior
+    private def check_error_message_for_obj(type, value)
+      nonrecursive_msg = type.error_message_for_obj(value)
+      recursive_msg = type.error_message_for_obj_recursive(value)
+      assert(
+        nonrecursive_msg == recursive_msg,
+        "Differing output from valid? and recursively_valid?: #{nonrecursive_msg.inspect} != #{recursive_msg.inspect}",
+      )
+      nonrecursive_msg
+    end
 
     describe "Base" do
       it "raises an error if you override `subtype_of?`" do
@@ -28,54 +60,213 @@ module Opus::Types::Test
       end
 
       it "passes a validation" do
-        msg = @type.error_message_for_obj(1)
+        msg = check_error_message_for_obj(@type, 1)
         assert_nil(msg)
       end
 
       it "fails a validation with a different type" do
-        msg = @type.error_message_for_obj("1")
+        msg = check_error_message_for_obj(@type, "1")
         assert_equal("Expected type Integer, got type String with value \"1\"", msg)
       end
 
       it "fails a validation with nil" do
-        msg = @type.error_message_for_obj(nil)
+        msg = check_error_message_for_obj(@type, nil)
         assert_equal("Expected type Integer, got type NilClass", msg)
       end
 
       it 'can hand back its raw type' do
         assert_equal(Integer, @type.raw_type)
       end
+
+      it 'valid? does not allocate' do
+        skip unless check_alloc_counts
+        allocs_when_valid = counting_allocations { @type.valid?(0) }
+        assert_equal(0, allocs_when_valid)
+
+        allocs_when_invalid = counting_allocations { @type.valid?(0.1) }
+        assert_equal(0, allocs_when_invalid)
+      end
+
+      it 'uses structural, not reference, equality' do
+        x = T::Types::Simple.new(String)
+        y = T::Types::Simple.new(String)
+        refute_equal(x.object_id, y.object_id)
+        assert_equal(x, y)
+        assert_equal(x.hash, y.hash)
+      end
+
+      it 'pools correctly' do
+        x = T::Types::Simple::Private::Pool.type_for_module(String)
+        y = T::Types::Simple::Private::Pool.type_for_module(String)
+        assert_equal(x.object_id, y.object_id)
+      end
+
+      it 'does not blow up when pooling with frozen module' do
+        m = Module.new
+        m.freeze
+
+        x = T::Types::Simple::Private::Pool.type_for_module(m)
+        assert_instance_of(T::Types::Simple, x)
+      end
+
+      it 'does not add any instance variables to the module' do
+        m = Module.new
+        ivars = m.instance_variables
+
+        _ = T::Types::Simple::Private::Pool.type_for_module(m)
+        assert_equal(ivars, m.instance_variables)
+      end
+
+      it "shows a detailed error for constant reloading problems" do
+        klass = ReloadedClass
+
+        expected_id = ReloadedClass.__id__
+        type = T::Utils.coerce(ReloadedClass)
+        Opus::Types::Test::TypesTest.send(:remove_const, :ReloadedClass)
+
+        Opus::Types::Test::TypesTest.const_set(:ReloadedClass, Class.new)
+        actual_id = ReloadedClass.__id__
+        obj = ReloadedClass.new
+        Opus::Types::Test::TypesTest.send(:remove_const, :ReloadedClass)
+
+        msg = check_error_message_for_obj(type, obj)
+        assert_equal(<<~MSG.strip, msg)
+          Expected type #{klass}, got type #{klass} with hash #{obj.hash}
+
+          The expected type and received object type have the same name but refer to different constants.
+          Expected type is #{klass} with object id #{expected_id}, but received type is #{klass} with object id #{actual_id}.
+
+          There might be a constant reloading problem in your application.
+        MSG
+      end
+
+      it "uses constant name for class with #name defined" do
+        NamedClass = Class.new do
+          def self.name
+            "String"
+          end
+        end
+
+        x = T::Types::Simple.new(NamedClass)
+
+        assert_equal("#{TypesTest.name}::NamedClass", x.name)
+      ensure
+        TypesTest.send(:remove_const, :NamedClass)
+      end
+
+      it "uses #name for anonymous classes" do
+        klass = Class.new do
+          def self.name
+            "String"
+          end
+        end
+
+        x = T::Types::Simple.new(klass)
+
+        assert_equal("String", x.name)
+      end
+
+      it "handles equality with a class that has overridden its #name method" do
+        NamedClass = Class.new
+
+        klass = Class.new do
+          def self.name
+            "NamedClass"
+          end
+        end
+
+        x = T::Types::Simple.new(klass)
+        y = T::Types::Simple.new(NamedClass)
+
+        refute_equal(x.name, y.name)
+      ensure
+        TypesTest.send(:remove_const, :NamedClass)
+      end
     end
 
     describe "Union" do
-      before do
-        @type = T.nilable(Integer)
+      describe "with simple nilable type" do
+        before do
+          @type = T.nilable(Integer)
+        end
+
+        it "passes a validation with a non-nil value" do
+          msg = check_error_message_for_obj(@type, 1)
+          assert_nil(msg)
+        end
+
+        it "passes a validation with a nil value" do
+          msg = check_error_message_for_obj(@type, nil)
+          assert_nil(msg)
+        end
+
+        it "fails a validation with a different type" do
+          msg = check_error_message_for_obj(@type, "1")
+          assert_equal("Expected type T.nilable(Integer), got type String with value \"1\"", msg)
+        end
+
+        it 'valid? does not allocate' do
+          skip unless check_alloc_counts
+          allocs_when_valid = counting_allocations { @type.valid?(0) }
+          assert_equal(0, allocs_when_valid)
+
+          allocs_when_invalid = counting_allocations { @type.valid?(0.1) }
+          assert_equal(0, allocs_when_invalid)
+        end
+
+        it 'can hand back its underlying types' do
+          value = @type.types.map(&:raw_type)
+          assert_equal([Integer, NilClass], value)
+        end
       end
 
-      it "passes a validation with a non-nil value" do
-        msg = @type.error_message_for_obj(1)
-        assert_nil(msg)
-      end
+      describe "with complex type" do
+        before do
+          @type = T.nilable(T.any(Integer, T::Boolean))
+        end
 
-      it "passes a validation with a nil value" do
-        msg = @type.error_message_for_obj(nil)
-        assert_nil(msg)
-      end
+        it "passes a validation with a non-nil value" do
+          msg = check_error_message_for_obj(@type, 1)
+          assert_nil(msg)
+        end
 
-      it "fails a validation with a different type" do
-        msg = @type.error_message_for_obj("1")
-        assert_equal("Expected type T.nilable(Integer), got type String with value \"1\"", msg)
+        it "passes a validation with a nil value" do
+          msg = check_error_message_for_obj(@type, nil)
+          assert_nil(msg)
+        end
+
+        it "fails a validation with a different type" do
+          msg = check_error_message_for_obj(@type, "1")
+          assert_equal("Expected type T.nilable(T.any(Integer, T::Boolean)), got type String with value \"1\"", msg)
+        end
+
+        it 'valid? does not allocate' do
+          skip unless check_alloc_counts
+
+          # Call a method on the type to trigger the lazy initialization
+          assert_equal("T.nilable(T.any(Integer, T::Boolean))", @type.name)
+
+          allocs_when_valid = counting_allocations { @type.valid?(0) }
+          assert_equal(0, allocs_when_valid)
+
+          allocs_when_invalid = counting_allocations { @type.valid?(0.1) }
+          assert_equal(0, allocs_when_invalid)
+        end
+
+        it 'can hand back its underlying types' do
+          value = @type.types.map(&:raw_type)
+          assert_equal([Integer, TrueClass, FalseClass, NilClass], value)
+        end
       end
 
       it "simplifies a union containing another union" do
-        type = T.any(@type, T.nilable(String))
+        type = T.any(T.nilable(Integer), T.nilable(String))
         assert_equal("T.nilable(T.any(Integer, String))", type.name)
       end
 
-      it 'can hand back its underlying types' do
-        type = T.any(Integer, T::Boolean, NilClass)
-        value = type.types.map(&:raw_type)
-        assert_equal([Integer, TrueClass, FalseClass, NilClass], value)
+      it "simplifies doubly-nested union" do
+        type = T.any(T.nilable(T.any(Integer, Float)), String)
+        assert_equal("T.nilable(T.any(Float, Integer, String))", type.name)
       end
 
       it "does not crash on anonymous classes" do
@@ -84,8 +275,63 @@ module Opus::Types::Test
       end
 
       it "unwraps aliased types" do
-        type = T.any(String, Integer, T::Private::Types::TypeAlias.new(-> {Integer}))
+        type = T.any(String, Integer, T::Private::Types::TypeAlias.new(-> { Integer }))
         assert_equal("T.any(Integer, String)", type.name)
+      end
+
+      it 'uses structural, not reference, equality' do
+        x = T::Types::Union.new([String, NilClass])
+        y = T::Types::Union.new([String, NilClass])
+        refute_equal(x.object_id, y.object_id)
+        assert_equal(x, y)
+        assert_equal(x.hash, y.hash)
+      end
+
+      it 'handles equality between simple pair and complex unions' do
+        x = T::Types::Union.new([String, NilClass])
+        y = T::Private::Types::SimplePairUnion.new(
+          T::Utils.coerce(String),
+          T::Utils.coerce(NilClass),
+        )
+        assert_equal(x, y)
+        assert_equal(x.hash, y.hash)
+      end
+
+      it 'pools correctly for simple nilable types' do
+        x = T::Types::Union::Private::Pool.union_of_types(
+          T::Utils.coerce(String),
+          T::Utils.coerce(NilClass),
+        )
+        y = T::Types::Union::Private::Pool.union_of_types(
+          T::Utils.coerce(String),
+          T::Utils.coerce(NilClass),
+        )
+        assert_equal(x.object_id, y.object_id)
+        assert_equal(
+          T::Private::Types::SimplePairUnion,
+          x.class,
+        )
+      end
+
+      it 'uses fast path for T::Boolean' do
+        assert_equal(
+          T::Private::Types::SimplePairUnion,
+          T::Boolean.aliased_type.class,
+        )
+      end
+
+      it 'deduplicates type, fast path' do
+        assert_equal(
+          'Integer',
+          T.any(Integer, Integer).name,
+        )
+      end
+
+      it 'deduplicates type, slow path' do
+        assert_equal(
+          'T.all(Opus::Types::Test::TypesTest::Mixin1, Opus::Types::Test::TypesTest::Mixin2)',
+          T.any(T.all(Mixin1, Mixin2), T.all(Mixin1, Mixin2)).name,
+        )
       end
     end
 
@@ -98,13 +344,13 @@ module Opus::Types::Test
       it "passes validation with both mixins" do
         @klass.include(Mixin1)
         @klass.include(Mixin2)
-        msg = @type.error_message_for_obj(@klass.new)
+        msg = check_error_message_for_obj(@type, @klass.new)
         assert_nil(msg)
       end
 
       it "fails validation with just Mixin1" do
         @klass.include(Mixin1)
-        msg = @type.error_message_for_obj(@klass.new)
+        msg = check_error_message_for_obj(@type, @klass.new)
         assert_match(
           /Expected type T.all\(Opus::Types::Test::TypesTest::Mixin1, Opus::Types::Test::TypesTest::Mixin2\), got type #{@klass} with hash -?\d+/,
           msg
@@ -113,7 +359,7 @@ module Opus::Types::Test
 
       it "fails validation with just Mixin2" do
         @klass.include(Mixin2)
-        msg = @type.error_message_for_obj(@klass.new)
+        msg = check_error_message_for_obj(@type, @klass.new)
         assert_match(
           /Expected type T.all\(Opus::Types::Test::TypesTest::Mixin1, Opus::Types::Test::TypesTest::Mixin2\), got type #{@klass} with hash -?\d+/,
           msg
@@ -129,9 +375,24 @@ module Opus::Types::Test
       end
 
       it "unwraps aliased types" do
-        type_alias = T::Private::Types::TypeAlias.new(-> {Mixin1})
+        type_alias = T::Private::Types::TypeAlias.new(-> { Mixin1 })
         type = T.all(@type, type_alias)
         assert_equal("T.all(Opus::Types::Test::TypesTest::Mixin1, Opus::Types::Test::TypesTest::Mixin2)", type.name)
+      end
+
+      it 'valid? does not allocate' do
+        skip unless check_alloc_counts
+        @klass.include(Mixin1)
+        @klass.include(Mixin2)
+
+        # Call a method on the type to trigger the lazy initialization
+        assert_equal("T.all(Opus::Types::Test::TypesTest::Mixin1, Opus::Types::Test::TypesTest::Mixin2)", @type.name)
+
+        allocs_when_valid = counting_allocations { @type.valid?(@klass) }
+        assert_equal(0, allocs_when_valid)
+
+        allocs_when_invalid = counting_allocations { @type.valid?(Mixin1) }
+        assert_equal(0, allocs_when_invalid)
       end
     end
 
@@ -141,23 +402,38 @@ module Opus::Types::Test
       end
 
       it "passes validation" do
-        msg = @type.error_message_for_obj(["hello", true])
+        msg = check_error_message_for_obj(@type, ["hello", true])
         assert_nil(msg)
       end
 
       it "fails validation with a non-array" do
-        msg = @type.error_message_for_obj("hello")
+        msg = check_error_message_for_obj(@type, "hello")
         assert_equal("Expected type [String, T::Boolean], got type String with value \"hello\"", msg)
       end
 
       it "fails validation with an array of the wrong size" do
-        msg = @type.error_message_for_obj(["hello", true, false])
+        msg = check_error_message_for_obj(@type, ["hello", true, false])
         assert_equal("Expected type [String, T::Boolean], got array of size 3", msg)
       end
 
       it "fails validation with an array of the right size but wrong types" do
-        msg = @type.error_message_for_obj(["hello", nil])
+        msg = check_error_message_for_obj(@type, ["hello", nil])
         assert_equal("Expected type [String, T::Boolean], got type [String, NilClass]", msg)
+      end
+
+      it 'valid? does not allocate' do
+        skip unless check_alloc_counts
+
+        # Call a method on the type to trigger the lazy initialization
+        assert_equal("[String, T::Boolean]", @type.name)
+
+        arr = ["foo", false]
+        allocs_when_valid = counting_allocations { @type.valid?(arr) }
+        assert_equal(0, allocs_when_valid)
+
+        arr = [1, 2]
+        allocs_when_invalid = counting_allocations { @type.valid?(arr) }
+        assert_equal(0, allocs_when_invalid)
       end
     end
 
@@ -167,41 +443,73 @@ module Opus::Types::Test
       end
 
       it "passes validation" do
-        msg = @type.error_message_for_obj({a: "hello", b: true, c: 3})
+        msg = check_error_message_for_obj(@type, {a: "hello", b: true, c: 3})
         assert_nil(msg)
       end
 
       it "passes validation when nilable fields are missing" do
-        msg = @type.error_message_for_obj({a: "hello", b: true})
+        msg = check_error_message_for_obj(@type, {a: "hello", b: true})
         assert_nil(msg)
       end
 
       it "fails validation with a non-hash" do
-        msg = @type.error_message_for_obj("hello")
+        msg = check_error_message_for_obj(@type, "hello")
         assert_equal("Expected type {a: String, b: T::Boolean, c: T.nilable(Numeric)}, got type String with value \"hello\"", msg)
       end
 
       it "fails validation with a hash of the wrong types" do
-        msg = @type.error_message_for_obj({a: true, b: true, c: 3})
+        msg = check_error_message_for_obj(@type, {a: true, b: true, c: 3})
         assert_equal("Expected type {a: String, b: T::Boolean, c: T.nilable(Numeric)}, got type {a: TrueClass, b: TrueClass, c: Integer}", msg)
       end
 
+      it "fails validation with a hash of wrong typed keys" do
+        msg = check_error_message_for_obj(@type, {"a" => true, :"foo bar" => true, :foo => 3})
+        assert_equal("Expected type {a: String, b: T::Boolean, c: T.nilable(Numeric)}, got type {\"a\" => TrueClass, :\"foo bar\" => TrueClass, foo: Integer}", msg)
+      end
+
       it "fails validation if a field is missing" do
-        msg = @type.error_message_for_obj({b: true, c: 3})
+        msg = check_error_message_for_obj(@type, {b: true, c: 3})
         assert_equal("Expected type {a: String, b: T::Boolean, c: T.nilable(Numeric)}, got type {b: TrueClass, c: Integer}", msg)
       end
 
       it "fails validation if an extra field is present" do
-        msg = @type.error_message_for_obj({a: "hello", b: true, d: "ohno"})
+        msg = check_error_message_for_obj(@type, {a: "hello", b: true, d: "ohno"})
         assert_equal("Expected type {a: String, b: T::Boolean, c: T.nilable(Numeric)}, got type {a: String, b: TrueClass, d: String}", msg)
+      end
+
+      it 'valid? does not allocate' do
+        skip unless check_alloc_counts
+
+        # Call a method on the type to trigger the lazy initialization
+        assert_equal("{a: String, b: T::Boolean, c: T.nilable(Numeric)}", @type.name)
+
+        h = {a: 'foo', b: false, c: nil}
+        allocs_when_valid = counting_allocations { @type.valid?(h) }
+        assert_equal(0, allocs_when_valid)
+
+        h = {a: 'foo', b: 1, c: nil}
+        allocs_when_invalid_type = counting_allocations { @type.valid?(h) }
+        assert_equal(0, allocs_when_invalid_type)
+
+        h = {a: 'foo', b: false, c: nil, d: 'nope'}
+        allocs_when_invalid_key = counting_allocations { @type.valid?(h) }
+        assert_equal(0, allocs_when_invalid_key)
       end
     end
 
     describe "TypedArray" do
+      class TestEnumerable
+        include Enumerable
+
+        def each;
+          yield "something";
+        end
+      end
+
       it 'fails if value is not an array' do
         type = T::Array[Integer]
         value = 3
-        msg = type.error_message_for_obj(value)
+        msg = check_error_message_for_obj(type, value)
         expected_error = "Expected type T::Array[Integer], " \
                          "got type Integer with value 3"
         assert_equal(expected_error, msg)
@@ -212,10 +520,16 @@ module Opus::Types::Test
         assert_equal(Integer, type.type.raw_type)
       end
 
-      it 'fails if an element of the array is the wrong type' do
+      it 'does not fail if an element of the array is the wrong type under shallow checking' do
         type = T::Array[Integer]
         value = [true]
-        msg = type.error_message_for_obj(value)
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'fails if an element of the array is the wrong type under deep checking' do
+        type = T::Array[Integer]
+        value = [true]
+        msg = type.error_message_for_obj_recursive(value)
         expected_error = "Expected type T::Array[Integer], " \
                          "got T::Array[T::Boolean]"
         assert_equal(expected_error, msg)
@@ -224,33 +538,51 @@ module Opus::Types::Test
       it 'succeeds if all values have the correct type' do
         type = T::Array[T.any(Integer, T::Boolean)]
         value = [true, 3, false, 4, 5, false]
+        assert_nil(check_error_message_for_obj(type, value))
+      end
+
+      it 'does not fail if any of the values is the wrong type under shallow checking' do
+        type = T::Array[T.any(Integer, T::Boolean)]
+        value = [true, 3.0, false, 4, "5", false]
         assert_nil(type.error_message_for_obj(value))
       end
 
-      it 'fails if any of the values is the wrong type' do
+      it 'fails if any of the values is the wrong type under deep checking' do
         type = T::Array[T.any(Integer, T::Boolean)]
         value = [true, 3.0, false, 4, "5", false]
         expected_error = "Expected type T::Array[T.any(Integer, T::Boolean)], " \
           "got T::Array[T.any(Float, Integer, String, T::Boolean)]"
-        msg = type.error_message_for_obj(value)
+        msg = type.error_message_for_obj_recursive(value)
         assert_equal(expected_error, msg)
       end
 
-      it 'proposes a simple type if only one type exists' do
+      it 'does not proposes anything under shallow checking' do
+        type = T::Array[String]
+        value = [1, 2, 3]
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'proposes a simple type if only one type exists under deep checking' do
         type = T::Array[String]
         value = [1, 2, 3]
         expected_error = "Expected type T::Array[String], " \
                          "got T::Array[Integer]"
-        msg = type.error_message_for_obj(value)
+        msg = type.error_message_for_obj_recursive(value)
         assert_equal(expected_error, msg)
       end
 
-      it 'proposes a union type if multiple types exist' do
+      it 'does not proposes a union type under shallow checking' do
+        type = T::Array[String]
+        value = [true, false, 1]
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'proposes a union type if multiple types exist under deep checking' do
         type = T::Array[String]
         value = [true, false, 1]
         expected_error = "Expected type T::Array[String], " \
           "got T::Array[T.any(Integer, T::Boolean)]"
-        msg = type.error_message_for_obj(value)
+        msg = type.error_message_for_obj_recursive(value)
         assert_equal(expected_error, msg)
       end
 
@@ -261,21 +593,27 @@ module Opus::Types::Test
         #   "Expected type T::Array[Numeric], got T::Array[Integer]"
         # but with type erasure, we have to leave all runtime checks as
         # covariant.
+        assert_nil(check_error_message_for_obj(type, value))
+      end
+
+      it 'does not care about contravariance for the type_member under shallow checking' do
+        type = T::Array[Integer]
+        value = [Object.new]
         assert_nil(type.error_message_for_obj(value))
       end
 
-      it 'is not contravariant for the type_member' do
+      it 'is not contravariant for the type_member under deep checking' do
         type = T::Array[Integer]
         value = [Object.new]
         expected_error = "Expected type T::Array[Integer], " \
           "got T::Array[Object]"
-        msg = type.error_message_for_obj(value)
+        msg = type.error_message_for_obj_recursive(value)
         assert_equal(expected_error, msg)
       end
 
       it 'gives the right error when passed a Hash' do
         type = T::Array[Symbol]
-        msg = type.error_message_for_obj({foo: 17})
+        msg = check_error_message_for_obj(type, {foo: 17})
         assert_equal(
           "Expected type T::Array[Symbol], got T::Hash[Symbol, Integer]",
           msg)
@@ -284,10 +622,32 @@ module Opus::Types::Test
       it 'can have its metatype instantiated' do
         assert_equal([], T::Array[Integer].new)
         assert_equal([nil, nil, nil], T::Array[Integer].new(3))
+        assert_equal([true, true, true], T::Array[Integer].new(3) { true })
       end
 
       it 'is coerced from plain array' do
         assert_equal(T::Array[T.untyped], T::Utils.coerce(::Array))
+      end
+
+      it 'valid? does not allocate' do
+        skip unless check_alloc_counts
+        type = T::Array[Integer]
+        valid = [1]
+        invalid = {}
+
+        allocs_when_valid = counting_allocations { type.valid?(valid) }
+        assert_equal(0, allocs_when_valid)
+
+        allocs_when_invalid = counting_allocations { type.valid?(invalid) }
+        assert_equal(0, allocs_when_invalid)
+      end
+
+      it 'gives the right error when passed an unrelated enumerable' do
+        type = T::Array[String]
+        msg = check_error_message_for_obj(type, TestEnumerable.new)
+        assert_equal(
+          "Expected type T::Array[String], got Opus::Types::Test::TypesTest::TestEnumerable",
+          msg)
       end
     end
 
@@ -301,7 +661,7 @@ module Opus::Types::Test
 
       it 'gives the right type error for an array' do
         type = T::Hash[Symbol, String]
-        msg = type.error_message_for_obj([:foo])
+        msg = check_error_message_for_obj(type, [:foo])
         assert_equal(
           "Expected type T::Hash[Symbol, String], got T::Array[Symbol]",
           msg)
@@ -309,31 +669,60 @@ module Opus::Types::Test
 
       it 'can have its metatype instantiated' do
         assert_equal({}, T::Hash[Symbol, Integer].new)
-        assert_equal([], T::Hash[Symbol, Integer].new {|h, k| h[k] = []}[:missing])
+        assert_equal([], T::Hash[Symbol, Integer].new { |h, k| h[k] = [] }[:missing])
       end
 
       it 'is coerced from plain hash' do
         assert_equal(T::Hash[T.untyped, T.untyped], T::Utils.coerce(::Hash))
       end
 
-      it 'fails if a key in the Hash is the wrong type' do
+      it 'does not fail if a key in the Hash is the wrong type under shallow checking' do
         type = T::Hash[Symbol, Integer]
         value = {
           'oops_string' => 1,
         }
-        msg = type.error_message_for_obj(value)
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'fails if a key in the Hash is the wrong type under deep checking' do
+        type = T::Hash[Symbol, Integer]
+        value = {
+          'oops_string' => 1,
+        }
+        msg = type.error_message_for_obj_recursive(value)
         expected_error = "Expected type T::Hash[Symbol, Integer], got T::Hash[String, Integer]"
         assert_equal(expected_error, msg)
       end
 
-      it 'fails if a value in the Hash is the wrong type' do
+      it 'does not fail if a value in the Hash is the wrong type under shallow checking' do
         type = T::Hash[Symbol, Integer]
         value = {
           sym: 1.0,
         }
-        msg = type.error_message_for_obj(value)
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'fails if a value in the Hash is the wrong type under deep checking' do
+        type = T::Hash[Symbol, Integer]
+        value = {
+          sym: 1.0,
+        }
+        msg = type.error_message_for_obj_recursive(value)
         expected_error = "Expected type T::Hash[Symbol, Integer], got T::Hash[Symbol, Float]"
         assert_equal(expected_error, msg)
+      end
+
+      it 'valid? does not allocate' do
+        skip unless check_alloc_counts
+        type = T::Hash[String, Integer]
+        valid = {'one' => 1}
+        invalid = []
+
+        allocs_when_valid = counting_allocations { type.valid?(valid) }
+        assert_equal(0, allocs_when_valid)
+
+        allocs_when_invalid = counting_allocations { type.valid?(invalid) }
+        assert_equal(0, allocs_when_invalid)
       end
     end
 
@@ -348,7 +737,7 @@ module Opus::Types::Test
       it 'works if the type is right' do
         type = T::Enumerator[Integer]
         value = [1, 2, 3].each
-        msg = type.error_message_for_obj(value)
+        msg = check_error_message_for_obj(type, value)
         assert_nil(msg)
       end
 
@@ -361,6 +750,50 @@ module Opus::Types::Test
       end
     end
 
+    describe "TypedEnumeratorLazy" do
+      it 'describes enumerators' do
+        t = T::Enumerator::Lazy[Integer]
+        assert_equal(
+          "T::Enumerator::Lazy[Integer]",
+          t.describe_obj([1, 2, 3].each.lazy))
+      end
+
+      it 'works if the type is right' do
+        type = T::Enumerator::Lazy[Integer]
+        value = [1, 2, 3].each.lazy
+        msg = check_error_message_for_obj(type, value)
+        assert_nil(msg)
+      end
+
+      it 'can have its metatype instantiated' do
+        assert_equal([2, 4, 6], T::Enumerator::Lazy[Integer].new([1, 2, 3]) do |yielder, value|
+          yielder << value * 2
+        end.to_a)
+      end
+    end
+
+    describe "TypedEnumeratorChain" do
+      it 'describes enumerators' do
+        t = T::Enumerator::Chain[Integer]
+        assert_equal(
+          "T::Enumerator::Chain[Integer]",
+          t.describe_obj([1, 2].chain([3])))
+      end
+
+      it 'works if the type is right' do
+        type = T::Enumerator::Chain[Integer]
+        value = [1, 2].chain([3])
+        msg = check_error_message_for_obj(type, value)
+        assert_nil(msg)
+      end
+
+      it 'can have its metatype instantiated' do
+        assert_equal([2, 4, 6], T::Enumerator::Chain[Integer].new([1, 2], [3]).map do |value|
+          value * 2
+        end.to_a)
+      end
+    end
+
     describe "TypedRange" do
       it 'describes ranges' do
         t = T::Range[Integer]
@@ -369,17 +802,47 @@ module Opus::Types::Test
           t.describe_obj(10...20))
       end
 
-      it 'works if the type is right' do
+      it 'works if the range has a start and end' do
         type = T::Range[Integer]
         value = (3...10)
-        msg = type.error_message_for_obj(value)
+        msg = check_error_message_for_obj(type, value)
         assert_nil(msg)
       end
 
-      it 'fails if the type is wrong' do
+      # Ruby 2.6 does not support ranges with boundless starts
+      if RUBY_VERSION >= '2.7'
+        it 'works if the range has no beginning' do
+          type = T::Range[Integer]
+          value = (nil...10)
+          msg = check_error_message_for_obj(type, value)
+          assert_nil(msg)
+        end
+      end
+
+      it 'works if the range has no end' do
+        type = T::Range[Integer]
+        value = (1...nil)
+        msg = check_error_message_for_obj(type, value)
+        assert_nil(msg)
+      end
+
+      it 'works if the range has no start or end' do
+        type = T::Range[T.untyped]
+        value = (nil...nil)
+        msg = check_error_message_for_obj(type, value)
+        assert_nil(msg)
+      end
+
+      it 'does not fail if the type is wrong under shallow checking' do
         type = T::Range[Float]
         value = (3...10)
-        msg = type.error_message_for_obj(value)
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'fails if the type is wrong under deep checking' do
+        type = T::Range[Float]
+        value = (3...10)
+        msg = type.error_message_for_obj_recursive(value)
         expected_error = "Expected type T::Range[Float], " \
                          "got T::Range[Integer]"
         assert_equal(expected_error, msg)
@@ -401,14 +864,20 @@ module Opus::Types::Test
       it 'works if the type is right' do
         type = T::Set[Integer]
         value = Set.new([1, 2, 3])
-        msg = type.error_message_for_obj(value)
+        msg = check_error_message_for_obj(type, value)
         assert_nil(msg)
       end
 
-      it 'fails if the type is wrong' do
+      it 'does not fail if the type is wrong under shallow checking' do
         type = T::Set[Float]
         value = Set.new([1, 2, 3])
-        msg = type.error_message_for_obj(value)
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'fails if the type is wrong under deep checking' do
+        type = T::Set[Float]
+        value = Set.new([1, 2, 3])
+        msg = type.error_message_for_obj_recursive(value)
         expected_error = "Expected type T::Set[Float], " \
                          "got T::Set[Integer]"
         assert_equal(expected_error, msg)
@@ -424,12 +893,11 @@ module Opus::Types::Test
       end
     end
 
-
     describe "Enumerable" do
       it 'fails if value is not an enumerable' do
         type = T::Enumerable[Integer]
         value = 3
-        msg = type.error_message_for_obj(value)
+        msg = check_error_message_for_obj(type, value)
         expected_error = "Expected type T::Enumerable[Integer], " \
                          "got type Integer with value 3"
         assert_equal(expected_error, msg)
@@ -440,10 +908,16 @@ module Opus::Types::Test
         assert_equal(Integer, type.type.raw_type)
       end
 
-      it 'fails if an element of the array is the wrong type' do
+      it 'does not fail if an element of the array is the wrong type under shallow checking' do
         type = T::Enumerable[Integer]
         value = [true]
-        msg = type.error_message_for_obj(value)
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'fails if an element of the array is the wrong type under deep checking' do
+        type = T::Enumerable[Integer]
+        value = [true]
+        msg = type.error_message_for_obj_recursive(value)
         expected_error = "Expected type T::Enumerable[Integer], " \
                          "got T::Array[T::Boolean]"
         assert_equal(expected_error, msg)
@@ -452,119 +926,249 @@ module Opus::Types::Test
       it 'succeeds if all values have the correct type' do
         type = T::Enumerable[T.any(Integer, T::Boolean)]
         value = [true, 3, false, 4, 5, false]
+        assert_nil(check_error_message_for_obj(type, value))
+      end
+
+      it 'does not fail if any of the values is the wrong type under shallow checking' do
+        type = T::Enumerable[T.any(Integer, T::Boolean)]
+        value = [true, 3.0, false, 4, "5", false]
         assert_nil(type.error_message_for_obj(value))
       end
 
-      it 'fails if any of the values is the wrong type' do
+      it 'fails if any of the values is the wrong type under deep checking' do
         type = T::Enumerable[T.any(Integer, T::Boolean)]
         value = [true, 3.0, false, 4, "5", false]
         expected_error = "Expected type T::Enumerable[T.any(Integer, T::Boolean)], " \
           "got T::Array[T.any(Float, Integer, String, T::Boolean)]"
-        msg = type.error_message_for_obj(value)
+        msg = type.error_message_for_obj_recursive(value)
         assert_equal(expected_error, msg)
       end
 
-      it 'proposes a simple type if only one type exists' do
+      it 'does not propose a simple type under shallow checking' do
+        type = T::Enumerable[String]
+        value = [1, 2, 3]
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'proposes a simple type if only one type exists under deep checking' do
         type = T::Enumerable[String]
         value = [1, 2, 3]
         expected_error = "Expected type T::Enumerable[String], " \
                          "got T::Array[Integer]"
-        msg = type.error_message_for_obj(value)
+        msg = type.error_message_for_obj_recursive(value)
         assert_equal(expected_error, msg)
       end
 
-      it 'proposes a union type if multiple types exist' do
+      it 'does not propose a union type if multiple types exist under shallow checking' do
+        type = T::Enumerable[String]
+        value = [true, false, 1]
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'proposes a union type if multiple types exist under deep checking' do
         type = T::Enumerable[String]
         value = [true, false, 1]
         expected_error = "Expected type T::Enumerable[String], " \
           "got T::Array[T.any(Integer, T::Boolean)]"
-        msg = type.error_message_for_obj(value)
+        msg = type.error_message_for_obj_recursive(value)
         assert_equal(expected_error, msg)
       end
 
       it 'wont check unrewindable enumerables' do
         type = T::Enumerable[T.any(Integer, T::Boolean)]
         value = File.new(__FILE__)
-        assert_nil(type.error_message_for_obj(value))
+        assert_nil(check_error_message_for_obj(type, value))
       end
 
       it 'is covariant for the type_member' do
         type = T::Enumerable[Numeric]
         value = [3]
+        assert_nil(check_error_message_for_obj(type, value))
+      end
+
+      it 'does not care about contravariance for the type_member under shallow checking' do
+        type = T::Enumerable[Integer]
+        value = [Object.new]
         assert_nil(type.error_message_for_obj(value))
       end
 
-      it 'is not contravariant for the type_member' do
+      it 'is not contravariant for the type_member under deep checking' do
         type = T::Enumerable[Integer]
         value = [Object.new]
         expected_error = "Expected type T::Enumerable[Integer], " \
           "got T::Array[Object]"
-        msg = type.error_message_for_obj(value)
+        msg = type.error_message_for_obj_recursive(value)
         assert_equal(expected_error, msg)
       end
 
       it 'does not check lazy enumerables (for now)' do
         type = T::Enumerable[Integer]
         value = ["bad"].lazy
-        msg = type.error_message_for_obj(value)
+        msg = check_error_message_for_obj(type, value)
+        assert_nil(msg)
+      end
+
+      it 'does not check chain enumerables (for now)' do
+        type = T::Enumerable[Integer]
+        value = ["bad"].chain([])
+        msg = check_error_message_for_obj(type, value)
         assert_nil(msg)
       end
 
       it 'does not check potentially non-finite enumerables' do
         type = T::Enumerable[Integer]
         value = ["bad"].cycle
-        msg = type.error_message_for_obj(value)
+        msg = check_error_message_for_obj(type, value)
         assert_nil(msg)
       end
 
-      it 'can serialize enumerables whose each throws' do
+      it 'does not find a problem for enumerables whose each throws under shallow checking' do
         type = T::Enumerable[Integer]
         value = Class.new(Array) do
           def each
             raise "bad"
           end
         end.new(['str'])
-        msg = type.error_message_for_obj(value)
+        assert_nil(type.error_message_for_obj(value))
+      end
+
+      it 'can serialize enumerables whose each throws under deep checking' do
+        type = T::Enumerable[Integer]
+        value = Class.new(Array) do
+          def each
+            raise "bad"
+          end
+        end.new(['str'])
+        msg = type.error_message_for_obj_recursive(value)
         expected_error = "Expected type T::Enumerable[Integer], got T::Array[T.untyped]"
         assert_equal(expected_error, msg)
       end
     end
 
+    describe "TypedClass" do
+      it 'works if the type is right' do
+        type = T::Class[Base]
+        value = Base
+        msg = check_error_message_for_obj(type, value)
+        assert_nil(msg)
+      end
+
+      it 'works if the type is wrong, but a class' do
+        type = T::Class[Sub]
+        value = Base
+        msg = check_error_message_for_obj(type, value)
+        assert_nil(msg)
+      end
+
+      it 'cannot have its metatype instantiated' do
+        # People might assume that this creates a class with a supertype of
+        # `Base`. It doesn't, because generics are erased, and also `[...]` can
+        # hold an arbitrary type, not necessarily a class type.
+        #
+        # Also, `Class.new` already has a sig that infers a _better_ type:
+        # Class.new(Base) has an inferred type of `T.class_of(Base)`, which is
+        # more narrow.
+        assert_raises(NoMethodError) do
+          T::Class[Base].new
+        end
+      end
+
+      it 'is not coerced from plain class literal' do
+        # This is for backwards compatibility. If this poses problems for the
+        # sake of runtime checking and reflection, we may want to make this
+        # behavior more like the static system, where `::Class` has type
+        # `T.class_of(Class)`. It looks like we already don't treat `::A` as
+        # coercing to `T.class_of(A)`, which is why I don't know whether it
+        # particularly matters.
+        #
+        # (It's also worth noting: Sorbet doesn't have a separate notion of
+        # `T::Types::Simple` and `T::Types::ClassOf`. A ClassType is used to
+        # model `T::Types::Simple` and _was_ used to model `T.class_of(...)`
+        # until we made all singleton classes generic with `<AttachedClass>`,
+        # when they became AppliedType.)
+        type = T::Utils.coerce(::Class)
+        assert_instance_of(T::Types::Simple, type)
+        assert_equal(::Class, type.raw_type)
+      end
+    end
+
+    describe "T.class_of(...)[...]" do
+      it 'works if the type is right' do
+        type = T.class_of(Base)[Base]
+        value = Base
+        msg = check_error_message_for_obj(type, value)
+        assert_nil(msg)
+      end
+
+      it 'errors if the type is a subclass' do
+        type = T.class_of(Sub)[Sub]
+        value = Base
+        msg = check_error_message_for_obj(type, value)
+        assert_match(/Expected type T.class_of\(Opus::Types::Test::TypesTest::Sub\), got Opus::Types::Test::TypesTest::Base/, msg)
+      end
+
+      it 'does not error if the attached class is wrong (erased generics)' do
+        type = T.class_of(Base)[Sub]
+        value = Base
+        msg = check_error_message_for_obj(type, value)
+        assert_nil(msg)
+      end
+    end
+
+    describe 'NotTyped' do
+      it 'builds properly' do
+        type = T::Private::Types::NotTyped.new
+        type.build_type
+        assert_equal('<NOT-TYPED>', type.name)
+      end
+    end
+
+    describe 'StringHolder' do
+      it 'builds properly' do
+        type = T::Private::Types::StringHolder.new("String")
+        type.build_type
+        assert_equal('String', type.name)
+      end
+    end
+
     describe 'TypeAlias' do
-      # TODO nroman get rid of this helper after `T.type_alias` accepts a block.
-      def make_type_alias(&blk)
-        T::Private::Types::TypeAlias.new(blk)
+      it 'builds properly' do
+        type = T.type_alias { String }
+        type.build_type
+        assert_equal('String', type.name)
       end
 
       it 'delegates name' do
-        type = make_type_alias {T.any(Integer, String)}
+        type = T.type_alias { T.any(Integer, String) }
         assert_equal('T.any(Integer, String)', type.name)
       end
 
       it 'delegates equality' do
-        assert(T.any(Integer, String) == make_type_alias {T.any(Integer, String)})
-        assert(make_type_alias {T.any(Integer, String)} == T.any(Integer, String))
-        assert(make_type_alias {T.any(Integer, String)} == make_type_alias {T.any(Integer, String)})
+        # rubocop:disable Lint/BinaryOperatorWithIdenticalOperands
+        assert(T.any(Integer, String) == T.type_alias { T.any(Integer, String) })
+        assert(T.type_alias { T.any(Integer, String) } == T.any(Integer, String))
+        assert(T.type_alias { T.any(Integer, String) } == T.type_alias { T.any(Integer, String) })
 
-        refute(make_type_alias {T.any(Integer, Float)} == make_type_alias {T.any(Integer, String)})
+        refute(T.type_alias { T.any(Integer, Float) } == T.type_alias { T.any(Integer, String) })
+        # rubocop:enable Lint/BinaryOperatorWithIdenticalOperands
       end
 
       it 'passes a validation' do
-        type = make_type_alias {T.any(Integer, String)}
-        msg = type.error_message_for_obj(1)
+        type = T.type_alias { T.any(Integer, String) }
+        msg = check_error_message_for_obj(type, 1)
         assert_nil(msg)
       end
 
       it 'provides errors on failed validation' do
-        type = make_type_alias {T.any(Integer, String)}
-        msg = type.error_message_for_obj(true)
+        type = T.type_alias { T.any(Integer, String) }
+        msg = check_error_message_for_obj(type, true)
         assert_equal('Expected type T.any(Integer, String), got type TrueClass', msg)
       end
 
       it 'defers block evaluation' do
-        crash_type = make_type_alias {raise 'crash'}
+        crash_type = T.type_alias { raise 'crash' }
         assert_raises(RuntimeError) do
-          crash_type.error_message_for_obj(1)
+          check_error_message_for_obj(crash_type, 1)
         end
       end
     end
@@ -574,7 +1178,7 @@ module Opus::Types::Test
       extend T::Helpers
       interface!
 
-      sig {abstract.returns(T.untyped)}; def hello; end
+      sig { abstract.returns(T.untyped) }; def hello; end
     end
 
     module TestInterface2
@@ -582,7 +1186,7 @@ module Opus::Types::Test
       extend T::Helpers
       interface!
 
-      sig {abstract.returns(T.untyped)}; def goodbye; end
+      sig { abstract.returns(T.untyped) }; def goodbye; end
     end
 
     class InterfaceImplementor1
@@ -603,65 +1207,51 @@ module Opus::Types::Test
 
     end
 
-    describe "Enum" do
+    describe "T.deprecated_enum" do
       before do
-        @type = T.enum([:foo, :bar])
+        @type = T.deprecated_enum(%i[foo bar])
       end
 
       it 'passes validation with a value from the enum' do
-        msg = @type.error_message_for_obj(:foo)
+        msg = check_error_message_for_obj(@type, :foo)
         assert_nil(msg)
       end
 
       it 'fails validation with a value not from the enum' do
-        msg = @type.error_message_for_obj(:baz)
-        assert_equal("Expected type T.enum([:foo, :bar]), got :baz", msg)
+        msg = check_error_message_for_obj(@type, :baz)
+        assert_equal("Expected type T.deprecated_enum([:bar, :foo]), got :baz", msg)
       end
 
       it 'does not coerce types' do
-        msg = @type.error_message_for_obj('foo')
-        assert_equal('Expected type T.enum([:foo, :bar]), got "foo"', msg)
+        msg = check_error_message_for_obj(@type, 'foo')
+        assert_equal('Expected type T.deprecated_enum([:bar, :foo]), got "foo"', msg)
 
-        type = T.enum(['foo', 'bar'])
-        msg = type.error_message_for_obj(:foo)
-        assert_equal('Expected type T.enum(["foo", "bar"]), got :foo', msg)
+        type = T.deprecated_enum(%w[foo bar])
+        msg = check_error_message_for_obj(type, :foo)
+        assert_equal('Expected type T.deprecated_enum(["bar", "foo"]), got :foo', msg)
       end
 
       it 'fails validation with a nil value' do
-        msg = @type.error_message_for_obj(nil)
-        assert_equal("Expected type T.enum([:foo, :bar]), got nil", msg)
+        msg = check_error_message_for_obj(@type, nil)
+        assert_equal("Expected type T.deprecated_enum([:bar, :foo]), got nil", msg)
       end
     end
 
     describe "TEnum" do
-      before do
-        class ::MyEnum < ::T::Enum
-          enums do
-            A = new
-            B = new
-            C = new
-          end
-        end
-      end
-
-      after do
-        ::Object.send(:remove_const, :MyEnum)
-      end
-
       it 'allows T::Enum values when coercing' do
         a = T::Utils.coerce(::MyEnum::A)
         assert_instance_of(T::Types::TEnum, a)
         assert_equal(a.val, ::MyEnum::A)
+        assert_equal(a.name, 'MyEnum::A')
       end
 
       it 'allows T::Enum values in a sig params' do
         c = Class.new do
           extend T::Sig
-          sig {params(x: MyEnum::A).void}
+          sig { params(x: MyEnum::A).void }
           def self.foo(x); end
         end
 
-        # TODO(jez) check TypeError messages
         c.foo(::MyEnum::A) # should not raise
         assert_raises(TypeError) do
           c.foo(::MyEnum::B)
@@ -674,11 +1264,15 @@ module Opus::Types::Test
       it 'allows T::Enum values in a sig returns' do
         c = Class.new do
           extend T::Sig
-          sig {returns(MyEnum::A)}
-          def self.good_return; MyEnum::A; end
+          sig { returns(MyEnum::A) }
+          def self.good_return;
+            MyEnum::A;
+          end
 
-          sig {returns(MyEnum::B)}
-          def self.bad_return; MyEnum::C; end
+          sig { returns(MyEnum::B) }
+          def self.bad_return;
+            MyEnum::C;
+          end
         end
 
         assert_equal(c.good_return, MyEnum::A)
@@ -691,7 +1285,7 @@ module Opus::Types::Test
       it 'allows T::Enum values in a union' do
         c = Class.new do
           extend T::Sig
-          sig {params(x: T.any(MyEnum::A, MyEnum::B)).void}
+          sig { params(x: T.any(MyEnum::A, MyEnum::B)).void }
           def self.foo(x); end
         end
 
@@ -700,6 +1294,9 @@ module Opus::Types::Test
         assert_raises(TypeError) do
           c.foo(MyEnum::C)
         end
+
+        runtime_type = T.any(MyEnum::A, MyEnum::B)
+        assert_equal("T.any(MyEnum::A, MyEnum::B)", runtime_type.to_s)
       end
     end
 
@@ -709,11 +1306,11 @@ module Opus::Types::Test
       end
 
       it 'allows procs' do
-        assert_nil(@type.error_message_for_obj(proc {|x, y| x + y}))
+        assert_nil(check_error_message_for_obj(@type, proc { |x, y| x + y }))
       end
 
       it 'allows lambdas' do
-        assert_nil(@type.error_message_for_obj(->(x, y) {x + y}))
+        assert_nil(check_error_message_for_obj(@type, ->(x, y) { x + y }))
       end
 
       it 'disallows custom callables' do
@@ -724,7 +1321,7 @@ module Opus::Types::Test
         end
 
         callable = k.new
-        msg = @type.error_message_for_obj(callable)
+        msg = check_error_message_for_obj(@type, callable)
         assert_match(/Expected type T.proc/, msg)
       end
 
@@ -765,47 +1362,57 @@ module Opus::Types::Test
       end
 
       it 'passes validation with a subclass' do
-        msg = @type.error_message_for_obj(Sub)
+        msg = check_error_message_for_obj(@type, Sub)
         assert_nil(msg)
       end
 
       it 'passes validation with the class itself' do
-        msg = @type.error_message_for_obj(Base)
+        msg = check_error_message_for_obj(@type, Base)
         assert_nil(msg)
       end
 
+      it 'fails validation with a superclass' do
+        type = T.class_of(Sub)
+        msg = check_error_message_for_obj(type, Base)
+        assert_equal("Expected type T.class_of(Opus::Types::Test::TypesTest::Sub), got Opus::Types::Test::TypesTest::Base", msg)
+      end
+
       it 'fails validation with some other class' do
-        msg = @type.error_message_for_obj(InterfaceImplementor1)
+        msg = check_error_message_for_obj(@type, InterfaceImplementor1)
         assert_equal("Expected type T.class_of(Opus::Types::Test::TypesTest::Base), got Opus::Types::Test::TypesTest::InterfaceImplementor1", msg)
       end
 
       it 'fails validation with a non-class' do
-        msg = @type.error_message_for_obj(1)
+        msg = check_error_message_for_obj(@type, 1)
         assert_equal('Expected type T.class_of(Opus::Types::Test::TypesTest::Base), got 1', msg)
 
-        msg = @type.error_message_for_obj(Mixin1)
+        msg = check_error_message_for_obj(@type, Mixin1)
         assert_equal('Expected type T.class_of(Opus::Types::Test::TypesTest::Base), got Opus::Types::Test::TypesTest::Mixin1', msg)
       end
 
       it 'fails validation with a nil value' do
-        msg = @type.error_message_for_obj(nil)
+        msg = check_error_message_for_obj(@type, nil)
         assert_equal('Expected type T.class_of(Opus::Types::Test::TypesTest::Base), got nil', msg)
       end
 
       it 'fails validation with when supplied an instance of the subclass' do
-        msg = @type.error_message_for_obj(Sub.new)
+        msg = check_error_message_for_obj(@type, Sub.new)
         assert_match(/Expected type T.class_of\(Opus::Types::Test::TypesTest::Base\), got/, msg)
       end
 
-      it 'works for a mixin' do
+      it 'treats module singleton classes as final' do
         type = T.class_of(Mixin1)
-        msg = type.error_message_for_obj(WithMixin)
-        assert_nil(msg)
+
+        msg = check_error_message_for_obj(type, WithMixin)
+        assert_equal("Expected type T.class_of(Opus::Types::Test::TypesTest::Mixin1), got Opus::Types::Test::TypesTest::WithMixin", msg)
+
+        msg = check_error_message_for_obj(type, Mixin1Child)
+        assert_equal("Expected type T.class_of(Opus::Types::Test::TypesTest::Mixin1), got Opus::Types::Test::TypesTest::Mixin1Child", msg)
       end
 
       it 'can not just be .singleton_class' do
         type = T::Utils.coerce(Mixin1.singleton_class)
-        msg = type.error_message_for_obj(WithMixin)
+        msg = check_error_message_for_obj(type, WithMixin)
         assert_equal('Expected type , got type Class with value Opus::Types::Test::TypesTest::WithMixin', msg)
       end
     end
@@ -1002,6 +1609,46 @@ module Opus::Types::Test
         it "returns false for a superclass" do
           assert_equal(false, subtype?(T.class_of(Base), T.class_of(Sub)))
         end
+
+        it "returns true for a simple superclass" do
+          assert_equal(true, subtype?(T.class_of(Base), Module))
+          assert_equal(true, subtype?(T.class_of(Sub), Module))
+          assert_equal(true, subtype?(T.class_of(Mixin1), Module))
+
+          custom_module = Class.new(Module)
+          mod = custom_module.new
+
+          assert_equal(true, subtype?(T.class_of(mod), Module))
+          assert_equal(true, subtype?(T.class_of(mod), custom_module))
+        end
+
+        it "returns true for module singleton classes against Module" do
+          assert_equal(true, subtype?(T.class_of(Mixin1), Module))
+        end
+
+        it "returns false for module singleton classes against Class" do
+          assert_equal(false, subtype?(T.class_of(Mixin1), Class))
+        end
+
+        it "returns false for a simple unrelated class" do
+          assert_equal(false, subtype?(T.class_of(Base), Mixin1))
+        end
+
+        it "returns true for a singleton of a class against T::Class[...]" do
+          assert_equal(true, subtype?(T.class_of(Base), T::Class[T.anything]))
+        end
+
+        it "returns false for a singleton of a module against T::Class[...]" do
+          assert_equal(false, subtype?(T.class_of(Mixin1), T::Class[T.anything]))
+        end
+
+        it "handles when RHS is a T.class_of type (equal)" do
+          assert(subtype?(T.class_of(Mixin1Child), T.class_of(Mixin1Child)))
+        end
+
+        it "handles when RHS is a T.class_of type (parent)" do
+          refute(subtype?(T.class_of(Mixin1Child), T.class_of(Mixin1)))
+        end
       end
 
       describe 'tuples' do
@@ -1012,6 +1659,31 @@ module Opus::Types::Test
           refute_subtype([Numeric, String], [Integer, String])
           refute_subtype([String, Numeric], [String, Integer])
           refute_subtype([String], [String, Object])
+        end
+
+        it 'compares upwards to TypedArray' do
+          assert_subtype([], T::Array[Integer])
+          assert_subtype([], T::Array[String])
+          assert_subtype([Integer], T::Array[Integer])
+          assert_subtype([Integer, String], T::Array[T.any(Integer, String)])
+
+          refute_subtype([Integer], T::Array[String])
+          refute_subtype([Integer, String], T::Array[Integer])
+        end
+      end
+
+      describe 'shapes' do
+        it 'compares upwards to TypedHash' do
+          assert_subtype({}, T::Hash[Integer, String])
+          assert_subtype({}, T::Hash[String, Symbol])
+          assert_subtype({key: Integer}, T::Hash[Symbol, Integer])
+          assert_subtype({'key' => Integer}, T::Hash[String, Integer])
+          assert_subtype({key: Integer, 'another' => Float}, T::Hash[T.any(Symbol, String), T.any(Integer, Float)])
+
+          refute_subtype({key: Integer}, T::Hash[String, Integer])
+          refute_subtype({key: Integer}, T::Hash[Symbol, Float])
+          refute_subtype({key: Integer, 'another' => Float}, T::Hash[Symbol, T.any(Integer, Float)])
+          refute_subtype({key: Integer, 'another' => Float}, T::Hash[T.any(Symbol, String), Integer])
         end
       end
 
@@ -1031,23 +1703,79 @@ module Opus::Types::Test
         end
       end
 
+      describe 'noreturn' do
+        it 'is a subtype of things' do
+          assert_subtype(T.noreturn, Integer)
+          assert_subtype(T.noreturn, Numeric)
+          assert_subtype(T.noreturn, [String, String])
+          assert_subtype(T.noreturn, T::Array[Integer])
+          assert_subtype(T.noreturn, T.untyped)
+        end
+
+        it 'other things are not a subtype of it' do
+          refute_subtype(Integer, T.noreturn)
+          refute_subtype(Numeric, T.noreturn)
+          refute_subtype([String, String], T.noreturn)
+          refute_subtype(T::Array[Integer], T.noreturn)
+
+          # except this one
+          assert_subtype(T.untyped, T.noreturn)
+        end
+      end
+
+      describe 'anything' do
+        it 'is not a subtype of things' do
+          refute_subtype(T.anything, Integer)
+          refute_subtype(T.anything, Numeric)
+          refute_subtype(T.anything, [String, String])
+          refute_subtype(T.anything, T::Array[Integer])
+
+          # except this one
+          assert_subtype(T.anything, T.untyped)
+        end
+
+        it 'other things are a subtype of it' do
+          assert_subtype(Integer, T.anything)
+          assert_subtype(Numeric, T.anything)
+          assert_subtype([String, String], T.anything)
+          assert_subtype(T::Array[Integer], T.anything)
+
+          assert_subtype(T.untyped, T.anything)
+        end
+      end
+
       describe 'type variables' do
+        it 'builds properly' do
+          type = T::Types::TypeParameter.new(:FOO)
+          type.build_type
+          assert_equal('T.type_parameter(:FOO)', type.name)
+        end
+
         it 'type members are subtypes of everything' do
-          # rubocop:disable PrisonGuard/UseOpusTypesShortcut
           assert_subtype(T::Types::TypeMember.new(:in), T.untyped)
           assert_subtype(T::Types::TypeMember.new(:in), String)
           assert_subtype(T::Types::TypeMember.new(:in),
                          T::Types::TypeMember.new(:out))
-          # rubocop:enable PrisonGuard/UseOpusTypesShortcut
+        end
+
+        it 'everything is a subtype of type members' do
+          assert_subtype(T.untyped, T::Types::TypeMember.new(:in))
+          assert_subtype(String, T::Types::TypeMember.new(:in))
+          assert_subtype(T::Types::TypeMember.new(:out),
+                         T::Types::TypeMember.new(:in))
         end
 
         it 'type parameters are subtypes of everything' do
-          # rubocop:disable PrisonGuard/UseOpusTypesShortcut
           assert_subtype(T::Types::TypeParameter.new(:T), T.untyped)
           assert_subtype(T::Types::TypeParameter.new(:T), String)
           assert_subtype(T::Types::TypeParameter.new(:T),
                          T::Types::TypeParameter.new(:V))
-          # rubocop:enable PrisonGuard/UseOpusTypesShortcut
+        end
+
+        it 'pools' do
+          assert_equal(T.type_parameter(:T).object_id, T.type_parameter(:T).object_id)
+          refute_equal(T.type_parameter(:T).object_id, T.type_parameter(:U).object_id)
+          refute_equal(T::Types::TypeParameter.new(:T).object_id, T::Types::TypeParameter.new(:T).object_id)
         end
       end
 
@@ -1070,6 +1798,24 @@ module Opus::Types::Test
           assert_subtype(T::Enumerator[Integer], T::Enumerator[T.untyped])
         end
       end
+
+      describe 'deprecated_enum' do
+        it 'treats the elements as a union of values' do
+          assert_subtype(T.deprecated_enum(["A"]), T.deprecated_enum(["A", "B"]))
+          assert_subtype(T.deprecated_enum(["A", "B"]), T.deprecated_enum(["A", "B"]))
+          refute_subtype(T.deprecated_enum(["A", "B"]), T.deprecated_enum(["A"]))
+          refute_subtype(T.deprecated_enum(["A", "B"]), T.deprecated_enum(["C"]))
+        end
+      end
+
+      describe 'T::Enum' do
+        it 'treats individual values as subtype of the respective class' do
+          assert_subtype(MyEnum::A, MyEnum)
+          assert_subtype(MyEnum::B, MyEnum)
+          refute_subtype(MyEnum::A, Integer)
+          refute_subtype(MyEnum::A, String)
+        end
+      end
     end
 
     module TestGeneric1
@@ -1077,7 +1823,7 @@ module Opus::Types::Test
       extend T::Generic
 
       Elem = type_member
-      sig {params(bar: Elem).returns(Elem)}
+      sig { params(bar: Elem).returns(Elem) }
       def self.foo(bar)
         bar
       end
@@ -1089,10 +1835,19 @@ module Opus::Types::Test
 
       Elem1 = type_member
       Elem2 = type_member
-      sig {params(bar: Elem1, baz: Elem2).returns([Elem1, Elem2])}
+      sig { params(bar: Elem1, baz: Elem2).returns([Elem1, Elem2]) }
       def foo(bar, baz)
         [bar, baz]
       end
+    end
+
+    class TestGeneric3
+      extend T::Sig
+      extend T::Generic
+
+      Elem = type_member { {fixed: Integer} }
+      sig { params(x: Elem).void }
+      def foo(x); end
     end
 
     class GenericSingleton
@@ -1100,18 +1855,15 @@ module Opus::Types::Test
       extend T::Generic
 
       SingletonTP = type_template
-      sig {params(arg: SingletonTP).returns(SingletonTP)}
+      sig { params(arg: SingletonTP).returns(SingletonTP) }
       def self.foo(arg)
         arg
       end
     end
 
     class GenericSingletonChild < GenericSingleton
-      SingletonTP = type_template(fixed: String)
+      SingletonTP = type_template { {fixed: String} }
     end
-
-
-
 
     describe "generics" do
       it 'simply works' do
@@ -1132,6 +1884,26 @@ module Opus::Types::Test
 
       it 'works for generic singleton classes' do
         assert_equal(:sym, GenericSingletonChild.foo(:sym))
+      end
+    end
+
+    describe "names" do
+      it 'can name T.any with runtime-created classes' do
+        klass = Class.new
+        name = T.any(klass, String).name
+        assert_equal(name, "T.any(String)")
+
+        name = T.any(String, klass).name
+        assert_equal(name, "T.any(String)")
+      end
+
+      it 'can name T.all with runtime-created classes' do
+        klass = Class.new
+        name = T.all(klass, String).name
+        assert_equal(name, "T.all(String)")
+
+        name = T.all(String, klass).name
+        assert_equal(name, "T.all(String)")
       end
     end
   end

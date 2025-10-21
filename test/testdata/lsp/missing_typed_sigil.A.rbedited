@@ -5,6 +5,8 @@
 # specially whitelisted.
 # !!!!
 
+# selective-apply-code-action: quickfix
+
 class Hello
   def something(x)
 
@@ -12,7 +14,7 @@ class Hello
 end
 
 def main
-  puts Gem.new
+  puts Hello.new
   #    ^^^^ error: Unable to resolve constant `Helo`
-  #    ^^^^ apply-code-action: [A] Replace with `Gem`
+  #    ^^^^ apply-code-action: [A] Replace with `Hello`
 end

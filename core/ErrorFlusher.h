@@ -1,7 +1,6 @@
 #ifndef SORBET_ERROR_FLUSHER_H
 #define SORBET_ERROR_FLUSHER_H
 
-#include "core/AutocorrectSuggestion.h"
 #include "core/ErrorQueueMessage.h"
 #include <vector>
 
@@ -10,15 +9,12 @@ class FileSystem;
 namespace core {
 
 class ErrorFlusher {
-private:
-    std::vector<AutocorrectSuggestion> autocorrects;
-    bool printedAtLeastOneError{false};
-
 public:
-    ErrorFlusher() = default;
-    void flushErrors(spdlog::logger &logger, std::vector<std::unique_ptr<ErrorQueueMessage>> error);
-    void flushErrorCount(spdlog::logger &logger, int count);
-    void flushAutocorrects(const GlobalState &gs, FileSystem &fs);
+    virtual bool wouldFlushErrors(core::FileRef file) const = 0;
+
+    virtual void flushErrors(spdlog::logger &logger, const GlobalState &gs, core::FileRef file,
+                             std::vector<std::unique_ptr<ErrorQueueMessage>> errors) = 0;
+    virtual ~ErrorFlusher() = default;
 };
 
 } // namespace core

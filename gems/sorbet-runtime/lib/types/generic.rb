@@ -2,7 +2,6 @@
 # typed: true
 
 # Use as a mixin with extend (`extend T::Generic`).
-# Docs at https://hackpad.corp.stripe.com/Type-Validation-in-pay-server-1JaoTHir5Mo.
 module T::Generic
   include T::Helpers
   include Kernel
@@ -13,11 +12,13 @@ module T::Generic
     self
   end
 
-  def type_member(variance=:invariant, fixed: nil, lower: T.untyped, upper: BasicObject)
-    T::Types::TypeMember.new(variance) # rubocop:disable PrisonGuard/UseOpusTypesShortcut
+  def type_member(variance=:invariant, &blk)
+    T::Types::TypeMember.new(variance)
   end
 
-  def type_template(variance=:invariant, fixed: nil, lower: T.untyped, upper: BasicObject)
-    T::Types::TypeTemplate.new(variance) # rubocop:disable PrisonGuard/UseOpusTypesShortcut
+  def type_template(variance=:invariant, &blk)
+    T::Types::TypeTemplate.new(variance)
   end
+
+  def has_attached_class!(variance=:invariant, &blk); end
 end

@@ -1,9 +1,9 @@
-class <emptyTree><<C <root>>> < ()
-  def test_strings<<C <todo sym>>>(&<blk>)
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  def test_strings<<todo method>>(&<blk>)
     begin
       ""
       "foo"
-      "foo".concat(1.to_s())
+      ::<Magic>.<string-interpolate>("foo", 1)
     end
   end
 end

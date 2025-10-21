@@ -7,10 +7,8 @@
 
 namespace sorbet::payload {
 
-void createInitialGlobalState(std::unique_ptr<core::GlobalState> &gs, const realmain::options::Options &options,
-                              std::unique_ptr<KeyValueStore> &kvstore);
-void retainGlobalState(std::unique_ptr<core::GlobalState> &gs, const realmain::options::Options &options,
-                       std::unique_ptr<KeyValueStore> &kvstore);
+void createInitialGlobalState(core::GlobalState &gs, const realmain::options::Options &options,
+                              const std::unique_ptr<const OwnedKeyValueStore> &kvstore);
 
 } // namespace sorbet::payload
 #endif // RUBY_TYPER_PAYLOAD_H

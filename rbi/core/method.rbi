@@ -1,10 +1,13 @@
 # typed: __STDLIB_INTERNAL
 
-# [`Method`](https://docs.ruby-lang.org/en/2.6.0/Method.html) objects are
-# created by `Object#method`, and are associated with a particular object (not
-# just with a class). They may be used to invoke the method within the object,
-# and as a block associated with an iterator. They may also be unbound from one
-# object (creating an `UnboundMethod`) and bound to another.
+# [`Method`](https://docs.ruby-lang.org/en/2.7.0/Method.html) objects are
+# created by
+# [`Object#method`](https://docs.ruby-lang.org/en/2.7.0/Object.html#method-i-method),
+# and are associated with a particular object (not just with a class). They may
+# be used to invoke the method within the object, and as a block associated with
+# an iterator. They may also be unbound from one object (creating an
+# [`UnboundMethod`](https://docs.ruby-lang.org/en/2.7.0/UnboundMethod.html)) and
+# bound to another.
 #
 # ```ruby
 # class Thing
@@ -25,7 +28,12 @@
 # #=> [#<Date: 2017-03-01 ((2457814j,0s,0n),+0s,2299161j)>, #<Date: 2017-03-02 ((2457815j,0s,0n),+0s,2299161j)>]
 # ```
 class Method < Object
-  # Returns a `Proc` object corresponding to this method.
+  # Two method objects are equal if they are bound to the same object and refer
+  # to the same method definition and their owners are the same class or module.
+  def ==(_); end
+
+  # Returns a [`Proc`](https://docs.ruby-lang.org/en/2.7.0/Proc.html) object
+  # corresponding to this method.
   sig {returns(Proc)}
   def to_proc; end
 
@@ -37,8 +45,8 @@ class Method < Object
   # m.call(3)    #=> 15
   # m.call(20)   #=> 32
   # ```
-  sig {params(args: T.untyped).returns(T.untyped)}
-  def call(*args);end
+  sig {params(args: T.untyped, blk: T.untyped).returns(T.untyped)}
+  def call(*args, &blk);end
 
   # Returns a proc that is the composition of this method and the given *g*. The
   # returned proc takes a variable number of arguments, calls *g* with them then
@@ -57,7 +65,7 @@ class Method < Object
   def <<(g); end
 
   # Invokes the method with `obj` as the parameter like
-  # [`call`](https://docs.ruby-lang.org/en/2.6.0/Method.html#method-i-call).
+  # [`call`](https://docs.ruby-lang.org/en/2.7.0/Method.html#method-i-call).
   # This allows a method object to be the target of a `when` clause in a case
   # statement.
   #
@@ -73,8 +81,8 @@ class Method < Object
   def ===(*obj); end
 
   # Returns a proc that is the composition of this method and the given *g*. The
-  # returned proc takes a variable number of arguments, calls *g* with them then
-  # calls this method with the result.
+  # returned proc takes a variable number of arguments, calls this method with
+  # them then calls *g* with the result.
   #
   # ```ruby
   # def f(x)
@@ -89,12 +97,13 @@ class Method < Object
   def >>(g); end
 
   # Invokes the *meth* with the specified arguments, returning the method's
-  # return value.
+  # return value, like
+  # [`call`](https://docs.ruby-lang.org/en/2.7.0/Method.html#method-i-call).
   #
   # ```ruby
   # m = 12.method("+")
-  # m.call(3)    #=> 15
-  # m.call(20)   #=> 32
+  # m[3]         #=> 15
+  # m[20]        #=> 32
   # ```
   sig {params(args: T.untyped).returns(T.untyped)}
   def [](*args); end
@@ -186,6 +195,48 @@ class Method < Object
   sig {params(args: T.untyped).returns(T.untyped)}
   def curry(*args); end
 
+  # Two method objects are equal if they are bound to the same object and refer
+  # to the same method definition and their owners are the same class or module.
+  def eql?(_); end
+
+  # Returns a hash value corresponding to the method object.
+  #
+  # See also
+  # [`Object#hash`](https://docs.ruby-lang.org/en/2.7.0/Object.html#method-i-hash).
+  def hash; end
+
+  # Returns a human-readable description of the underlying method.
+  #
+  # ```ruby
+  # "cat".method(:count).inspect   #=> "#<Method: String#count(*)>"
+  # (1..3).method(:map).inspect    #=> "#<Method: Range(Enumerable)#map()>"
+  # ```
+  #
+  # In the latter case, the method description includes the "owner" of the
+  # original method (`Enumerable` module, which is included into `Range`).
+  #
+  # `inspect` also provides, when possible, method argument names (call
+  # sequence) and source location.
+  #
+  # ```ruby
+  # require 'net/http'
+  # Net::HTTP.method(:get).inspect
+  # #=> "#<Method: Net::HTTP.get(uri_or_host, path=..., port=...) <skip>/lib/ruby/2.7.0/net/http.rb:457>"
+  # ```
+  #
+  # `...` in argument definition means argument is optional (has some default
+  # value).
+  #
+  # For methods defined in C (language core and extensions), location and
+  # argument names can't be extracted, and only generic information is provided
+  # in form of `*` (any number of arguments) or `_` (some positional argument).
+  #
+  # ```ruby
+  # "cat".method(:count).inspect   #=> "#<Method: String#count(*)>"
+  # "cat".method(:+).inspect       #=> "#<Method: String#+(_)>""
+  # ```
+  def inspect; end
+
   # Returns the name of the method.
   sig {returns(Symbol)}
   def name; end
@@ -202,12 +253,13 @@ class Method < Object
   sig {returns(Symbol)}
   def original_name; end
 
-  # Returns the class or module that defines the method. See also receiver.
+  # Returns the class or module that defines the method. See also
+  # [`Method#receiver`](https://docs.ruby-lang.org/en/2.7.0/Method.html#method-i-receiver).
   #
   # ```ruby
   # (1..3).method(:map).owner #=> Enumerable
   # ```
-  sig {returns(T.any(Class, Module))}
+  sig {returns(Module)}
   def owner; end
 
   # Returns the parameter information of this method.
@@ -241,15 +293,48 @@ class Method < Object
   sig {returns(T.untyped)}
   def source_location; end
 
-  # Returns a [`Method`](https://docs.ruby-lang.org/en/2.6.0/Method.html) of
+  # Returns a [`Method`](https://docs.ruby-lang.org/en/2.7.0/Method.html) of
   # superclass which would be called when super is used or nil if there is no
   # method on superclass.
   sig {returns(T.nilable(Method))}
   def super_method; end
 
-  # Dissociates *meth* from its current receiver. The resulting `UnboundMethod`
+  # Returns a human-readable description of the underlying method.
+  #
+  # ```ruby
+  # "cat".method(:count).inspect   #=> "#<Method: String#count(*)>"
+  # (1..3).method(:map).inspect    #=> "#<Method: Range(Enumerable)#map()>"
+  # ```
+  #
+  # In the latter case, the method description includes the "owner" of the
+  # original method (`Enumerable` module, which is included into `Range`).
+  #
+  # `inspect` also provides, when possible, method argument names (call
+  # sequence) and source location.
+  #
+  # ```ruby
+  # require 'net/http'
+  # Net::HTTP.method(:get).inspect
+  # #=> "#<Method: Net::HTTP.get(uri_or_host, path=..., port=...) <skip>/lib/ruby/2.7.0/net/http.rb:457>"
+  # ```
+  #
+  # `...` in argument definition means argument is optional (has some default
+  # value).
+  #
+  # For methods defined in C (language core and extensions), location and
+  # argument names can't be extracted, and only generic information is provided
+  # in form of `*` (any number of arguments) or `_` (some positional argument).
+  #
+  # ```ruby
+  # "cat".method(:count).inspect   #=> "#<Method: String#count(*)>"
+  # "cat".method(:+).inspect       #=> "#<Method: String#+(_)>""
+  # ```
+  def to_s; end
+
+  # Dissociates *meth* from its current receiver. The resulting
+  # [`UnboundMethod`](https://docs.ruby-lang.org/en/2.7.0/UnboundMethod.html)
   # can subsequently be bound to a new object of the same class (see
-  # `UnboundMethod`).
+  # [`UnboundMethod`](https://docs.ruby-lang.org/en/2.7.0/UnboundMethod.html)).
   sig {returns(T.untyped)}
   def unbind; end
 end

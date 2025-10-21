@@ -1,0 +1,3 @@
+s(:def, :f,
+  s(:params,
+    s(:kwnilarg)), nil)

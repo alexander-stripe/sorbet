@@ -24,6 +24,9 @@ end
 module DidYouMean::JaroWinkler
   THRESHOLD = T.let(T.unsafe(nil), Float)
   WEIGHT = T.let(T.unsafe(nil), Float)
+
+  sig { params(str1: String, str2: String).returns(T.any(Float, Integer)) }
+  def self.distance(str1, str2); end
 end
 
 class DidYouMean::MethodNameChecker < Object
@@ -44,4 +47,11 @@ class DidYouMean::NullChecker < Object
 end
 
 class DidYouMean::SpellChecker < Object
+  sig {params(dictionary: T::Enumerable[T.any(String, Symbol)]).void}
+  def initialize(dictionary:)
+  end
+
+  sig {params(input: T.any(String, Symbol)).returns(T::Array[T.any(String, Symbol)])}
+  def correct(input)
+  end
 end

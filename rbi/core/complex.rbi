@@ -4,11 +4,11 @@
 # unit; a+bi. Where a is real part, b is imaginary part and i is imaginary unit.
 # Real a equals complex a+0i mathematically.
 #
-# [`Complex`](https://docs.ruby-lang.org/en/2.6.0/Complex.html) object can be
+# [`Complex`](https://docs.ruby-lang.org/en/2.7.0/Complex.html) object can be
 # created as literal, and also by using Kernel#Complex,
-# [`Complex::rect`](https://docs.ruby-lang.org/en/2.6.0/Complex.html#method-c-rect),
-# [`Complex::polar`](https://docs.ruby-lang.org/en/2.6.0/Complex.html#method-c-polar)
-# or [`to_c`](https://docs.ruby-lang.org/en/2.6.0/Complex.html#method-i-to_c)
+# [`Complex::rect`](https://docs.ruby-lang.org/en/2.7.0/Complex.html#method-c-rect),
+# [`Complex::polar`](https://docs.ruby-lang.org/en/2.7.0/Complex.html#method-c-polar)
+# or [`to_c`](https://docs.ruby-lang.org/en/2.7.0/Complex.html#method-i-to_c)
 # method.
 #
 # ```ruby
@@ -273,6 +273,26 @@ class Complex < Numeric
   end
   def ==(arg0); end
 
+  # If `cmp`'s imaginary part is zero, and `object` is also a real number (or a
+  # [`Complex`](https://docs.ruby-lang.org/en/2.7.0/Complex.html) number where
+  # the imaginary part is zero), compare the real part of `cmp` to object.
+  # Otherwise, return nil.
+  #
+  # ```ruby
+  # Complex(2, 3)  <=> Complex(2, 3)   #=> nil
+  # Complex(2, 3)  <=> 1               #=> nil
+  # Complex(2)     <=> 1               #=> 1
+  # Complex(2)     <=> 2               #=> 0
+  # Complex(2)     <=> 3               #=> -1
+  # ```
+  sig do
+    params(
+      arg0: Object,
+    )
+    .returns(T.nilable(Integer))
+  end
+  def <=>(arg0); end
+
   # Returns the absolute part of its polar form.
   #
   # ```ruby
@@ -353,6 +373,10 @@ class Complex < Numeric
   end
   def equal?(arg0); end
 
+  # Returns `true` if `cmp`'s real and imaginary parts are both finite numbers,
+  # otherwise returns `false`.
+  def finite?; end
+
   # Performs division as each part is a float, never returns a float.
   #
   # ```ruby
@@ -386,6 +410,17 @@ class Complex < Numeric
   # ```
   sig {returns(T.any(Integer, Float, Rational, BigDecimal))}
   def imaginary(); end
+
+  # Returns `1` if `cmp`'s real or imaginary part is an infinite number,
+  # otherwise returns `nil`.
+  #
+  # ```ruby
+  # For example:
+  #
+  #    (1+1i).infinite?                   #=> nil
+  #    (Float::INFINITY + 1i).infinite?   #=> 1
+  # ```
+  def infinite?; end
 
   # Returns the value as a string for inspection.
   #
@@ -512,7 +547,7 @@ class Complex < Numeric
   sig {returns(T.any(Integer, Float, Rational, BigDecimal))}
   def real(); end
 
-  # Returns false.
+  # Returns false, even if the complex number has no imaginary part.
   sig {returns(FalseClass)}
   def real?(); end
 
@@ -590,4 +625,28 @@ class Complex < Numeric
 
   sig {returns(T::Boolean)}
   def zero?(); end
+
+  # Returns a complex object which denotes the given polar form.
+  #
+  # ```ruby
+  # Complex.polar(3, 0)            #=> (3.0+0.0i)
+  # Complex.polar(3, Math::PI/2)   #=> (1.836909530733566e-16+3.0i)
+  # Complex.polar(3, Math::PI)     #=> (-3.0+3.673819061467132e-16i)
+  # Complex.polar(3, -Math::PI/2)  #=> (1.836909530733566e-16-3.0i)
+  # ```
+  def self.polar(*_); end
+
+  # Returns a complex object which denotes the given rectangular form.
+  #
+  # ```ruby
+  # Complex.rectangular(1, 2)  #=> (1+2i)
+  # ```
+  def self.rect(*_); end
+
+  # Returns a complex object which denotes the given rectangular form.
+  #
+  # ```ruby
+  # Complex.rectangular(1, 2)  #=> (1+2i)
+  # ```
+  def self.rectangular(*_); end
 end

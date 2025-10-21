@@ -1,33 +1,60 @@
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 # We define our externals here instead of directly in WORKSPACE
-# because putting the `new_git_repository` calls here instead of there
-# works around https://github.com/bazelbuild/bazel/issues/1465 when
-# passing `build_file` to the `new_git_repository`.
 def register_sorbet_dependencies():
-    git_repository(
-        name = "com_google_googletest",
-        remote = "https://github.com/google/googletest.git",
-        commit = "90a443f9c2437ca8a682a1ac625eba64e1d74a8a",
-        shallow_since = "1565193450 -0400",
+    http_archive(
+        name = "platforms",
+        url = "https://github.com/bazelbuild/platforms/releases/download/0.0.10/platforms-0.0.10.tar.gz",
+        sha256 = "218efe8ee736d26a3572663b374a253c012b716d8af0c07e842e82f238a0a7ee",
+    )
+
+    http_archive(
+        name = "prism",
+        url = "https://github.com/ruby/prism/releases/download/v1.3.0/libprism-src.tar.gz",
+        sha256 = "8f17e209e2a4c026a72f3bfbac541f7dbe898ec56dc8bc06abce5db6886f9b2e",
+        build_file = "@com_stripe_ruby_typer//third_party:prism.BUILD",
+        strip_prefix = "libprism-src",
+    )
+
+    http_archive(
+        name = "doctest",
+        url = "https://github.com/doctest/doctest/archive/v2.4.9.zip",
+        sha256 = "88a552f832ef3e4e7b733f9ab4eff5d73d7c37e75bebfef4a3339bf52713350d",
+        strip_prefix = "doctest-2.4.9",
+    )
+
+    http_archive(
+        name = "dtl",
+        url = "https://github.com/cubicdaiya/dtl/archive/v1.19.tar.gz",
+        sha256 = "f47b99dd11e5d771ad32a8dc960db4ab2fbe349fb0346fa0795f53c846a99c5d",
+        build_file = "@com_stripe_ruby_typer//third_party:dtl.BUILD",
+        strip_prefix = "dtl-1.19",
     )
 
     http_archive(
         name = "yaml_cpp",
-        url = "https://github.com/jbeder/yaml-cpp/archive/yaml-cpp-0.6.2.zip",
-        sha256 = "292c8de66bfda19a2ca08a32a8c1ec39b709ac75f54e6be0735940db2dbdff76",
+        url = "https://github.com/jbeder/yaml-cpp/archive/yaml-cpp-0.6.3.zip",
+        sha256 = "7c0ddc08a99655508ae110ba48726c67e4a10b290c214aed866ce4bbcbe3e84c",
         build_file = "@com_stripe_ruby_typer//third_party:yaml_cpp.BUILD",
-        strip_prefix = "yaml-cpp-yaml-cpp-0.6.2",
+        strip_prefix = "yaml-cpp-yaml-cpp-0.6.3",
     )
 
-    # their zip archive has symlinks that bazel does not like
-    new_git_repository(
+    http_archive(
         name = "spdlog",
-        remote = "https://github.com/gabime/spdlog.git",
-        commit = "a7148b718ea2fabb8387cb90aee9bf448da63e65",  # v1.3.1
+        url = "https://github.com/gabime/spdlog/archive/8e5613379f5140fefb0b60412fbf1f5406e7c7f8.zip",  # v1.15.0
+        sha256 = "86d0688c088f6cad36533c731e8377882d1cb0d05508afa3e624d3c0e7cf92af",
         build_file = "@com_stripe_ruby_typer//third_party:spdlog.BUILD",
-        shallow_since = "1547806387 +0200",
+        strip_prefix = "spdlog-8e5613379f5140fefb0b60412fbf1f5406e7c7f8",
+    )
+
+    # We don't use this directly, but protobuf will skip defining its own
+    # `@zlib` if it's present.
+    http_archive(
+        name = "zlib",
+        url = "https://github.com/madler/zlib/archive/v1.3.1.zip",
+        build_file = "@com_stripe_ruby_typer//third_party:zlib.BUILD",
+        sha256 = "50b24b47bf19e1f35d2a21ff36d2a366638cdf958219a66f30ce0861201760e6",
+        strip_prefix = "zlib-1.3.1",
     )
 
     # proto_library, cc_proto_library, and java_proto_library rules implicitly
@@ -35,81 +62,95 @@ def register_sorbet_dependencies():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "d7a221b3d4fb4f05b7473795ccea9e05dab3b8721f6286a95fffbffc2d926f8b",
-        strip_prefix = "protobuf-3.6.1",
-        urls = ["https://github.com/google/protobuf/archive/v3.6.1.zip"],
+        url = "https://github.com/protocolbuffers/protobuf/archive/v3.27.0.zip",
+        sha256 = "913530eba097b17f58b9087fe9c4944de87b56913e3e340b91e317d1e6763dde",
+        strip_prefix = "protobuf-3.27.0",
+        patches = [
+            "@com_stripe_ruby_typer//third_party:com_google_protobuf/cpp_opts.bzl.patch",
+        ],
     )
 
-    new_git_repository(
+    http_archive(
         name = "libprotobuf-mutator",
-        remote = "https://github.com/google/libprotobuf-mutator.git",
-        commit = "d761b622751ae8c226db3d8daaaf4c6aab5e5243",
+        url = "https://github.com/google/libprotobuf-mutator/archive/68e10c13248517c5bcd531d0e02be483da83fc13.zip",
+        sha256 = "8684276b996e8d8541ed3703420f9dbcc17702bd7b13c6f3d9c13a4656597c76",
         build_file = "@com_stripe_ruby_typer//third_party:libprotobuf-mutator.BUILD",
-        shallow_since = "1549313935 -0800",
+        strip_prefix = "libprotobuf-mutator-68e10c13248517c5bcd531d0e02be483da83fc13",
     )
 
-    new_git_repository(
+    http_archive(
         name = "lmdb",
-        remote = "https://github.com/DarkDimius/lmdb.git",
-        commit = "15a9c2604e3401593110ddf6c9e2e16a4b28e68e",
+        url = "https://github.com/LMDB/lmdb/archive/da9aeda08c3ff710a0d47d61a079f5a905b0a10a.zip",
+        sha256 = "893a324b60c6465edcf7feb7dafacb3d5f5803649f1b5de6f453b3a6d9e2bb97",
         build_file = "@com_stripe_ruby_typer//third_party:lmdb.BUILD",
-        shallow_since = "1539245726 -0700",
+        strip_prefix = "lmdb-da9aeda08c3ff710a0d47d61a079f5a905b0a10a",
+        patches = [
+            "@com_stripe_ruby_typer//third_party:lmdb/strdup.patch",
+        ],
     )
 
-    new_git_repository(
+    http_archive(
         name = "rapidjson",
-        remote = "https://github.com/Tencent/rapidjson.git",
-        commit = "d87b698d0fcc10a5f632ecbc80a9cb2a8fa094a5",
+        url = "https://github.com/Tencent/rapidjson/archive/f376690822cbc2d17044e626be5df21f7d91ca8f.zip",
+        sha256 = "9425276583dff9020cee6332472b0cf247ae325cb5f26dbe157183f747da3910",
         build_file = "@com_stripe_ruby_typer//third_party:rapidjson.BUILD",
-        shallow_since = "1561689433 +0800",
+        strip_prefix = "rapidjson-f376690822cbc2d17044e626be5df21f7d91ca8f",
     )
 
-    new_git_repository(
-        name = "lizard",
-        remote = "https://github.com/inikep/lizard.git",
-        commit = "dda3b335e92ecd5caceccc9c577b39dd4e3c9950",
-        build_file = "@com_stripe_ruby_typer//third_party:lizard.BUILD",
-        shallow_since = "1552038096 +0100",
+    http_archive(
+        name = "lz4",
+        url = "https://github.com/lz4/lz4/archive/v1.9.3.zip",
+        sha256 = "4ec935d99aa4950eadfefbd49c9fad863185ac24c32001162c44a683ef61b580",
+        build_file = "@com_stripe_ruby_typer//third_party:lz4.BUILD",
+        strip_prefix = "lz4-1.9.3",
     )
 
-    new_git_repository(
+    http_archive(
         name = "pdqsort",
-        remote = "https://github.com/orlp/pdqsort.git",
-        commit = "08879029ab8dcb80a70142acb709e3df02de5d37",
+        url = "https://github.com/orlp/pdqsort/archive/08879029ab8dcb80a70142acb709e3df02de5d37.zip",
+        sha256 = "ad8c9cd3d1abe5d566bad341bcce327a2e897b64236a7f9e74f4b9b0e7e5dc39",
         build_file = "@com_stripe_ruby_typer//third_party:pdqsort.BUILD",
-        shallow_since = "1524162080 +0200",
+        strip_prefix = "pdqsort-08879029ab8dcb80a70142acb709e3df02de5d37",
     )
 
-    new_git_repository(
+    http_archive(
         name = "jemalloc",
-        remote = "https://github.com/jemalloc/jemalloc.git",
-        commit = "ea6b3e973b477b8061e0076bb257dbd7f3faa756",  # 5.2.1
+        url = "https://github.com/jemalloc/jemalloc/archive/20f9802e4f25922884448d9581c66d76cc905c0c.zip",  # 5.3
+        sha256 = "1cc1ec93701868691c73b371eb87e5452257996279a42303a91caad355374439",
         build_file = "@com_stripe_ruby_typer//third_party:jemalloc.BUILD",
-        shallow_since = "1565035161 -0700",
+        strip_prefix = "jemalloc-20f9802e4f25922884448d9581c66d76cc905c0c",
     )
 
-    new_git_repository(
+    http_archive(
+        name = "mimalloc",
+        url = "https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.zip",  # 2.1.2
+        sha256 = "86281c918921c1007945a8a31e5ad6ae9af77e510abfec20d000dd05d15123c7",
+        build_file = "@com_stripe_ruby_typer//third_party:mimalloc.BUILD",
+        strip_prefix = "mimalloc-2.1.2",
+    )
+
+    http_archive(
         name = "concurrentqueue",
-        remote = "https://github.com/cameron314/concurrentqueue.git",
-        commit = "7e3ad876fcca2e44e17528a51865ab2420afb238",
+        url = "https://github.com/cameron314/concurrentqueue/archive/79cec4c3bf1ca23ea4a03adfcd3c2c3659684dd2.zip",
+        sha256 = "a78ff232e2996927ad6fbd015d1f15dfb20bf524a87ce2893e64dbbe1f04051e",
         build_file = "@com_stripe_ruby_typer//third_party:concurrentqueue.BUILD",
-        shallow_since = "1564683624 -0400",
+        strip_prefix = "concurrentqueue-79cec4c3bf1ca23ea4a03adfcd3c2c3659684dd2",
     )
 
-    new_git_repository(
+    http_archive(
         name = "statsd",
-        remote = "https://github.com/romanbsd/statsd-c-client.git",
-        commit = "0caa5ef05d6a786bb4695394534a7182a3c94427",
+        url = "https://github.com/romanbsd/statsd-c-client/archive/08ecca678345f157e72a1db1446facb403cbeb65.zip",
+        sha256 = "825395556fb553383173e47dbce98165981d100587993292ec9d174ec40a7ba1",
         build_file = "@com_stripe_ruby_typer//third_party:statsd.BUILD",
-        shallow_since = "1520851215 +0200",
+        strip_prefix = "statsd-c-client-08ecca678345f157e72a1db1446facb403cbeb65",
     )
 
-    new_git_repository(
+    http_archive(
         name = "cxxopts",
-        remote = "https://github.com/jarro2783/cxxopts.git",
-        commit = "cb60381e84df99a4829e3d3c657c06380f916d0f",
+        url = "https://github.com/jarro2783/cxxopts/archive/c74846a891b3cc3bfa992d588b1295f528d43039.zip",
+        sha256 = "4ba2b0a3c94e61501b974118a0fe171cd658f8efdd941e9ad82e71f48a98933a",
         build_file = "@com_stripe_ruby_typer//third_party:cxxopts.BUILD",
-        shallow_since = "1565216834 +1000",
+        strip_prefix = "cxxopts-c74846a891b3cc3bfa992d588b1295f528d43039",
     )
 
     http_archive(
@@ -120,166 +161,172 @@ def register_sorbet_dependencies():
         strip_prefix = "rang-3.1.0",
     )
 
-    git_repository(
+    http_archive(
+        name = "xxhash",
+        url = "https://github.com/Cyan4973/xxHash/archive/v0.8.0.zip",
+        sha256 = "064333c754f166837bbefefa497642a60b3f8035e54bae52eb304d3cb3ceb655",
+        build_file = "@com_stripe_ruby_typer//third_party:xxhash.BUILD",
+        strip_prefix = "xxHash-0.8.0",
+    )
+
+    http_archive(
         name = "com_google_absl",
-        remote = "https://github.com/abseil/abseil-cpp.git",
-        commit = "d9aa92d7fb324314f9df487ac23d32a25650b742",
-        shallow_since = "1565720473 -0400",
+        url = "https://github.com/abseil/abseil-cpp/archive/20240722.0.zip",
+        sha256 = "95e90be7c3643e658670e0dd3c1b27092349c34b632c6e795686355f67eca89f",
+        strip_prefix = "abseil-cpp-20240722.0",
     )
 
-    new_git_repository(
-        name = "compdb",
-        remote = "https://github.com/grailbio/bazel-compilation-database.git",
-        commit = "7bc80f9355b09466fffabce24d463d65e37fcc0f",
-        build_file_content = (
-            """
-package(default_visibility = ["//visibility:public"])
-"""
-        ),
-        shallow_since = "1541620420 -0800",
+    http_archive(
+        name = "com_grail_bazel_compdb",
+        url = "https://github.com/grailbio/bazel-compilation-database/archive/6b9329e37295eab431f82af5fe24219865403e0f.zip",
+        sha256 = "6cf0dc4b40023a26787cd7cdb629dccd26e2208c8a2f19e1dde4ca10c109c86c",
+        strip_prefix = "bazel-compilation-database-6b9329e37295eab431f82af5fe24219865403e0f",
     )
 
-    # NOTE: using this branch:
-    # https://github.com/DarkDimius/bazel-toolchain/tree/dp-srb-now
-    git_repository(
-        name = "com_grail_bazel_toolchain",
-        remote = "https://github.com/DarkDimius/bazel-toolchain.git",
-        commit = "4db2af1249fa1c20f5f12830e4ad209e56c870a4",
-        shallow_since = "1571938947 -0700",
+    http_archive(
+        name = "rules_cc",
+        sha256 = "b6f34b3261ec02f85dbc5a8bdc9414ce548e1f5f67e000d7069571799cb88b25",
+        strip_prefix = "rules_cc-726dd8157557f1456b3656e26ab21a1646653405",
+        urls = ["https://github.com/bazelbuild/rules_cc/archive/726dd8157557f1456b3656e26ab21a1646653405.tar.gz"],
     )
 
-    git_repository(
+    # TODO(jez) We keep our changes on the `sorbet` branch of `sorbet/bazel-toolchain`
+    # The `master` branch is the commit of `bazel-contrib/toolchains_llvm` that we're based on
+    # In 2ddd7d791 (#7912) we upgraded the toolchain. Our old toolchain patches are on the `sorbet-old-toolchain` branch
+    http_archive(
+        name = "toolchains_llvm",
+        url = "https://github.com/sorbet/bazel-toolchain/archive/5ed6d56dd7d2466bda56a6237c5ed70336b95ee5.tar.gz",
+        sha256 = "bdc706dbc33811ce4b2089d52564da106c2afbf3723cffbef301cc64e7615251",
+        strip_prefix = "bazel-toolchain-5ed6d56dd7d2466bda56a6237c5ed70336b95ee5",
+    )
+
+    http_archive(
         name = "io_bazel_rules_go",
-        remote = "https://github.com/bazelbuild/rules_go.git",
-        commit = "153c823428660f14b6e028cc71086833e445b2da",
-        shallow_since = "1545156968 -0500",
+        sha256 = "d6ab6b57e48c09523e93050f13698f708428cfd5e619252e369d377af6597707",
+        url = "https://github.com/bazelbuild/rules_go/releases/download/v0.43.0/rules_go-v0.43.0.zip",
     )
 
-    git_repository(
+    http_archive(
         name = "com_github_bazelbuild_buildtools",
-        remote = "https://github.com/bazelbuild/buildifier.git",
-        commit = "8a1359dc25add12a6e724f6a2bded60fbc23d08a",
-        shallow_since = "1537534502 +0200",
+        url = "https://github.com/bazelbuild/buildtools/archive/5bcc31df55ec1de770cb52887f2e989e7068301f.zip",
+        sha256 = "875d0c49953e221cfc35d2a3846e502f366dfa4024b271fa266b186ca4664b37",
+        strip_prefix = "buildtools-5bcc31df55ec1de770cb52887f2e989e7068301f",
     )
 
-    # optimized version of blake2 hashing algorithm
-    new_git_repository(
+    # optimized version of blake2 hashing algorithm, using SSE vector extensions
+    http_archive(
         name = "com_github_blake2_libb2",
-        remote = "https://github.com/BLAKE2/libb2",
-        commit = "fa83ddbe179912e9a7a57edf0333b33f6ff83056",
+        url = "https://github.com/BLAKE2/libb2/archive/fa83ddbe179912e9a7a57edf0333b33f6ff83056.zip",
+        sha256 = "dd25f7ac53371c2a15761fc1689d04de2ff948ac7e213a10d13961e24b0c9ae6",
         build_file = "@com_stripe_ruby_typer//third_party:libb2.BUILD",
-        shallow_since = "1563839709 +0100",
+        strip_prefix = "libb2-fa83ddbe179912e9a7a57edf0333b33f6ff83056",
     )
 
     # portable reference implementation of blake2
-    new_git_repository(
+    http_archive(
         name = "com_github_blake2_blake2",
-        remote = "https://github.com/BLAKE2/BLAKE2",
-        commit = "997fa5ba1e14b52c554fb03ce39e579e6f27b90c",
+        url = "https://github.com/BLAKE2/BLAKE2/archive/997fa5ba1e14b52c554fb03ce39e579e6f27b90c.zip",
+        sha256 = "56dafe9512f65728ce7abc78900272f8bf8e95ca04439b362d2dc461927b2a17",
         build_file = "@com_stripe_ruby_typer//third_party:blake2.BUILD",
-        shallow_since = "1531310717 +0100",
+        strip_prefix = "BLAKE2-997fa5ba1e14b52c554fb03ce39e579e6f27b90c",
     )
 
-    new_git_repository(
-        name = "com_github_msgpack_msgpack",
-        remote = "https://github.com/msgpack/msgpack-c",
-        commit = "3129326432dde8d509326ae9720a33f46dd56917",
-        build_file = "@com_stripe_ruby_typer//third_party:msgpack.BUILD",
-        shallow_since = "1564297751 +0900",
+    http_archive(
+        name = "com_github_ludocode_mpack",
+        url = "https://github.com/ludocode/mpack/archive/6883f6f8067d5c6dbaaddeaa47aaaaa763eea51c.zip",
+        sha256 = "fb184dc169722cecf9b47bece308f70861787f4615ebdbee7383b6434cfdbc0d",
+        build_file = "@com_stripe_ruby_typer//third_party:mpack.BUILD",
+        strip_prefix = "mpack-6883f6f8067d5c6dbaaddeaa47aaaaa763eea51c",
     )
 
-    new_git_repository(
+    http_archive(
         name = "com_github_d_bahr_crcpp",
-        remote = "https://github.com/d-bahr/CRCpp.git",
-        commit = "534c1d8c5517cfbb0a0f1ff0d9ec4c8b8ffd78e2",
+        url = "https://github.com/d-bahr/CRCpp/archive/51fbc35ef892e98abe91a51f7320749c929d72bd.zip",
+        sha256 = "57c4c127b5aa4451556969d6929cf9465a5d5481b3442ddb878d95296caeee4b",
         build_file = "@com_stripe_ruby_typer//third_party:crcpp.BUILD",
-        shallow_since = "1557307551 -0700",
+        strip_prefix = "CRCpp-51fbc35ef892e98abe91a51f7320749c929d72bd",
     )
 
     http_archive(
-        name = "emscripten_toolchain",
-        url = "https://github.com/kripken/emscripten/archive/1.38.25.tar.gz",
-        build_file = "@com_stripe_ruby_typer//third_party:emscripten-toolchain.BUILD",
-        sha256 = "4d6fa350895fabc25b89ce5f9dcb528e719e7c2bf7dacab2a3e3cc818ecd7019",
-        strip_prefix = "emscripten-1.38.25",
+        name = "emsdk",
+        sha256 = "47515d522229a103b7d9f34eacc1d88ac355b22fd754d13417a2191fd9d77d5f",
+        strip_prefix = "emsdk-3.1.59/bazel",
+        url = "https://github.com/emscripten-core/emsdk/archive/3.1.59.tar.gz",
     )
 
     http_archive(
-        name = "emscripten_clang_linux",
-        url = "https://storage.googleapis.com/webassembly/emscripten-releases-builds/old/linux/emscripten-llvm-e1.38.25.tar.gz",
-        build_file = "@com_stripe_ruby_typer//third_party:emscripten-clang.BUILD",
-        sha256 = "0e9a5a114a60c21604f4038b573109bd31424aeba275b4173480485ca0a56ba4",
-        strip_prefix = "emscripten-llvm-e1.38.25",
+        name = "rules_ragel",
+        url = "https://github.com/jmillikin/rules_ragel/archive/f99f17fcad2e155646745f4827ac636a3b5d4d15.zip",
+        sha256 = "f957682c6350b2e4484c433c7f45d427a86de5c8751a0d2a9836f36995fe0320",
+        strip_prefix = "rules_ragel-f99f17fcad2e155646745f4827ac636a3b5d4d15",
     )
 
     http_archive(
-        name = "emscripten_clang_darwin",
-        url = "https://storage.googleapis.com/webassembly/emscripten-releases-builds/old/mac/emscripten-llvm-e1.38.25.tar.gz",
-        build_file = "@com_stripe_ruby_typer//third_party:emscripten-clang.BUILD",
-        sha256 = "01519125c613d0b013193eaf5ac5031e6ec34aac2451c357fd4097874ceee38c",
-        strip_prefix = "emscripten-llvm-e1.38.25",
+        name = "rules_bison",
+        url = "https://github.com/jmillikin/rules_bison/archive/478079b28605a38000eaf83719568d756b3383a0.zip",
+        sha256 = "d662d200f4e2a868f6873d666402fa4d413f07ba1a433591c5f60ac601157fb9",
+        strip_prefix = "rules_bison-478079b28605a38000eaf83719568d756b3383a0",
     )
 
-    git_repository(
-        name = "io_bazel_rules_ragel",
-        remote = "https://github.com/jmillikin/rules_ragel.git",
-        commit = "5723d752a53dd8e25eb4509f3ed869196a06cb2a",
-        shallow_since = "1547960305 -0800",
+    http_archive(
+        name = "rules_m4",
+        url = "https://github.com/jmillikin/rules_m4/releases/download/v0.2.1/rules_m4-v0.2.1.tar.xz",
+        sha256 = "f59f75ac8a315d7647a2d058d324a87ff9ebbc4bf5c7a61b08d58da119a7fb43",
     )
 
-    git_repository(
-        name = "io_bazel_rules_bison",
-        remote = "https://github.com/jmillikin/rules_bison.git",
-        commit = "3809da0cea172c320f1fb7cd94bcb9be97897b14",
-        shallow_since = "1549513081 -0800",
-    )
-
-    git_repository(
-        name = "io_bazel_rules_m4",
-        remote = "https://github.com/jmillikin/rules_m4",
-        commit = "ae19f8df57f680c6dbad4887e162ca17ee97a13e",
-        shallow_since = "1549512390 -0800",
-    )
-
-    new_git_repository(
+    http_archive(
         name = "cpp_subprocess",
-        remote = "https://github.com/arun11299/cpp-subprocess.git",
-        commit = "6931e3d69fb36e6eae099585646e54ac644bf99c",
+        url = "https://github.com/arun11299/cpp-subprocess/archive/9c624ce4e3423cce9f148bafbae56abfd6437ea0.zip",
+        sha256 = "1810d1ec80f3c319dcbb530443b264b9a32a449b5a5d3630076e473648bba8cc",
         build_file = "@com_stripe_ruby_typer//third_party:cpp_subprocess.BUILD",
-        shallow_since = "1562838002 +0530",
+        strip_prefix = "cpp-subprocess-9c624ce4e3423cce9f148bafbae56abfd6437ea0",
     )
 
     http_archive(
-        name = "ruby_2_4_3",
-        url = "https://cache.ruby-lang.org/pub/ruby/2.4/ruby-2.4.3.tar.gz",
-        sha256 = "fd0375582c92045aa7d31854e724471fb469e11a4b08ff334d39052ccaaa3a98",
-        strip_prefix = "ruby-2.4.3",
-        build_file = "@com_stripe_ruby_typer//third_party/ruby:ruby-2.4.BUILD",
-        patches = [
-            "@com_stripe_ruby_typer//third_party/ruby:probes.h.patch",
-            "@com_stripe_ruby_typer//third_party/ruby:enc.encinit.c.patch",
-        ],
-        patch_args = ["-p1"],
+        name = "bazel_skylib",
+        sha256 = "cd55a062e763b9349921f0f5db8c3933288dc8ba4f76dd9416aac68acee3cb94",
+        url = "https://github.com/bazelbuild/bazel-skylib/releases/download/1.5.0/bazel-skylib-1.5.0.tar.gz",
     )
 
     http_archive(
-        name = "ruby_2_6_3",
-        url = "https://cache.ruby-lang.org/pub/ruby/2.6/ruby-2.6.3.tar.gz",
-        sha256 = "577fd3795f22b8d91c1d4e6733637b0394d4082db659fccf224c774a2b1c82fb",
-        strip_prefix = "ruby-2.6.3",
-        build_file = "@com_stripe_ruby_typer//third_party/ruby:ruby-2.6.BUILD",
-        patches = [
-            "@com_stripe_ruby_typer//third_party/ruby:probes.h.patch",
-            "@com_stripe_ruby_typer//third_party/ruby:enc.encinit.c.patch",
-            "@com_stripe_ruby_typer//third_party/ruby:debug_counter.h.patch",
-        ],
-        patch_args = ["-p1"],
+        name = "aspect_bazel_lib",
+        sha256 = "357dad9d212327c35d9244190ef010aad315e73ffa1bed1a29e20c372f9ca346",
+        strip_prefix = "bazel-lib-2.7.0",
+        url = "https://github.com/aspect-build/bazel-lib/releases/download/v2.7.0/bazel-lib-v2.7.0.tar.gz",
     )
 
+    shellcheck_version = "0.8.0"
     http_archive(
-        name = "zlib",
-        url = "https://zlib.net/zlib-1.2.11.tar.gz",
-        sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
-        strip_prefix = "zlib-1.2.11",
-        build_file = "@com_stripe_ruby_typer//third_party:zlib.BUILD",
+        name = "shellcheck_linux",
+        url = "https://github.com/koalaman/shellcheck/releases/download/v{0}/shellcheck-v{0}.linux.x86_64.tar.xz".format(shellcheck_version),
+        build_file = "@com_stripe_ruby_typer//third_party:shellcheck.BUILD",
+        sha256 = "ab6ee1b178f014d1b86d1e24da20d1139656c8b0ed34d2867fbb834dad02bf0a",
+        strip_prefix = "shellcheck-v{}".format(shellcheck_version),
+    )
+    http_archive(
+        name = "shellcheck_darwin",
+        url = "https://github.com/koalaman/shellcheck/releases/download/v{0}/shellcheck-v{0}.darwin.x86_64.tar.xz".format(shellcheck_version),
+        build_file = "@com_stripe_ruby_typer//third_party:shellcheck.BUILD",
+        sha256 = "e065d4afb2620cc8c1d420a9b3e6243c84ff1a693c1ff0e38f279c8f31e86634",
+        strip_prefix = "shellcheck-v{}".format(shellcheck_version),
+    )
+
+    # Needed to build CMake projects
+    http_archive(
+        name = "rules_foreign_cc",
+        url = "https://github.com/bazelbuild/rules_foreign_cc/archive/d74623f0ad47f4e375de81baa454eb106715a416.zip",
+        sha256 = "47b61d25dd52bdaa1d571dab6705d076f05ba3d7a1bbbfed36145f8281c0403f",
+        strip_prefix = "rules_foreign_cc-d74623f0ad47f4e375de81baa454eb106715a416",
+    )
+
+    # The current implementation of the `ruby/rbs` parser requires a Ruby VM to run.
+    # Shopify is currently working on removing the Ruby dependency.
+    # In the meantime, we pull the RBS parser from the `shopify` fork of the `rbs` gem
+    # while we're upstreaming their changes.
+    http_archive(
+        name = "rbs_parser",
+        url = "https://github.com/ruby/rbs/archive/ee566f83bb11c1b6e4acc13f1910ccc54ad53af4.zip",
+        sha256 = "d0a2a4077f4849566b6a93d874fd13465deef26630024e9d928e9e23ef90b186",
+        strip_prefix = "rbs-ee566f83bb11c1b6e4acc13f1910ccc54ad53af4",
+        build_file = "@com_stripe_ruby_typer//third_party:rbs_parser.BUILD",
     )

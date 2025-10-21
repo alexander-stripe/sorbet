@@ -1,51 +1,64 @@
 #include <string_view>
 
 #include "absl/strings/str_split.h"
-#include "common/formatting.h"
+#include "common/strings/formatting.h"
 #include "resolver/CorrectTypeAlias.h"
 
 using namespace std;
 
 namespace sorbet::resolver {
-std::string getIndent(core::Context ctx, const core::Loc loc) {
-    auto [_, indentLen] = loc.findStartOfLine(ctx);
+string getIndent(core::Context ctx, const core::Loc loc) {
+    auto [_, indentLen] = loc.findStartOfIndentation(ctx);
     return string(indentLen, ' ');
 }
 
-std::string indented(const std::string &s) {
+string indented(const string &s) {
     vector<string_view> lines = absl::StrSplit(s, '\n');
     return fmt::format("{}", fmt::map_join(lines, "\n", [](auto line) -> string { return fmt::format("  {}", line); }));
 }
 
 void CorrectTypeAlias::eagerToLazy(core::Context ctx, core::ErrorBuilder &e, ast::Send *send) {
-    if (send->args.size() != 1) {
+    bool wrapHash = false;
+
+    if (send->hasKwArgs()) {
+        if (send->numPosArgs() != 0) {
+            return;
+        }
+        wrapHash = true;
+    } else {
+        if (send->numPosArgs() != 1) {
+            return;
+        }
+    }
+
+    core::Loc argsLoc{ctx.file, send->argsLoc()};
+
+    if (!argsLoc.exists()) {
         return;
     }
-    auto *arg = send->args[0].get();
-    auto *hash = ast::cast_tree<ast::Hash>(send->args[0].get());
-    // Insert extra {}'s when a hash literal does not have them.
-    // Example: `T.type_alias(a: Integer,  b: String)`
-    bool wrapHash = hash != nullptr && hash->loc.source(ctx)[0] != '{';
-    auto [start, end] = send->loc.position(ctx);
+
+    auto [start, end] = ctx.locAt(send->loc).toDetails(ctx);
+
     if (start.line == end.line) {
         if (wrapHash) {
-            e.replaceWith("Convert to lazy type alias", send->loc, "T.type_alias {{{{{}}}}}", arg->loc.source(ctx));
+            e.replaceWith("Convert to lazy type alias", ctx.locAt(send->loc), "T.type_alias {{ {{{}}} }}",
+                          argsLoc.source(ctx).value());
         } else {
-            e.replaceWith("Convert to lazy type alias", send->loc, "T.type_alias {{{}}}", arg->loc.source(ctx));
+            e.replaceWith("Convert to lazy type alias", ctx.locAt(send->loc), "T.type_alias {{ {} }}",
+                          argsLoc.source(ctx).value());
         }
     } else {
-        auto loc = arg->loc;
-        core::Loc endLoc(loc.file(), loc.endPos(), loc.endPos());
+        core::Loc endLoc = argsLoc.copyEndWithZeroLength();
         string argIndent = getIndent(ctx, endLoc);
-        string argSrc = fmt::format("{}{}", argIndent, arg->loc.source(ctx));
+        string argSrc = fmt::format("{}{}", argIndent, argsLoc.source(ctx).value());
         if (wrapHash) {
             argSrc = fmt::format("{}{{\n{}\n{}}}", argIndent, indented(argSrc), argIndent);
         }
-        if (send->loc.position(ctx).second.line == endLoc.position(ctx).second.line) {
+        if (ctx.locAt(send->loc).toDetails(ctx).second.line == endLoc.toDetails(ctx).second.line) {
             argSrc = indented(argSrc);
         }
-        e.replaceWith("Convert to lazy type alias", send->loc, "T.type_alias do\n{}\n{}end", argSrc,
-                      getIndent(ctx, send->loc));
+        e.replaceWith("Convert to lazy type alias", ctx.locAt(send->loc), "T.type_alias do\n{}\n{}end", argSrc,
+                      getIndent(ctx, ctx.locAt(send->loc)));
     }
 }
 

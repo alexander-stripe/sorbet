@@ -1,5 +1,4 @@
 # typed: false
-# disable-fast-path: true
   T = T.type_alias
-# ^^^^^^^^^^^^^^^^ error: Redefining constant `T`
+# ^^^^^^^^^^^^^^^^ error: Cannot initialize the module `T` by constant assignment
     # ^^^^^^^^^^^^ error: No block given to `T.type_alias`

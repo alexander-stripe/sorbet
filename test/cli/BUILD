@@ -1,8 +1,9 @@
-load(":cli_test.bzl", "cli_test", "update_test")
+load("//tools:clang.bzl", "clang_tool")  # todo: this should be decoupled and use the library toolchain, not the compiler one
+load(":cli_test.bzl", "cli_tests")
 
-test_suite(
-    name = "cli",
-    tests = [cli_test(script) for script in glob(["*/*.sh"])],
+clang_tool("llvm-symbolizer")
+
+cli_tests(
+    "cli",
+    glob(["*/*.sh"]),
 )
-
-update_test()

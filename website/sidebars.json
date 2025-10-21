@@ -3,7 +3,10 @@
     "Getting Started": [
       "overview",
       "adopting",
-      "quickref"
+      "metrics",
+      "quickref",
+      "vscode",
+      "from-typescript"
     ],
     "Static & Runtime": [
       "gradual",
@@ -11,18 +14,22 @@
       "runtime",
       "rbi",
       "cli",
+      "cli-ref",
       "tconfiguration"
     ],
     "Troubleshooting": [
       "troubleshooting",
+      "why-type-annotations",
       "faq",
-      "error-reference"
+      "error-reference",
+      "unsupported"
     ],
     "Type System": [
       "sigs",
       "type-annotations",
       "type-assertions",
       "class-types",
+      "stdlib-generics",
       "nilable-types",
       "union-types",
       "flow-sensitive",
@@ -37,25 +44,60 @@
       "override-checking",
       "sealed",
       "class-of",
-      "stdlib-generics",
       "self-type",
       "noreturn",
-      "intersection-types"
+      "anything",
+      "attached-class",
+      "intersection-types",
+      "generics",
+      "non-forcing-constants",
+      "strong"
+    ],
+    "Ruby & DSL Features": [
+      "attr_reader",
+      "minitest"
+    ],
+    "Editor Features": [
+      "lsp",
+      "server-status",
+      "lsp-typed-level",
+      "go-to-def",
+      "hover",
+      "autocompletion",
+      "references",
+      "code-actions",
+      "outline",
+      "doc-comments",
+      "sig-suggestion",
+      "highlight-untyped",
+      "sorbet-uris"
     ],
     "Experimental Features": [
       "tuples",
       "shapes",
-      "metaprogramming-plugins"
+      "overloads",
+      "requires-ancestor",
+      "rbs-support"
     ]
   },
   "talks": {
     "Talks": [
       "talks/ruby-kaigi-2018",
       "talks/strange-loop-2018",
+      "talks/ruby-conf-2018",
       "talks/ruby-kaigi-2019",
       "talks/curry-on-2019",
-      "talks/jvm-ls-2019"
+      "talks/jvm-ls-2019",
+      "talks/ruby-conf-2019",
+      "talks/qcon-2019",
+      "talks/parisrb-2020",
+      "talks/pdxrb-2020",
+      "talks/ruby-conf-2021"
     ]
   },
-  "legal": { "Legal": [ "legal/trademark-policy" ] }
+  "legal": {
+    "Legal": [
+      "legal/trademark-policy"
+    ]
+  }
 }

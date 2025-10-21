@@ -24,10 +24,10 @@ class Main
     end
 
     sig {void}
-    def self.missing_arg(my_arg) # error: Type not specified for argument `my_arg`
+    def self.missing_arg(my_arg) # error: Type not specified for parameter `my_arg`
     end
 end
 
 Main.new.foo
-Main.voider.bad # error: Can not call method `bad` on void type
-Main.voider.equal?(3) # error: Can not call method `equal?` on void type
+Main.voider.bad # error: Cannot call method `bad` on void type
+Main.voider.equal?(3) # error: Cannot call method `equal?` on void type

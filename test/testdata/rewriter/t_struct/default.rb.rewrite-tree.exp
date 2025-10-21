@@ -1,43 +1,62 @@
-class <emptyTree><<C <root>>> < ()
+class <emptyTree><<C <root>>> < (::<todo sym>)
   class <emptyTree>::<C Default><<C <todo sym>>> < (<emptyTree>::<C T>::<C Struct>)
     ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"foo" => <emptyTree>::<C Integer>}).void()
+      <self>.params(:foo, <emptyTree>::<C Integer>).void()
     end
 
-    def initialize<<C <todo sym>>>(foo: = <emptyTree>, &<blk>)
-      <emptyTree>
-    end
-
-    ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({}).returns(<emptyTree>::<C Integer>)
-    end
-
-    def foo<<C <todo sym>>>(&<blk>)
-      ::T.cast(::T.unsafe(nil), <emptyTree>::<C Integer>)
+    def initialize<<todo method>>(foo: = 3, &<blk>)
+      begin
+        @foo = <cast:let>(foo, <todo sym>, <emptyTree>::<C Integer>)
+        nil
+      end
     end
 
     ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => <emptyTree>::<C Integer>}).returns(<emptyTree>::<C Integer>)
+      <self>.returns(<emptyTree>::<C Integer>)
     end
 
-    def foo=<<C <todo sym>>>(arg0, &<blk>)
-      ::T.cast(::T.unsafe(nil), <emptyTree>::<C Integer>)
+    def foo<<todo method>>(&<blk>)
+      @foo
     end
 
     ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"foo" => <emptyTree>::<C Integer>}).returns(<emptyTree>::<C Integer>)
+      <self>.params(:arg0, <emptyTree>::<C Integer>).returns(<emptyTree>::<C Integer>)
     end
 
-    def initialize<defaultArg>1<<C <todo sym>>>(foo: = <emptyTree>, &<blk>)
-      3
+    def foo=<<todo method>>(arg0, &<blk>)
+      @foo = arg0
     end
+
+    <runtime method definition of initialize>
+
+    <self>.prop(:foo, <emptyTree>::<C Integer>, :default, 3)
+
+    <runtime method definition of foo>
+
+    <runtime method definition of foo=>
   end
 
   <emptyTree>::<C T>.reveal_type(<emptyTree>::<C Default>.new().foo())
 
-  <emptyTree>::<C Default>.new({:"foo" => "no"})
+  <emptyTree>::<C Default>.new(:foo, "no")
 
-  <emptyTree>::<C Default>.new({:"foo" => 3, :"bar" => 4})
+  <emptyTree>::<C Default>.new(:foo, 3, :bar, 4)
 
-  <emptyTree>::<C T>.reveal_type(<emptyTree>::<C Default>.new({:"foo" => 3}).foo())
+  <emptyTree>::<C T>.reveal_type(<emptyTree>::<C Default>.new(:foo, 3).foo())
+
+  class <emptyTree>::<C Bad><<C <todo sym>>> < (<emptyTree>::<C T>::<C Struct>)
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.void()
+    end
+
+    def initialize<<todo method>>(&<blk>)
+      nil
+    end
+
+    <runtime method definition of initialize>
+
+    <self>.prop(:no_type_on_prop)
+
+    <self>.const(:no_type_on_const)
+  end
 end

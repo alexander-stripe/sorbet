@@ -1,0 +1,29 @@
+Begin {
+  stmts = [
+    DefMethod {
+      name = <U foo>
+      params = Params {
+        params = [
+          Param {
+            name = <U a>
+          }
+        ]
+      }
+      body = NULL
+    }
+    DefMethod {
+      name = <U bar>
+      params = Params {
+        params = [
+          Param {
+            name = <U a>
+          }
+          Param {
+            name = <U b>
+          }
+        ]
+      }
+      body = NULL
+    }
+  ]
+}

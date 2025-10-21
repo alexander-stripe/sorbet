@@ -1,0 +1,8 @@
+s(:def, :foo,
+  s(:params,
+    s(:param, :argument),
+    s(:kwrestarg, :**)),
+  s(:send, nil, :bar,
+    s(:lvar, :argument),
+    s(:hash,
+      s(:forwarded_kwrestarg))))

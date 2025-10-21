@@ -2,7 +2,7 @@
 
 # This library provides three different ways to delegate method calls to an
 # object. The easiest to use is
-# [`SimpleDelegator`](https://docs.ruby-lang.org/en/2.6.0/SimpleDelegator.html).
+# [`SimpleDelegator`](https://docs.ruby-lang.org/en/2.7.0/SimpleDelegator.html).
 # Pass an object to the constructor and all methods supported by the object will
 # be delegated. This object can be changed later.
 #
@@ -12,9 +12,9 @@
 #
 # Finally, if you need full control over the delegation scheme, you can inherit
 # from the abstract class
-# [`Delegator`](https://docs.ruby-lang.org/en/2.6.0/Delegator.html) and
+# [`Delegator`](https://docs.ruby-lang.org/en/2.7.0/Delegator.html) and
 # customize as needed. (If you find yourself needing this control, have a look
-# at [`Forwardable`](https://docs.ruby-lang.org/en/2.6.0/Forwardable.html) which
+# at [`Forwardable`](https://docs.ruby-lang.org/en/2.7.0/Forwardable.html) which
 # is also in the standard library. It may suit your needs better.)
 #
 # SimpleDelegator's implementation serves as a nice example of the use of
@@ -35,13 +35,79 @@
 #
 # ## Notes
 #
-# Be advised, [`RDoc`](https://docs.ruby-lang.org/en/2.6.0/RDoc.html) will not
+# Be advised, [`RDoc`](https://docs.ruby-lang.org/en/2.7.0/RDoc.html) will not
 # detect delegated methods.
 class Delegator < BasicObject
+  # Pass in the *obj* to delegate method calls to. All methods supported by
+  # *obj* will be delegated to.
+  sig { params(obj: BasicObject).void }
+  def initialize(obj); end
+
+  # Delegates ! to the \_*getobj*_
+  def !; end
+
+  # Returns true if two objects are not considered of equal value.
+  def !=(obj); end
+
+  # Returns true if two objects are considered of equal value.
+  def ==(obj); end
+
+  # This method must be overridden by subclasses and should return the object
+  # method calls are being delegated to.
+  def __getobj__; end
+
+  # This method must be overridden by subclasses and change the object delegate
+  # to *obj*.
+  def __setobj__(obj); end
+
+  # Returns true if two objects are considered of equal value.
+  def eql?(obj); end
+
+  # :method: freeze Freeze both the object returned by \_*getobj*_ and self.
+  def freeze; end
+
+  # Serialization support for the object returned by \_*getobj*_.
+  def marshal_dump; end
+
+  # Reinitializes delegation from a serialized object.
+  def marshal_load(data); end
+
+  # Handles the magic of delegation through \_*getobj*_.
+  def method_missing(m, *args, &block); end
+
+  # Returns the methods available to this delegate object as the union of this
+  # object's and \_*getobj*_ methods.
+  def methods(all = _); end
+
+  # Returns the methods available to this delegate object as the union of this
+  # object's and \_*getobj*_ protected methods.
+  def protected_methods(all = _); end
+
+  # Returns the methods available to this delegate object as the union of this
+  # object's and \_*getobj*_ public methods.
+  def public_methods(all = _); end
+
+  # Taint both the object returned by \_*getobj*_ and self.
+  def taint; end
+
+  # Trust both the object returned by \_*getobj*_ and self.
+  def trust; end
+
+  # Untaint both the object returned by \_*getobj*_ and self.
+  def untaint; end
+
+  # Untrust both the object returned by \_*getobj*_ and self.
+  def untrust; end
+
+  def self.const_missing(n); end
+
+  def self.delegating_block(mid); end
+
+  def self.public_api; end
 end
 
 # A concrete implementation of
-# [`Delegator`](https://docs.ruby-lang.org/en/2.6.0/Delegator.html), this class
+# [`Delegator`](https://docs.ruby-lang.org/en/2.7.0/Delegator.html), this class
 # provides the means to delegate all supported method calls to the object passed
 # into the constructor and even to change the object being delegated to at a
 # later time with #\_\_setobj\_\_.
@@ -65,9 +131,9 @@ end
 # ```
 #
 # A
-# [`SimpleDelegator`](https://docs.ruby-lang.org/en/2.6.0/SimpleDelegator.html)
+# [`SimpleDelegator`](https://docs.ruby-lang.org/en/2.7.0/SimpleDelegator.html)
 # instance can take advantage of the fact that
-# [`SimpleDelegator`](https://docs.ruby-lang.org/en/2.6.0/SimpleDelegator.html)
+# [`SimpleDelegator`](https://docs.ruby-lang.org/en/2.7.0/SimpleDelegator.html)
 # is a subclass of `Delegator` to call `super` to have methods called on the
 # object being delegated to.
 #
@@ -117,4 +183,22 @@ end
 #   Unique:  6
 # ```
 class SimpleDelegator < Delegator
+  # Returns the current object method calls are being delegated to.
+  def __getobj__; end
+
+  # Changes the delegate object to *obj*.
+  #
+  # It's important to note that this does **not** cause SimpleDelegator's
+  # methods to change. Because of this, you probably only want to change
+  # delegation to objects of the same type as the original delegate.
+  #
+  # Here's an example of changing the delegation object.
+  #
+  # ```ruby
+  # names = SimpleDelegator.new(%w{James Edward Gray II})
+  # puts names[1]    # => Edward
+  # names.__setobj__(%w{Gavin Sinclair})
+  # puts names[1]    # => Sinclair
+  # ```
+  def __setobj__(obj); end
 end

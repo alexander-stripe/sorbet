@@ -1,19 +1,12 @@
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
+  class <emptyTree><<C <root>>> < (::<todo sym>)
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
-      begin
-        <emptyTree>
-        ::Sorbet::Private::Static.keep_for_ide(::Test)
-        <emptyTree>
-      end
+      <emptyTree>
     end
   end
   class ::Test<<C Test>> < (::<todo sym>)
-    <emptyTree>
-
-    <emptyTree>
-
     def test_next_break(<blk>)
       <self>.each() do ||
         begin
@@ -32,7 +25,7 @@ begin
     end
 
     def self.<static-init>(<blk>)
-      <emptyTree>
+      <runtime method definition of test_next_break>
     end
   end
   <emptyTree>

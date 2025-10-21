@@ -1,81 +1,227 @@
-#include "common/Counters.h"
 #include "common/FileOps.h"
+#include "common/counters/Counters.h"
 
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
-#include "common/Counters_impl.h"
 #include "common/JSON.h"
-#include "common/formatting.h"
+#include "common/counters/Counters_impl.h"
+#include "common/strings/formatting.h"
 #include "common/web_tracer_framework/tracing.h"
-#include "version/version.h"
-#include <chrono>
+#include "rapidjson/writer.h"
+#include "sorbet_version/sorbet_version.h"
 #include <string>
 #include <unistd.h>
+
 using namespace std;
+
 namespace sorbet::web_tracer_framework {
-bool Tracing::storeTraces(const CounterState &counters, string_view fileName) {
-    fmt::memory_buffer result;
 
-    if (!FileOps::exists(fileName)) {
-        fmt::format_to(result, "[\n");
+namespace {
+
+void endLine(rapidjson::StringBuffer &result, rapidjson::Writer<rapidjson::StringBuffer> &writer) {
+    // From the docs:
+    //
+    // > This function reset the writer with a new stream and default settings,
+    // > in order to make a Writer object reusable for output multiple JSONs.
+    //
+    // We're using it so we can manage writing the top-level array ourselves
+    // (one object per line, no closing ] and re-use previous file data).
+    writer.Reset(result);
+
+    result.Put(',');
+    result.Put('\n');
+}
+
+} // namespace
+
+string Tracing::stateToJSONL(const CounterState &counters, pid_t pid, microseconds now) {
+    rapidjson::StringBuffer result;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(result);
+
+    // header / meta information
+    {
+        writer.StartObject();
+
+        writer.String("name");
+        writer.String("process_name");
+
+        writer.String("ph");
+        writer.String("M");
+
+        writer.String("pid");
+        writer.Int(pid);
+
+        writer.String("args");
+        writer.StartObject();
+        writer.String("name");
+        writer.String(fmt::format("Sorbet v{}", sorbet_full_version_string));
+        writer.EndObject();
+
+        writer.EndObject();
+        endLine(result, writer);
     }
-    auto now = std::chrono::duration<double, std::micro>(chrono::steady_clock::now().time_since_epoch()).count();
 
-    auto pid = getpid();
-    fmt::format_to(result,
-                   "{{\"name\":\"process_name\",\"ph\":\"M\",\"pid\":{},\"args\":{{\"name\":\"Sorbet v{}\"}}}},\n", pid,
-                   Version::full_version_string);
     counters.counters->canonicalize();
 
-    for (auto &cat : counters.counters->countersByCategory) {
-        fmt::format_to(result, "{{\"name\":\"{}\",\"ph\":\"C\",\"ts\":{:.3f},\"pid\":{},\"args\":{{{}}}}},\n",
-                       cat.first, now, pid, fmt::map_join(cat.second, ",", [](const auto &e) -> string {
-                           return fmt::format("\"{}\":{}", e.first, e.second);
-                       }));
+    for (auto &[category, counters] : counters.counters->countersByCategory) {
+        writer.StartObject();
+
+        writer.String("name");
+        writer.String(category);
+
+        writer.String("ph");
+        writer.String("C");
+
+        writer.String("ts");
+        auto ts = fmt::format("{:.3f}", now.usec * 1.0);
+        writer.RawValue(ts.c_str(), ts.length(), rapidjson::Type::kNumberType);
+
+        writer.String("pid");
+        writer.Int(pid);
+
+        writer.String("args");
+        writer.StartObject();
+        for (const auto &[counterName, value] : counters) {
+            writer.String(counterName);
+            writer.String(fmt::format("{}", value));
+        }
+        writer.EndObject();
+
+        writer.EndObject();
+        endLine(result, writer);
     }
 
-    for (auto &e : counters.counters->counters) {
-        fmt::format_to(result, "{{\"name\":\"{}\",\"ph\":\"C\",\"ts\":{:.3f},\"pid\":{},\"args\":{{\"value\":{}}}}},\n",
-                       e.first, now, pid, e.second);
+    for (auto &[counterName, value] : counters.counters->counters) {
+        writer.StartObject();
+
+        writer.String("name");
+        writer.String(counterName);
+
+        writer.String("ph");
+        writer.String("C");
+
+        writer.String("ts");
+        auto ts = fmt::format("{:.3f}", now.usec * 1.0);
+        writer.RawValue(ts.c_str(), ts.length(), rapidjson::Type::kNumberType);
+
+        writer.String("pid");
+        writer.Int(pid);
+
+        writer.String("args");
+        writer.StartObject();
+        writer.String("value");
+        writer.String(fmt::format("{}", value));
+        writer.EndObject();
+
+        writer.EndObject();
+        endLine(result, writer);
     }
 
-    // // for some reason, emmiting all of our counters breaks flow even visualitaion. @dmitry decided to not emmit
-    // // histograms
-    //
-    // for (auto &hist : counters.counters->histograms) {
-    //     fmt::format_to(result,
-    //     "{{\"name\":\"{}\",\"ph\":\"C\",\"ts\":{},\"pid\":{},\"args\":{{{}}}}},\n",
-    //                    hist.first, now, pid, fmt::map_join(hist.second, ",", [](const auto &e) -> string {
-    //                        return fmt::format("\"{}\":{}", e.first, e.second);
-    //                    }));
-    // }
+    // For some reason, emitting all of our counters breaks flow event visualitaion.
+    // @dmitry decided to not emit histograms
 
-    for (const auto &e : counters.counters->timings) {
-        string maybeArgs;
-        if (!e.args.empty()) {
-            maybeArgs = fmt::format(",\"args\":{{{}}}", fmt::map_join(e.args, ",", [](const auto &nameValue) -> string {
-                                        return fmt::format("\"{}\":\"{}\"", JSON::escape(nameValue.first),
-                                                           JSON::escape(nameValue.second));
-                                    }));
+    for (const auto &timing : counters.counters->timings) {
+        writer.StartObject();
+
+        writer.String("name");
+        writer.String(timing.measure);
+
+        writer.String("ph");
+        writer.String("X");
+
+        writer.String("ts");
+        auto ts = fmt::format("{:.3f}", timing.start.usec * 1.0);
+        writer.RawValue(ts.c_str(), ts.length(), rapidjson::Type::kNumberType);
+
+        writer.String("dur");
+        auto dur = fmt::format("{:.3f}", (timing.end.usec - timing.start.usec) * 1.0);
+        writer.RawValue(dur.c_str(), dur.length(), rapidjson::Type::kNumberType);
+
+        writer.String("pid");
+        writer.Int(pid);
+
+        writer.String("tid");
+        writer.Int(timing.threadId);
+
+        if ((timing.args != nullptr && !timing.args->empty()) || (timing.tags != nullptr && !timing.tags->empty())) {
+            writer.String("args");
+
+            writer.StartObject();
+            // Puts all tags and args in the same namespace, and does not check for overlaps.
+            if (timing.args != nullptr && !timing.args->empty()) {
+                for (const auto &[key, value] : *timing.args) {
+                    writer.String(key);
+                    writer.String(value);
+                }
+            }
+            if (timing.tags != nullptr && !timing.tags->empty()) {
+                for (const auto &[key, value] : *timing.tags) {
+                    writer.String(key);
+                    writer.String(value);
+                }
+            }
+            writer.EndObject();
         }
 
-        string maybeFlow;
-        if (e.self.id != 0) {
-            ENFORCE(e.prev.id == 0);
-            maybeFlow = fmt::format(",\"bind_id\":{},\"flow_out\":true", e.self.id);
-        } else if (e.prev.id != 0) {
-            maybeFlow = fmt::format(",\"bind_id\":{},\"flow_in\":true", e.prev.id);
+        if (timing.self.id != 0) {
+            ENFORCE(timing.prev.id == 0);
+
+            writer.String("bind_id");
+            writer.Int(timing.self.id);
+
+            writer.String("flow_out");
+            writer.Bool(true);
+        } else if (timing.prev.id != 0) {
+            writer.String("bind_id");
+            writer.Int(timing.prev.id);
+
+            writer.String("flow_in");
+            writer.Bool(true);
         }
 
-        fmt::format_to(result,
-                       "{{\"name\":\"{}\",\"ph\":\"X\",\"ts\":{:.3f},\"dur\":{:.3f},\"pid\":{},\"tid\":{}{}{}}},\n",
-                       e.measure, (std::chrono::duration<double, std::micro>(e.start.time_since_epoch())).count(),
-                       (std::chrono::duration<double, std::micro>(e.end - e.start)).count(), pid, e.threadId, maybeArgs,
-                       maybeFlow);
+        writer.EndObject();
+        endLine(result, writer);
     }
 
-    fmt::format_to(result, "\n");
-    FileOps::append(fileName, to_string(result));
+    return result.GetString();
+}
+
+string Tracing::jsonlToJSON(const string &jsonl, bool needsOpeningBracket, bool strictClosing) {
+    string result;
+
+    if (needsOpeningBracket) {
+        result += "[\n";
+    }
+
+    result += jsonl;
+
+    // Strict generation is useful when generating this file for non-Perfetto tools; non-strict
+    // is useful for general forgetfulness and for doing tracing when LSP is active, as LSP will
+    // continually append new entries to the file.
+    if (strictClosing) {
+        // Generating the JSONL will have appended ",\n"; we want to make `result` valid JSON,
+        // so we need to strip the ",".
+        if (absl::EndsWith(result, ",\n")) {
+            result[result.size() - 2] = '\n';
+            result[result.size() - 1] = ']';
+        }
+    }
+    result += '\n';
+
+    return result;
+}
+
+// Super rudimentary support for outputting trace files in Google's Trace Event Format
+// https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview
+bool Tracing::storeTraces(const CounterState &counters, const string &fileName, bool strict) {
+    auto now = Timer::clock_gettime_coarse();
+    auto pid = getpid();
+
+    string jsonl = stateToJSONL(counters, pid, now);
+    string result = jsonlToJSON(jsonl, !FileOps::exists(fileName), strict);
+
+    FileOps::append(fileName, result);
     return true;
 }
 } // namespace sorbet::web_tracer_framework

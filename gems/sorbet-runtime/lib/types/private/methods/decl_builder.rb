@@ -2,7 +2,7 @@
 # typed: true
 
 module T::Private::Methods
-  Declaration = Struct.new(:mod, :params, :returns, :bind, :mode, :checked, :finalized, :on_failure, :override_allow_incompatible, :type_parameters)
+  Declaration = Struct.new(:mod, :params, :returns, :bind, :mode, :checked, :finalized, :on_failure, :override_allow_incompatible, :type_parameters, :raw)
 
   class DeclBuilder
     attr_reader :decl
@@ -15,8 +15,7 @@ module T::Private::Methods
       end
     end
 
-    def initialize(mod)
-      # TODO RUBYPLAT-1278 - with ruby 2.5, use kwargs here
+    def initialize(mod, raw)
       @decl = Declaration.new(
         mod,
         ARG_NOT_PROVIDED, # params
@@ -28,13 +27,31 @@ module T::Private::Methods
         ARG_NOT_PROVIDED, # on_failure
         nil, # override_allow_incompatible
         ARG_NOT_PROVIDED, # type_parameters
+        raw
       )
     end
 
-    def params(params)
+    def params(*unused_positional_params, **params)
       check_live!
       if !decl.params.equal?(ARG_NOT_PROVIDED)
         raise BuilderError.new("You can't call .params twice")
+      end
+
+      if unused_positional_params.any?
+        some_or_only = params.any? ? "some" : "only"
+        raise BuilderError.new(<<~MSG)
+          'params' was called with #{some_or_only} positional arguments, but it needs to be called with keyword arguments.
+          The keyword arguments' keys must match the name and order of the method's parameters.
+        MSG
+      end
+
+      if params.empty?
+        raise BuilderError.new(<<~MSG)
+          'params' was called without any arguments, but it needs to be called with keyword arguments.
+          The keyword arguments' keys must match the name and order of the method's parameters.
+
+          Omit 'params' entirely for methods with no parameters.
+        MSG
       end
 
       decl.params = params
@@ -62,7 +79,7 @@ module T::Private::Methods
         raise BuilderError.new("You can't call .void after calling .returns.")
       end
 
-      decl.returns = T::Private::Types::Void.new
+      decl.returns = T::Private::Types::Void::Private::INSTANCE
 
       self
     end
@@ -85,7 +102,7 @@ module T::Private::Methods
         raise BuilderError.new("You can't call .checked multiple times in a signature.")
       end
       if level == :never && !decl.on_failure.equal?(ARG_NOT_PROVIDED)
-        raise BuilderError.new("You can't use .checked(:never) with .on_failure because .on_failure will have no effect.")
+        raise BuilderError.new("You can't use .checked(:#{level}) with .on_failure because .on_failure will have no effect.")
       end
       if !T::Private::RuntimeLevels::LEVELS.include?(level)
         raise BuilderError.new("Invalid `checked` level '#{level}'. Use one of: #{T::Private::RuntimeLevels::LEVELS}.")
@@ -103,7 +120,7 @@ module T::Private::Methods
         raise BuilderError.new("You can't call .on_failure multiple times in a signature.")
       end
       if decl.checked == :never
-        raise BuilderError.new("You can't use .on_failure with .checked(:never) because .on_failure will have no effect.")
+        raise BuilderError.new("You can't use .on_failure with .checked(:#{decl.checked}) because .on_failure will have no effect.")
       end
 
       decl.on_failure = args
@@ -137,7 +154,12 @@ module T::Private::Methods
       case decl.mode
       when Modes.standard
         decl.mode = Modes.override
-        decl.override_allow_incompatible = allow_incompatible
+        case allow_incompatible
+        when true, false, :visibility
+          decl.override_allow_incompatible = allow_incompatible
+        else
+          raise BuilderError.new(".override(allow_incompatible: ...) only accepts `true`, `false`, or `:visibility`, got: #{allow_incompatible.inspect}")
+        end
       when Modes.override, Modes.overridable_override
         raise BuilderError.new(".override cannot be repeated in a single signature")
       when Modes.overridable
@@ -166,7 +188,7 @@ module T::Private::Methods
       self
     end
 
-    # Declares valid type paramaters which can be used with `T.type_parameter` in
+    # Declares valid type parameters which can be used with `T.type_parameter` in
     # this `sig`.
     #
     # This is used for generic methods. Example usage:
@@ -214,15 +236,17 @@ module T::Private::Methods
         decl.on_failure = nil
       end
       if decl.params.equal?(ARG_NOT_PROVIDED)
-        decl.params = {}
+        decl.params = FROZEN_HASH
       end
       if decl.type_parameters.equal?(ARG_NOT_PROVIDED)
-        decl.type_parameters = {}
+        decl.type_parameters = FROZEN_HASH
       end
 
       decl.finalized = true
 
       self
     end
+
+    FROZEN_HASH = {}.freeze
   end
 end

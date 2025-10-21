@@ -20,6 +20,9 @@ class MyTest
       C3.new
     end
 
+    it "finds errors in the test name: #{bad_variable}" do # error: Method `bad_variable` does not exist on `T.class_of(MyTest)`
+    end
+
     describe "some inner tests" do
         def inside_method
         end
@@ -38,7 +41,7 @@ class MyTest
     end
 
     after do
-        @foo = nil # error: Reassigning field
+        @foo = nil # error: Expected `Integer` but found `NilClass` for field
         instance_helper
     end
 
@@ -75,6 +78,22 @@ class MyTest
         end
       end
     end
+
+    it do
+      puts("anonymous it blocks")
+    end
+end
+
+describe 'extends T::Sig' do
+  extend T::Sig
+
+  sig { returns(Integer) }
+  def example = 0
+
+  it 'calls example' do
+    res = example
+    T.reveal_type(res) # error: `Integer`
+  end
 end
 
 def junk

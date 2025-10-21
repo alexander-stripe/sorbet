@@ -1,10 +1,10 @@
 # typed: strict
-# exhaustive-apply-code-action: true
+# selective-apply-code-action: quickfix
 
 class Foo
   extend T::Sig
 
-  sig {generated.overridable.void}
+  sig { generated.overridable.void }
   def self.bar
   end
 end

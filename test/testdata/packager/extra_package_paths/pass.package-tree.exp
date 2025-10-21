@@ -1,0 +1,199 @@
+# -- test/testdata/packager/extra_package_paths/bar/__package.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::<PackageSpecRegistry>::Project::Bar<<C Bar>> < (::Sorbet::Private::Static::PackageSpec)
+    <self>.import(::<PackageSpecRegistry>::<C Project>::<C Foo>)
+
+    <self>.import(::<PackageSpecRegistry>::<C Project>::<C Baz>::<C Package>)
+
+    <self>.import(::<PackageSpecRegistry>::<C Project>::<C FooBar>)
+  end
+end
+# -- test/testdata/packager/extra_package_paths/baz/__package.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::<PackageSpecRegistry>::Project::Baz::Package<<C Package>> < (::Sorbet::Private::Static::PackageSpec)
+    <self>.export(<emptyTree>::<C Project>::<C Baz>::<C Package>::<C C>)
+
+    <self>.export(<emptyTree>::<C Project>::<C Baz>::<C Package>::<C E>)
+  end
+end
+# -- test/testdata/packager/extra_package_paths/foo/__package.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::<PackageSpecRegistry>::Project::Foo<<C Foo>> < (::Sorbet::Private::Static::PackageSpec)
+    <self>.export(<emptyTree>::<C Project>::<C Foo>::<C B>)
+
+    <self>.export(<emptyTree>::<C Project>::<C Foo>::<C D>)
+  end
+end
+# -- test/testdata/packager/extra_package_paths/foo_bar/__package.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::<PackageSpecRegistry>::Project::FooBar<<C FooBar>> < (::Sorbet::Private::Static::PackageSpec)
+    <self>.export(<emptyTree>::<C Project>::<C FooBar>::<C Z>)
+  end
+end
+# -- test/testdata/packager/extra_package_paths/bar/bar.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::Project::Bar::Bar<<C Bar>> < (::<todo sym>)
+    <self>.sig() do ||
+      <self>.void()
+    end
+
+    def bar1(<blk>)
+      begin
+        <emptyTree>::<C Project>::<C Foo>::<C B>.b()
+        <emptyTree>::<C Project>::<C Foo>::<C D>.d()
+        <emptyTree>::<C Project>::<C FooBar>::<C Z>.z()
+      end
+    end
+
+    <self>.sig() do ||
+      <self>.void()
+    end
+
+    def bar2(<blk>)
+      begin
+        <emptyTree>::<C Project>::<C Baz>::<C Package>::<C C>.c()
+        <emptyTree>::<C Project>::<C Baz>::<C Package>::<C E>.e()
+      end
+    end
+
+    <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+    <runtime method definition of bar1>
+
+    <runtime method definition of bar2>
+  end
+end
+# -- test/testdata/packager/extra_package_paths/extra/Project_Baz_Package/c.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  module ::Project::Baz::Package<<C Package>> < ()
+    class ::Project::Baz::Package::C<<C C>> < (::<todo sym>)
+      <self>.sig() do ||
+        <self>.void()
+      end
+
+      def self.c(<blk>)
+        <emptyTree>
+      end
+
+      <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+      <runtime method definition of self.c>
+    end
+  end
+end
+# -- test/testdata/packager/extra_package_paths/extra/Project_Foo/b.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::Project::Foo::B<<C B>> < (::<todo sym>)
+    <self>.sig() do ||
+      <self>.void()
+    end
+
+    def self.b(<blk>)
+      <emptyTree>
+    end
+
+    <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+    <runtime method definition of self.b>
+  end
+end
+# -- test/testdata/packager/extra_package_paths/extra_slash/Project/Baz/Package/E.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  module ::Project::Baz::Package<<C Package>> < ()
+    class ::Project::Baz::Package::E<<C E>> < (::<todo sym>)
+      <self>.sig() do ||
+        <self>.void()
+      end
+
+      def self.e(<blk>)
+        <emptyTree>
+      end
+
+      <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+      <runtime method definition of self.e>
+    end
+  end
+end
+# -- test/testdata/packager/extra_package_paths/extra_slash/Project/Foo/D.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::Project::Foo::D<<C D>> < (::<todo sym>)
+    <self>.sig() do ||
+      <self>.void()
+    end
+
+    def self.d(<blk>)
+      <emptyTree>
+    end
+
+    <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+    <runtime method definition of self.d>
+  end
+end
+# -- test/testdata/packager/extra_package_paths/extra_slash/Project/FooBar/Z.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::Project::FooBar::Z<<C Z>> < (::<todo sym>)
+    <self>.sig() do ||
+      <self>.void()
+    end
+
+    def self.z(<blk>)
+      <emptyTree>
+    end
+
+    <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+    <runtime method definition of self.z>
+  end
+end
+# -- test/testdata/packager/extra_package_paths/extra_slash_deprecated/Project/Baz/Package/E.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  module ::Project::Baz::Package<<C Package>> < ()
+    class ::Project::Baz::Package::E<<C E>> < (::<todo sym>)
+      <self>.sig() do ||
+        <self>.void()
+      end
+
+      def self.e(<blk>)
+        <emptyTree>
+      end
+
+      <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+      <runtime method definition of self.e>
+    end
+  end
+end
+# -- test/testdata/packager/extra_package_paths/extra_slash_deprecated/Project/Foo/D.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::Project::Foo::D<<C D>> < (::<todo sym>)
+    <self>.sig() do ||
+      <self>.void()
+    end
+
+    def self.d(<blk>)
+      <emptyTree>
+    end
+
+    <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+    <runtime method definition of self.d>
+  end
+end
+# -- test/testdata/packager/extra_package_paths/extra_slash_deprecated/Project/Foo_bar/Z.rb --
+class <emptyTree><<C <root>>> < (::<todo sym>)
+  class ::Project::FooBar::Z<<C Z>> < (::<todo sym>)
+    <self>.sig() do ||
+      <self>.void()
+    end
+
+    def self.z(<blk>)
+      <emptyTree>
+    end
+
+    <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+    <runtime method definition of self.z>
+  end
+end

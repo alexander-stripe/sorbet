@@ -1,36 +1,10 @@
-class <emptyTree><<C <root>>> < ()
+class <emptyTree><<C <root>>> < (::<todo sym>)
   class <emptyTree>::<C GoodUsages><<C <todo sym>>> < (::<todo sym>)
-    <self>.extend(<emptyTree>::<C T>::<C Sig>)
-
     ::T::Sig::WithoutRuntime.sig() do ||
       <self>.returns(::T.untyped())
     end
 
-    def both<<C <todo sym>>>(&<blk>)
-      <emptyTree>
-    end
-
-    ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.returns(::T.untyped())
-    end
-
-    def self.both<<C <todo sym>>>(&<blk>)
-      <emptyTree>
-    end
-
-    ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => ::T.untyped()}).returns(::T.untyped())
-    end
-
-    def both=<<C <todo sym>>>(arg0, &<blk>)
-      <emptyTree>
-    end
-
-    ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => ::T.untyped()}).returns(::T.untyped())
-    end
-
-    def self.both=<<C <todo sym>>>(arg0, &<blk>)
+    def both<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -38,7 +12,23 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def foo<<C <todo sym>>>(&<blk>)
+    def self.both<<todo method>>(&<blk>)
+      <emptyTree>
+    end
+
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.params(:arg0, ::T.untyped()).returns(::T.untyped())
+    end
+
+    def both=<<todo method>>(arg0, &<blk>)
+      <emptyTree>
+    end
+
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.params(:arg0, ::T.untyped()).returns(::T.untyped())
+    end
+
+    def self.both=<<todo method>>(arg0, &<blk>)
       <emptyTree>
     end
 
@@ -46,23 +36,7 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def self.foo<<C <todo sym>>>(&<blk>)
-      <emptyTree>
-    end
-
-    ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => ::T.untyped()}).returns(::T.untyped())
-    end
-
-    def foo=<<C <todo sym>>>(arg0, &<blk>)
-      <emptyTree>
-    end
-
-    ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => ::T.untyped()}).returns(::T.untyped())
-    end
-
-    def self.foo=<<C <todo sym>>>(arg0, &<blk>)
+    def foo<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -70,39 +44,23 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def self.no_instance<<C <todo sym>>>(&<blk>)
+    def self.foo<<todo method>>(&<blk>)
       <emptyTree>
     end
 
     ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => ::T.untyped()}).returns(::T.untyped())
+      <self>.params(:arg0, ::T.untyped()).returns(::T.untyped())
     end
 
-    def self.no_instance=<<C <todo sym>>>(arg0, &<blk>)
+    def foo=<<todo method>>(arg0, &<blk>)
       <emptyTree>
     end
 
     ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.returns(::T.untyped())
+      <self>.params(:arg0, ::T.untyped()).returns(::T.untyped())
     end
 
-    def self.no_instance_reader<<C <todo sym>>>(&<blk>)
-      <emptyTree>
-    end
-
-    ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => ::T.untyped()}).returns(::T.untyped())
-    end
-
-    def no_instance_reader=<<C <todo sym>>>(arg0, &<blk>)
-      <emptyTree>
-    end
-
-    ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => ::T.untyped()}).returns(::T.untyped())
-    end
-
-    def self.no_instance_reader=<<C <todo sym>>>(arg0, &<blk>)
+    def self.foo=<<todo method>>(arg0, &<blk>)
       <emptyTree>
     end
 
@@ -110,7 +68,15 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def bar<<C <todo sym>>>(&<blk>)
+    def self.no_instance<<todo method>>(&<blk>)
+      <emptyTree>
+    end
+
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.params(:arg0, ::T.untyped()).returns(::T.untyped())
+    end
+
+    def self.no_instance=<<todo method>>(arg0, &<blk>)
       <emptyTree>
     end
 
@@ -118,15 +84,23 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def self.bar<<C <todo sym>>>(&<blk>)
+    def self.no_instance_reader<<todo method>>(&<blk>)
       <emptyTree>
     end
 
     ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => ::T.untyped()}).returns(::T.untyped())
+      <self>.params(:arg0, ::T.untyped()).returns(::T.untyped())
     end
 
-    def self.bar=<<C <todo sym>>>(arg0, &<blk>)
+    def no_instance_reader=<<todo method>>(arg0, &<blk>)
+      <emptyTree>
+    end
+
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.params(:arg0, ::T.untyped()).returns(::T.untyped())
+    end
+
+    def self.no_instance_reader=<<todo method>>(arg0, &<blk>)
       <emptyTree>
     end
 
@@ -134,7 +108,7 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def no_instance_writer<<C <todo sym>>>(&<blk>)
+    def bar<<todo method>>(&<blk>)
       <emptyTree>
     end
 
@@ -142,15 +116,39 @@ class <emptyTree><<C <root>>> < ()
       <self>.returns(::T.untyped())
     end
 
-    def self.no_instance_writer<<C <todo sym>>>(&<blk>)
+    def self.bar<<todo method>>(&<blk>)
       <emptyTree>
     end
 
     ::T::Sig::WithoutRuntime.sig() do ||
-      <self>.params({:"arg0" => ::T.untyped()}).returns(::T.untyped())
+      <self>.params(:arg0, ::T.untyped()).returns(::T.untyped())
     end
 
-    def self.no_instance_writer=<<C <todo sym>>>(arg0, &<blk>)
+    def self.bar=<<todo method>>(arg0, &<blk>)
+      <emptyTree>
+    end
+
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.returns(::T.untyped())
+    end
+
+    def no_instance_writer<<todo method>>(&<blk>)
+      <emptyTree>
+    end
+
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.returns(::T.untyped())
+    end
+
+    def self.no_instance_writer<<todo method>>(&<blk>)
+      <emptyTree>
+    end
+
+    ::T::Sig::WithoutRuntime.sig() do ||
+      <self>.params(:arg0, ::T.untyped()).returns(::T.untyped())
+    end
+
+    def self.no_instance_writer=<<todo method>>(arg0, &<blk>)
       <emptyTree>
     end
 
@@ -158,7 +156,7 @@ class <emptyTree><<C <root>>> < ()
       <self>.void()
     end
 
-    def usages<<C <todo sym>>>(&<blk>)
+    def usages<<todo method>>(&<blk>)
       begin
         <self>.both()
         <self>.both=(1)
@@ -170,6 +168,48 @@ class <emptyTree><<C <root>>> < ()
         <self>.no_instance_writer=(1)
       end
     end
+
+    <self>.extend(<emptyTree>::<C T>::<C Sig>)
+
+    <runtime method definition of both>
+
+    <runtime method definition of self.both>
+
+    <runtime method definition of both=>
+
+    <runtime method definition of self.both=>
+
+    <runtime method definition of foo>
+
+    <runtime method definition of self.foo>
+
+    <runtime method definition of foo=>
+
+    <runtime method definition of self.foo=>
+
+    <runtime method definition of self.no_instance>
+
+    <runtime method definition of self.no_instance=>
+
+    <runtime method definition of self.no_instance_reader>
+
+    <runtime method definition of no_instance_reader=>
+
+    <runtime method definition of self.no_instance_reader=>
+
+    <runtime method definition of bar>
+
+    <runtime method definition of self.bar>
+
+    <runtime method definition of self.bar=>
+
+    <runtime method definition of no_instance_writer>
+
+    <runtime method definition of self.no_instance_writer>
+
+    <runtime method definition of self.no_instance_writer=>
+
+    <runtime method definition of usages>
 
     <self>.both()
 
@@ -191,7 +231,7 @@ class <emptyTree><<C <root>>> < ()
   class <emptyTree>::<C IgnoredUsages><<C <todo sym>>> < (::<todo sym>)
     <self>.mattr_accessor()
 
-    <self>.mattr_accessor({:"instance_accessor" => false})
+    <self>.mattr_accessor(:instance_accessor, false)
 
     <self>.mattr_accessor("foo")
   end

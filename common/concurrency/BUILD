@@ -14,7 +14,7 @@ cc_library(
         "WorkerPool.h",
     ],
     linkopts = select({
-        "//tools/config:linux": ["-lm"],
+        "@platforms//os:linux": ["-lm"],
         "//conditions:default": [],
     }),
     linkstatic = select({
@@ -23,7 +23,11 @@ cc_library(
     }),
     visibility = ["//visibility:public"],
     deps = [
-        "//common",
+        "//common/enforce_no_timer",
+        "//common/exception",
+        "//common/os",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
         "@concurrentqueue",
         "@spdlog",
     ],

@@ -3,31 +3,70 @@
 
 module T::Types
   class TypedArray < TypedEnumerable
-    # @override Base
+    # overrides Base
     def name
-      "T::Array[#{@type.name}]"
+      "T::Array[#{type.name}]"
     end
 
     def underlying_class
       Array
     end
 
-    # @override Base
-    def valid?(obj)
+    # overrides Base
+    def recursively_valid?(obj)
       obj.is_a?(Array) && super
     end
 
-    def new(*args) # rubocop:disable PrisonGuard/BanBuiltinMethodOverride
-      Array.new(*T.unsafe(args))
+    # overrides Base
+    def valid?(obj)
+      obj.is_a?(Array)
+    end
+
+    def new(...)
+      Array.new(...)
+    end
+
+    module Private
+      module Pool
+        CACHE_FROZEN_OBJECTS = begin
+          ObjectSpace::WeakMap.new[1] = 1
+          true # Ruby 2.7 and newer
+                               rescue ArgumentError # Ruby 2.6 and older
+                                 false
+        end
+
+        @cache = ObjectSpace::WeakMap.new
+
+        def self.type_for_module(mod)
+          cached = @cache[mod]
+          return cached if cached
+
+          type = TypedArray.new(mod)
+
+          if CACHE_FROZEN_OBJECTS || (!mod.frozen? && !type.frozen?)
+            @cache[mod] = type
+          end
+          type
+        end
+      end
     end
 
     class Untyped < TypedArray
       def initialize
-        super(T.untyped)
+        super(T::Types::Untyped::Private::INSTANCE)
       end
 
       def valid?(obj)
         obj.is_a?(Array)
+      end
+
+      def freeze
+        build_type # force lazy initialization before freezing the object
+        super
+      end
+
+      module Private
+        INSTANCE = Untyped.new.freeze
       end
     end
   end

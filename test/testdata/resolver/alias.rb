@@ -8,22 +8,22 @@ class Foo
     a
   end
 
-  Reactions = T.type_alias {T.enum(['+1', '-1', 'laugh', 'confused', 'heart', 'hooray'])}
+  DeprecatedReactions = T.type_alias {T.deprecated_enum(['+1', '-1', 'laugh', 'confused', 'heart', 'hooray'])}
 
-  sig {returns(Reactions)}
-  def react
+  sig {returns(DeprecatedReactions)}
+  def deprecated_react
     any
   end
 
   ADDRESS_TYPE = T.type_alias do
-    T.nilable(
+    T.nilable({
       line1: T.nilable(String),
       line2: T.nilable(String),
       city: T.nilable(String),
       state: T.nilable(String),
       postal_code: T.nilable(String),
       country: T.nilable(String),
-    )
+    })
   end
 
   sig {returns(ADDRESS_TYPE)}

@@ -19,14 +19,14 @@ class TestClass
 
   def method_with_keyword_args(
     meaning_of_life: 42,
-  # ^^^^^^^^^^^^^^^ def: meaning_of_life
+  # ^^^^^^^^^^^^^^^ def: meaning_of_life 1
     coolest_angle: 15
-  # ^^^^^^^^^^^^^ def: coolest_angle
+  # ^^^^^^^^^^^^^ def: coolest_angle 1
   )
     meaning_of_life + 1
-  # ^^^^^^^^^^^^^^^ usage: meaning_of_life
+  # ^^^^^^^^^^^^^^^ usage: meaning_of_life 1
     coolest_angle + 1
-  # ^^^^^^^^^^^^^ usage: coolest_angle
+  # ^^^^^^^^^^^^^ usage: coolest_angle 1
   end
 
   def method_with_rest_arg(*arr)
@@ -36,12 +36,20 @@ class TestClass
   end
 
   def method_with_optional_arg(foo = 3, bar = 5)
-                             # ^^^ def: fooOpt
+                             # ^^^ def: fooOpt 1
                                       # ^^^ def: barOpt
     foo + 4
-  # ^^^ usage: fooOpt
+  # ^^^ usage: fooOpt 1
     bar + 10
-  # ^^^ usage: barOpt
+  # ^^^ usage: barOpt 1
+  end
+
+  def method_with_block_inside
+    [].each do |var|
+              # ^^^ def: var
+      var
+    # ^^^ usage: var
+    end
   end
 end
 

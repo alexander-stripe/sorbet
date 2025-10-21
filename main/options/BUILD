@@ -13,8 +13,8 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//core",
+        "//sorbet_version",
         "//third_party/licenses",
-        "//version",
         "@cxxopts",
         "@spdlog",
         "@yaml_cpp",
@@ -27,7 +27,6 @@ cc_test(
     srcs = glob([
         "test/*.cc",
     ]),
-    copts = ["-Iexternal/gtest/include"],
     linkstatic = select({
         "//tools/config:linkshared": 0,
         "//conditions:default": 1,
@@ -36,7 +35,7 @@ cc_test(
     deps = [
         "//core",
         "//main/options",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@doctest//doctest",
+        "@doctest//doctest:main",
     ],
 )

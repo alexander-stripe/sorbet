@@ -1,44 +1,34 @@
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
+  class <emptyTree><<C <root>>> < (::<todo sym>)
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
-      begin
-        <emptyTree>
-        ::Sorbet::Private::Static.keep_for_ide(::TestSig)
-        <emptyTree>
-      end
+      <emptyTree>
     end
   end
   class ::TestSig<<C TestSig>> < (::<todo sym>)
-    <emptyTree>
-
-    <emptyTree>
-
     def test_resolve(<blk>)
       <emptyTree>
     end
 
     def self.<static-init>(<blk>)
-      <self>.sig() do ||
-        <self>.returns(::T2)
+      begin
+        <self>.sig() do ||
+          <self>.returns(::T2)
+        end
+        <runtime method definition of test_resolve>
+        <emptyTree>
       end
     end
   end
   <emptyTree>
 end
 begin
-  <emptyTree>
-  class <emptyTree><<C <root>>> < ()
+  class <emptyTree><<C <root>>> < (::<todo sym>)
+    <emptyTree>
+
     def self.<static-init><<static-init>$CENSORED>(<blk>)
-      begin
-        begin
-          <emptyTree>
-          ::Sorbet::Private::Static.keep_for_ide(::T1)
-          <emptyTree>
-        end
-        ::T2 = ::T1
-        <emptyTree>
-      end
+      ::T2 = ::T1
     end
   end
   class ::T1<<C T1>> < (::<todo sym>)

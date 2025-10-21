@@ -41,6 +41,16 @@ module Sorbet::Private
           Sorbet::Private::GemGeneratorTracepoint::Tracer.on_module_created(result)
           result
         end
+
+        # This is a hack due to changes in kwargs with Ruby 2.7 and 3.0. Using
+        # `*` for method delegation is deprecated in Ruby 2.7 and doesn't work
+        # in Ruby 3.0.
+        # See the "compatible delegation" section in this blog post:
+        # https://www.ruby-lang.org/en/news/2019/12/12/separation-of-positional-and-keyword-arguments-in-ruby-3-0/
+        #
+        # Once Sorbet supports exclusively 2.7+ we can remove ruby2_keywords and
+        # use the `...` delegation syntax instead.
+        send(:ruby2_keywords, :new) if respond_to?(:ruby2_keywords, true)
       end
       Class.prepend(ClassOverride)
 
@@ -118,13 +128,18 @@ module Sorbet::Private
           on_module_created(tp.self)
         end
         @c_call_tracepoint = TracePoint.new(:c_call) do |tp|
-          case tp.method_id
+
+          # older version of JRuby unfortunately returned a String
+          case tp.method_id.to_sym
           when :require, :require_relative
             @context_stack << []
           end
         end
         @c_return_tracepoint = TracePoint.new(:c_return) do |tp|
-          case tp.method_id
+
+          # older version of JRuby unfortunately returned a String
+          method_id_sym = tp.method_id.to_sym
+          case method_id_sym
           when :require, :require_relative
             popped = @context_stack.pop
 
@@ -147,8 +162,13 @@ module Sorbet::Private
             begin
               tp.disable
 
-              singleton = tp.method_id == :singleton_method_added
+              singleton = method_id_sym == :singleton_method_added
               receiver = singleton ? Sorbet::Private::RealStdlib.real_singleton_class(tp.self) : tp.self
+
+              # JRuby the main Object is not a module
+              # so lets skip it, otherwise RealStdlib#real_instance_methods raises an exception since it expects one.
+              next unless receiver.is_a?(Module)
+
               methods = Sorbet::Private::RealStdlib.real_instance_methods(receiver, false) + Sorbet::Private::RealStdlib.real_private_instance_methods(receiver, false)
               set = @modules[Sorbet::Private::RealStdlib.real_object_id(receiver)] ||= Set.new
               added = methods.find { |m| !set.include?(m) }

@@ -26,16 +26,16 @@ class A
   sig {params(types).returns(T1)}
             # ^^^^^ error: Method `types` does not exist
      # ^^^^^^^^^^^^^ error: `params` expects keyword arguments
-  def f1(x) # error: Type not specified for argument
+  def f1(x) # error: Type not specified for parameter
     T1.new
   end
 
-  sig do params(x: T1).returns(T2) end.hithere # error: Can not call method `hithere` on void type
+  sig do params(x: T1).returns(T2) end.hithere # error: Method `hithere` does not exist on `NilClass`
   def f2(x)
     T2.new
   end
 
-  sig {params(x: T1).returns(T1)} # error: Unknown argument name `x`
+  sig {params(x: T1).returns(T1)} # error: Unknown parameter name `x`
   def f3
     T1.new
   end
@@ -80,7 +80,7 @@ class A
 
   sig { override.void }
   def test_implementation(x) # error: Method `A#test_implementation` is marked `override` but does not override anything
-                        # ^ error: Malformed `sig`. Type not specified for argument
+                        # ^ error: Malformed `sig`. Type not specified for parameter
   end
 
   sig {override.returns(T1)}
@@ -103,12 +103,13 @@ class A
   end
 
   sig {}; def test_standard_untyped; end # error: Malformed `sig`: No return type specified. Specify one with .returns()
+# ^^^^^^ error: Malformed `sig`: Signature blocks must contain a single statement
 
   sig {void.foo}; def test_junk_inside; end # error: invalid in this context
-     # ^^^^^^^^ error: Method `foo` does not exist
+     #      ^^^ error: Method `foo` does not exist
 
   sig {T.void}; def test_junk_again; end # error: being invoked on an invalid receiver
-     # ^^^^^^ error: Method `void` does not exist
+     #   ^^^^ error: Method `void` does not exist
 
   sig {params(z: T1).returns(T1)} # error: Malformed `sig`. No method def following it
 end

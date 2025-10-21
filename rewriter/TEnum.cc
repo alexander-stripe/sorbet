@@ -6,6 +6,7 @@
 #include "core/core.h"
 #include "core/errors/rewriter.h"
 #include "rewriter/rewriter.h"
+#include "rewriter/util/Util.h"
 
 using namespace std;
 
@@ -14,155 +15,179 @@ namespace sorbet::rewriter {
 namespace {
 
 enum class FromWhere {
+    Before,
     Inside,
-    Outside,
+    After,
 };
 
 bool isTEnum(core::MutableContext ctx, ast::ClassDef *klass) {
-    if (klass->kind != ast::Class || klass->ancestors.empty()) {
+    if (klass->kind != ast::ClassDef::Kind::Class || klass->ancestors.empty()) {
         return false;
     }
-    auto *cnst = ast::cast_tree<ast::UnresolvedConstantLit>(klass->ancestors.front().get());
-    if (cnst == nullptr) {
-        return false;
-    }
-    if (cnst->cnst != core::Names::Constants::Enum()) {
-        return false;
-    }
-    auto *scope = ast::cast_tree<ast::UnresolvedConstantLit>(cnst->scope.get());
-    if (scope == nullptr) {
-        return false;
-    }
-    if (scope->cnst != core::Names::Constants::T()) {
-        return false;
-    }
-    if (ast::isa_tree<ast::EmptyTree>(scope->scope.get())) {
-        return true;
-    }
-    auto *id = ast::cast_tree<ast::ConstantLit>(scope->scope.get());
-    if (id == nullptr) {
-        return false;
-    }
-    return id->symbol == core::Symbols::root();
+    static constexpr core::NameRef tEnum[] = {
+        core::Names::Constants::T(),
+        core::Names::Constants::Enum(),
+    };
+    return ASTUtil::isRootScopedSyntacticConstant(klass->ancestors.front(), tEnum);
 }
 
-ast::Send *asEnumsDo(ast::Expression *stat) {
-    auto *send = ast::cast_tree<ast::Send>(stat);
+ast::Send *asEnumsDo(ast::ExpressionPtr &stat) {
+    auto send = ast::cast_tree<ast::Send>(stat);
 
-    if (send != nullptr && send->block != nullptr && send->fun == core::Names::enums()) {
+    if (send != nullptr && send->hasBlock() && send->fun == core::Names::enums()) {
         return send;
     } else {
         return nullptr;
     }
 }
 
-// TODO(jez) Change this error message after making everything T::Enum
-vector<unique_ptr<ast::Expression>> badConst(core::MutableContext ctx, core::Loc headerLoc, core::Loc line1Loc) {
-    if (auto e = ctx.state.beginError(headerLoc, core::errors::Rewriter::TEnumConstNotEnumValue)) {
-        e.setHeader("All constants defined on an `{}` must be unique instances of the enum", "T::Enum");
-        e.addErrorLine(line1Loc, "Enclosing definition here");
+void badConst(core::MutableContext ctx, core::LocOffsets headerLoc, core::LocOffsets line1Loc) {
+    if (auto e = ctx.beginIndexerError(headerLoc, core::errors::Rewriter::BadTEnumSyntax)) {
+        e.setHeader("All non-enum constants in a `{}` must be defined after the `{}` block", "T::Enum", "enums do");
+        e.addErrorLine(ctx.locAt(line1Loc), "Enclosing definition here");
     }
-    return {};
 }
 
-vector<unique_ptr<ast::Expression>> processStat(core::MutableContext ctx, ast::ClassDef *klass, ast::Expression *stat,
-                                                FromWhere fromWhere) {
-    auto *asgn = ast::cast_tree<ast::Assign>(stat);
+ast::Send *findSelfNew(ast::ExpressionPtr &assignRhs) {
+    auto rhs = ast::cast_tree<ast::Send>(assignRhs);
+    if (rhs != nullptr) {
+        if (rhs->fun != core::Names::new_() && rhs->fun != core::Names::let()) {
+            return nullptr;
+        }
+
+        if (rhs->fun == core::Names::new_() && !rhs->recv.isSelfReference()) {
+            return nullptr;
+        }
+
+        auto magicSelfNew = rhs;
+        if (rhs->fun == core::Names::let()) {
+            auto recv = ast::cast_tree<ast::UnresolvedConstantLit>(rhs->recv);
+            if (recv == nullptr) {
+                return nullptr;
+            }
+
+            if (rhs->numPosArgs() != 2) {
+                return nullptr;
+            }
+
+            auto arg0 = ast::cast_tree<ast::Send>(rhs->getPosArg(0));
+            if (arg0 == nullptr) {
+                return nullptr;
+            }
+
+            if (!ast::MK::isSelfNew(arg0)) {
+                return nullptr;
+            }
+            magicSelfNew = arg0;
+        }
+        return magicSelfNew;
+    }
+
+    auto cast = ast::cast_tree<ast::Cast>(assignRhs);
+    if (cast == nullptr) {
+        return nullptr;
+    }
+
+    return findSelfNew(cast->arg);
+}
+
+struct ProcessStatResult {
+    vector<ast::ExpressionPtr> stats;
+    core::TypePtr type;
+};
+
+optional<ProcessStatResult> processStat(core::MutableContext ctx, ast::ClassDef *klass, ast::ExpressionPtr &stat,
+                                        FromWhere fromWhere) {
+    auto asgn = ast::cast_tree<ast::Assign>(stat);
     if (asgn == nullptr) {
         return {};
     }
 
-    auto *lhs = ast::cast_tree<ast::UnresolvedConstantLit>(asgn->lhs.get());
+    auto lhs = ast::cast_tree<ast::UnresolvedConstantLit>(asgn->lhs);
     if (lhs == nullptr) {
         return {};
     }
 
-    auto *rhs = ast::cast_tree<ast::Send>(asgn->rhs.get());
-    if (rhs == nullptr) {
-        return badConst(ctx, stat->loc, klass->loc);
-    }
-
-    if (rhs->fun != core::Names::selfNew() && rhs->fun != core::Names::let()) {
-        return badConst(ctx, stat->loc, klass->loc);
-    }
-
-    if (rhs->fun == core::Names::selfNew() && !ast::MK::isMagicClass(rhs->recv.get())) {
-        return badConst(ctx, stat->loc, klass->loc);
-    }
-
-    if (rhs->fun == core::Names::let()) {
-        auto recv = ast::cast_tree<ast::UnresolvedConstantLit>(rhs->recv.get());
-        if (recv == nullptr) {
-            return badConst(ctx, stat->loc, klass->loc);
+    auto *selfNew = findSelfNew(asgn->rhs);
+    if (selfNew == nullptr) {
+        if (fromWhere == FromWhere::After) {
+            // Allow non-enum constants to be defined after `enums do`
+            // (type aliases, type members, etc.)
+            return {};
         }
 
-        if (rhs->args.size() != 2) {
-            return badConst(ctx, stat->loc, klass->loc);
-        }
-
-        auto arg0 = ast::cast_tree<ast::Send>(rhs->args[0].get());
-        if (arg0 == nullptr) {
-            return badConst(ctx, stat->loc, klass->loc);
-        }
-
-        if (!ast::MK::isSelfNew(arg0)) {
-            return badConst(ctx, stat->loc, klass->loc);
-        }
+        badConst(ctx, stat.loc(), klass->loc);
+        return {};
     }
 
     // By this point, we have something that looks like
     //
-    //   A = Magic.<self-new>(self) | T.let(Magic.<self-new>(self), ...)
+    //   A = <self>.new(...) | T.let(<self>.new(...))
     //
     // So we're good to process this thing as a new T::Enum value.
 
-    if (fromWhere != FromWhere::Inside) {
-        if (auto e = ctx.state.beginError(stat->loc, core::errors::Rewriter::TEnumOutsideEnumsDo)) {
-            e.setHeader("Definition of enum value `{}` must be within the `{}` block for this `{}`",
-                        lhs->cnst.show(ctx), "enums do", "T::Enum");
-            e.addErrorLine(klass->declLoc, "Enclosing definition here");
+    core::TypePtr serializeType = core::Types::untypedUntracked();
+
+    if (selfNew->numPosArgs() == 0 && selfNew->onlyPosArgs()) {
+        serializeType = core::Types::String();
+    } else if (selfNew->numPosArgs() == 1) {
+        if (auto selfNewArg = ast::cast_tree<ast::Literal>(selfNew->getPosArg(0))) {
+            // If the enum has exactly one variant that has a literal passed (ex. "a"),
+            // then its type will be String("a"), but we want a ClassType as the return type.
+            serializeType = core::Types::dropLiteral(ctx, selfNewArg->value);
         }
     }
 
+    if (fromWhere != FromWhere::Inside) {
+        if (auto e = ctx.beginIndexerError(stat.loc(), core::errors::Rewriter::BadTEnumSyntax)) {
+            e.setHeader("Definition of enum value `{}` must be within the `{}` block for this `{}`",
+                        lhs->cnst.show(ctx), "enums do", "T::Enum");
+            e.addErrorLine(ctx.locAt(klass->declLoc), "Enclosing definition here");
+        }
+    }
+
+    auto statLocZero = stat.loc().copyWithZeroLength();
     auto name = ctx.state.enterNameConstant(ctx.state.freshNameUnique(core::UniqueNameKind::TEnum, lhs->cnst, 1));
-    auto classCnst = ast::MK::UnresolvedConstant(lhs->loc, ast::MK::EmptyTree(), name);
+    auto classCnst = ast::MK::UnresolvedConstant(statLocZero, ast::MK::EmptyTree(), name);
     ast::ClassDef::ANCESTORS_store parent;
-    parent.emplace_back(klass->name->deepCopy());
+    parent.emplace_back(klass->name.deepCopy());
     ast::ClassDef::RHS_store classRhs;
-    classRhs.emplace_back(ast::MK::Send1(stat->loc, ast::MK::Self(stat->loc), core::Names::include(),
-                                         ast::MK::Constant(stat->loc, core::Symbols::Singleton())));
-    classRhs.emplace_back(ast::MK::Send0(stat->loc, ast::MK::Self(stat->loc), core::Names::declareFinal()));
-    auto classDef = ast::MK::Class(stat->loc, stat->loc, classCnst->deepCopy(), std::move(parent), std::move(classRhs),
-                                   ast::ClassDefKind::Class);
+    auto classDef =
+        ast::MK::Class(statLocZero, statLocZero, classCnst.deepCopy(), std::move(parent), std::move(classRhs));
 
-    auto singletonAsgn =
-        ast::MK::Assign(stat->loc, std::move(asgn->lhs),
-                        ast::MK::Send2(stat->loc, ast::MK::Constant(stat->loc, core::Symbols::T()), core::Names::let(),
-                                       ast::MK::Send0(stat->loc, classCnst->deepCopy(), core::Names::instance()),
-                                       std::move(classCnst)));
-
-    vector<unique_ptr<ast::Expression>> result;
+    ast::Send::Flags flags = {};
+    flags.isPrivateOk = true;
+    auto singletonAsgn = ast::MK::Assign(
+        statLocZero, std::move(asgn->lhs),
+        ast::make_expression<ast::Cast>(statLocZero, core::Types::todo(),
+                                        selfNew->withNewBody(selfNew->loc, classCnst.deepCopy(), core::Names::new_()),
+                                        core::Names::uncheckedLet(), std::move(classCnst)));
+    vector<ast::ExpressionPtr> result;
     result.emplace_back(std::move(classDef));
     result.emplace_back(std::move(singletonAsgn));
-    return result;
+
+    return {{std::move(result), serializeType}};
 }
 
-void collectNewStats(core::MutableContext ctx, ast::ClassDef *klass, unique_ptr<ast::Expression> stat,
-                     FromWhere fromWhere) {
-    auto newStats = processStat(ctx, klass, stat.get(), fromWhere);
-    if (newStats.empty()) {
-        klass->rhs.emplace_back(std::move(stat));
-    } else {
+core::TypePtr collectNewStats(core::MutableContext ctx, ast::ClassDef *klass, ast::ExpressionPtr stat,
+                              FromWhere fromWhere, vector<ast::ExpressionPtr> &into) {
+    auto result = processStat(ctx, klass, stat, fromWhere);
+    if (result) {
+        auto [newStats, type] = std::move(*result);
         for (auto &newStat : newStats) {
-            klass->rhs.emplace_back(std::move(newStat));
+            into.emplace_back(std::move(newStat));
         }
+        return type;
+    } else {
+        into.emplace_back(std::move(stat));
+        return core::Types::bottom();
     }
 }
 
 } // namespace
 
 void TEnum::run(core::MutableContext ctx, ast::ClassDef *klass) {
-    if (ctx.state.runningUnderAutogen) {
+    if (ctx.state.cacheSensitiveOptions.runningUnderAutogen) {
         return;
     }
 
@@ -174,24 +199,72 @@ void TEnum::run(core::MutableContext ctx, ast::ClassDef *klass) {
     klass->rhs.clear();
     klass->rhs.reserve(oldRHS.size());
     auto loc = klass->declLoc;
-    klass->rhs.emplace_back(ast::MK::Send1(loc, ast::MK::Self(loc), core::Names::extend(),
+    auto locZero = loc.copyWithZeroLength();
+    klass->rhs.emplace_back(ast::MK::Send1(loc, ast::MK::Self(loc), core::Names::extend(), locZero,
                                            ast::MK::Constant(loc, core::Symbols::T_Helpers())));
-    klass->rhs.emplace_back(ast::MK::Send0(loc, ast::MK::Self(loc), core::Names::declareAbstract()));
-    klass->rhs.emplace_back(ast::MK::Send0(loc, ast::MK::Self(loc), core::Names::declareSealed()));
+    klass->rhs.emplace_back(ast::MK::Send0(loc, ast::MK::Self(loc), core::Names::declareAbstract(), locZero));
+    klass->rhs.emplace_back(ast::MK::Send0(loc, ast::MK::Self(loc), core::Names::declareSealed(), locZero));
+    core::TypePtr serializeReturnType = core::Types::bottom();
+    auto fromWhere = FromWhere::Before;
+    core::Loc enumsDoLoc;
     for (auto &stat : oldRHS) {
-        // TODO(jez) Clean this up when there is only one way to define enum variants
-        if (auto enumsDo = asEnumsDo(stat.get())) {
-            if (auto insSeq = ast::cast_tree<ast::InsSeq>(enumsDo->block->body.get())) {
-                for (auto &stat : insSeq->stats) {
-                    collectNewStats(ctx, klass, std::move(stat), FromWhere::Inside);
+        if (auto enumsDo = asEnumsDo(stat)) {
+            if (fromWhere != FromWhere::Before) {
+                if (auto e = ctx.beginIndexerError(stat.loc(), core::errors::Rewriter::BadTEnumSyntax)) {
+                    e.setHeader("Duplicate `{}` block in `{}`", "enums do", "T::Enum");
+                    e.addErrorLine(enumsDoLoc, "Previous `{}` block here", "enums do");
                 }
-                collectNewStats(ctx, klass, std::move(insSeq->expr), FromWhere::Inside);
             } else {
-                collectNewStats(ctx, klass, std::move(enumsDo->block->body), FromWhere::Inside);
+                fromWhere = FromWhere::Inside;
+                enumsDoLoc = ctx.locAt(enumsDo->loc);
             }
+
+            auto *block = enumsDo->block();
+            vector<ast::ExpressionPtr> newStats;
+            if (auto insSeq = ast::cast_tree<ast::InsSeq>(block->body)) {
+                for (auto &stat : insSeq->stats) {
+                    auto type = collectNewStats(ctx, klass, std::move(stat), fromWhere, newStats);
+                    serializeReturnType = core::Types::any(ctx, serializeReturnType, type);
+                }
+                auto type = collectNewStats(ctx, klass, std::move(insSeq->expr), fromWhere, newStats);
+                serializeReturnType = core::Types::any(ctx, serializeReturnType, type);
+            } else {
+                auto type = collectNewStats(ctx, klass, std::move(block->body), fromWhere, newStats);
+                serializeReturnType = core::Types::any(ctx, serializeReturnType, type);
+            }
+
+            ast::InsSeq::STATS_store insSeqStats;
+            for (auto &newStat : newStats) {
+                insSeqStats.emplace_back(std::move(newStat));
+            }
+
+            block->body = ast::MK::InsSeq(block->loc, std::move(insSeqStats), ast::MK::Nil(block->loc));
+            klass->rhs.emplace_back(std::move(stat));
+            fromWhere = FromWhere::After;
         } else {
-            collectNewStats(ctx, klass, std::move(stat), FromWhere::Outside);
+            vector<ast::ExpressionPtr> newStats;
+            collectNewStats(ctx, klass, std::move(stat), fromWhere, newStats);
+            for (auto &newStat : newStats) {
+                klass->rhs.emplace_back(std::move(newStat));
+            }
         }
+    }
+    if (core::isa_type<core::ClassType>(serializeReturnType) && !serializeReturnType.isUntyped() &&
+        !serializeReturnType.isBottom()) {
+        auto serializeReturnTypeClass = core::cast_type_nonnull<core::ClassType>(serializeReturnType);
+        ast::ExpressionPtr return_type_ast = ast::MK::Constant(klass->declLoc, serializeReturnTypeClass.symbol);
+        auto sig = ast::MK::Sig0(klass->declLoc, std::move(return_type_ast));
+        auto method = ast::MK::SyntheticMethod0(klass->loc, klass->declLoc, core::Names::serialize(),
+                                                ast::MK::RaiseTypedUnimplemented(klass->declLoc));
+        ast::Send::ARGS_store nargs;
+        ast::Send::Flags flags;
+        flags.isPrivateOk = true;
+        auto visibility = ast::MK::Send(klass->declLoc, ast::MK::Self(klass->declLoc), core::Names::public_(),
+                                        klass->declLoc, 0, std::move(nargs), flags);
+
+        klass->rhs.emplace_back(std::move(visibility));
+        klass->rhs.emplace_back(std::move(sig));
+        klass->rhs.emplace_back(std::move(method));
     }
 }
 }; // namespace sorbet::rewriter

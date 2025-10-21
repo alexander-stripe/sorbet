@@ -40,4 +40,49 @@ E = Class.new(Top::Parent) do; end
 
 T.let(E.new, Top::Parent)
 
+#################
 
+class Foo
+  def self.foo; end
+end
+
+C1 = Class.new do
+  T.reveal_type self # error: Revealed type: `T.class_of(C1)`
+end
+
+C2 = Class.new(Foo) do
+  T.reveal_type self # error: Revealed type: `T.class_of(C2)`
+  foo
+end
+
+c1 = Class.new do
+  T.reveal_type self # error: Revealed type: `T::Class[Object]`
+end
+
+c2 = Class.new(Foo) do
+  T.reveal_type self # error: Revealed type: `T.class_of(Foo)`
+  foo
+end
+
+Class.new do
+  T.reveal_type(self) # error: Revealed type: `T::Class[Object]`
+end
+
+Class.new(Foo) do
+  T.reveal_type(self) # error: Revealed type: `T.class_of(Foo)`
+  foo
+end
+
+class Bar
+  def bar
+    Class.new(Foo) do
+      T.reveal_type(self) # error: Revealed type: `T.class_of(Foo)`
+    end
+  end
+
+  def self.bar
+    Class.new(Foo) do
+      T.reveal_type(self) # error: Revealed type: `T.class_of(Foo)`
+    end
+  end
+end

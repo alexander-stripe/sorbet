@@ -1,18 +1,40 @@
 #include "test/lsp/ProtocolTest.h"
+#include "absl/strings/str_split.h" // For StripAsciiWhitespace
 #include "test/helpers/MockFileSystem.h"
 #include "test/helpers/lsp.h"
 #include "test/helpers/position_assertions.h"
 
-namespace sorbet::test::lsp {
 using namespace std;
 
-void ProtocolTest::SetUp() {
-    rootPath = "/Users/jvilk/stripe/pay-server";
-    rootUri = fmt::format("file://{}", rootPath);
+string exec(string cmd);
+
+namespace sorbet::test::lsp {
+namespace {
+bool isSorbetFence(const LSPMessage &msg) {
+    return msg.isNotification() && msg.method() == LSPMethod::SorbetFence;
+}
+
+bool isTypecheckRun(const LSPMessage &msg) {
+    return msg.isNotification() && msg.method() == LSPMethod::SorbetTypecheckRunInfo;
+}
+} // namespace
+
+void ProtocolTest::resetState(shared_ptr<realmain::options::Options> opts) {
     fs = make_shared<MockFileSystem>(rootPath);
-    bool useMultithreading = GetParam();
-    auto opts = make_shared<realmain::options::Options>();
+    diagnostics.clear();
+    sourceFileContents.clear();
+    if (opts == nullptr) {
+        opts = make_shared<realmain::options::Options>();
+    }
     opts->disableWatchman = true;
+    if (useCache) {
+        // Only recreate the cacheDir if we haven't created one before.
+        if (cacheDir.empty()) {
+            cacheDir = absl::StripAsciiWhitespace(exec("mktemp -d"));
+        }
+        opts->cacheDir = cacheDir;
+    }
+
     if (useMultithreading) {
         lspWrapper = MultiThreadedLSPWrapper::create(rootPath, opts);
     } else {
@@ -22,9 +44,24 @@ void ProtocolTest::SetUp() {
     lspWrapper->enableAllExperimentalFeatures();
 }
 
-vector<unique_ptr<LSPMessage>> ProtocolTest::initializeLSP(bool supportsMarkdown,
+ProtocolTest::ProtocolTest(bool useMultithreading, bool useCache)
+    : useMultithreading(useMultithreading), useCache(useCache), rootPath("/Users/jvilk/stripe/pay-server"),
+      rootUri(fmt::format("file://{}", rootPath)) {
+    resetState();
+}
+
+ProtocolTest::~ProtocolTest() {
+    if (!cacheDir.empty()) {
+        // Shut down lspwrapper before cleaning up database on disk.
+        lspWrapper = nullptr;
+        exec(fmt::format("rm -r {}", cacheDir));
+    }
+}
+
+vector<unique_ptr<LSPMessage>> ProtocolTest::initializeLSP(bool supportsMarkdown, bool supportsCodeActionResolve,
                                                            optional<unique_ptr<SorbetInitializationOptions>> opts) {
-    auto responses = sorbet::test::initializeLSP(rootPath, rootUri, *lspWrapper, nextId, supportsMarkdown, move(opts));
+    auto responses = sorbet::test::initializeLSP(rootPath, rootUri, *lspWrapper, nextId, supportsMarkdown,
+                                                 supportsCodeActionResolve, move(opts));
     updateDiagnostics(responses);
     return responses;
 }
@@ -43,7 +80,7 @@ unique_ptr<LSPMessage> ProtocolTest::closeFile(string_view path) {
     // File is closed, so update contents from mock FS.
     try {
         sourceFileContents[string(path)] =
-            make_shared<core::File>(string(path), string(fs->readFile(path)), core::File::Type::Normal);
+            make_shared<core::File>(string(path), fs->readFile(string(path)), core::File::Type::Normal);
     } catch (FileNotFoundException e) {
         auto it = sourceFileContents.find(path);
         if (it != sourceFileContents.end()) {
@@ -53,10 +90,11 @@ unique_ptr<LSPMessage> ProtocolTest::closeFile(string_view path) {
     return makeClose(getUri(path));
 }
 
-unique_ptr<LSPMessage> ProtocolTest::changeFile(string_view path, string_view newContents, int version) {
+unique_ptr<LSPMessage> ProtocolTest::changeFile(string_view path, string_view newContents, int version,
+                                                bool cancellationExpected, int preemptionsExpected) {
     sourceFileContents[string(path)] =
         make_shared<core::File>(string(path), string(newContents), core::File::Type::Normal);
-    return makeChange(getUri(path), newContents, version);
+    return makeChange(getUri(path), newContents, version, cancellationExpected, preemptionsExpected);
 }
 
 unique_ptr<LSPMessage> ProtocolTest::documentSymbol(string_view path) {
@@ -69,8 +107,32 @@ unique_ptr<LSPMessage> ProtocolTest::workspaceSymbol(string_view query) {
     return makeWorkspaceSymbolRequest(nextId++, query);
 }
 
+unique_ptr<LSPMessage> ProtocolTest::hover(string_view path, int line, int character) {
+    return makeHover(nextId++, getUri(path), line, character);
+}
+
+unique_ptr<LSPMessage> ProtocolTest::codeAction(string_view path, int line, int character) {
+    return makeCodeAction(nextId++, getUri(path), line, character);
+}
+
+unique_ptr<LSPMessage> ProtocolTest::completion(string_view path, int line, int character) {
+    return makeCompletion(nextId++, getUri(path), line, character);
+}
+
+unique_ptr<LSPMessage> ProtocolTest::signatureHelp(string_view path, int line, int character) {
+    return makeSignatureHelp(nextId++, getUri(path), line, character);
+}
+
 unique_ptr<LSPMessage> ProtocolTest::getDefinition(string_view path, int line, int character) {
     return makeDefinitionRequest(nextId++, getUri(path), line, character);
+}
+
+unique_ptr<LSPMessage> ProtocolTest::implementation(string_view path, int line, int character) {
+    return makeImplementationRequest(nextId++, getUri(path), line, character);
+}
+
+unique_ptr<LSPMessage> ProtocolTest::getReference(string_view path, int line, int character) {
+    return makeReferenceRequest(nextId++, getUri(path), line, character);
 }
 
 unique_ptr<LSPMessage> ProtocolTest::watchmanFileUpdate(vector<string> updatedFilePaths) {
@@ -109,7 +171,7 @@ vector<unique_ptr<LSPMessage>> verify(const vector<unique_ptr<LSPMessage>> &msgs
     return reparsedMessages;
 }
 
-std::vector<std::unique_ptr<LSPMessage>> ProtocolTest::sendRaw(const std::string &json) {
+vector<unique_ptr<LSPMessage>> ProtocolTest::sendRaw(const string &json) {
     auto responses = verify(getLSPResponsesFor(*lspWrapper, LSPMessage::fromClient(json)));
     updateDiagnostics(responses);
     return responses;
@@ -127,59 +189,126 @@ vector<unique_ptr<LSPMessage>> ProtocolTest::send(vector<unique_ptr<LSPMessage>>
     return responses;
 }
 
-void ProtocolTest::updateDiagnostics(const vector<unique_ptr<LSPMessage>> &messages) {
-    for (auto &msg : messages) {
-        if (msg->isNotification() && msg->method() == LSPMethod::TextDocumentPublishDiagnostics) {
-            if (auto diagnosticParams = getPublishDiagnosticParams(msg->asNotification())) {
-                // Will explicitly overwrite older diagnostics that are irrelevant.
-                // TODO: Have a better way of copying.
-                rapidjson::MemoryPoolAllocator<> alloc;
-                diagnostics[uriToFilePath(lspWrapper->config(), (*diagnosticParams)->uri)] = move(
-                    PublishDiagnosticsParams::fromJSONValue(*(*diagnosticParams)->toJSONValue(alloc))->diagnostics);
+void ProtocolTest::sendAsyncRaw(const string &json) {
+    auto &wrapper = dynamic_cast<MultiThreadedLSPWrapper &>(*lspWrapper);
+    wrapper.send(json);
+}
+
+void ProtocolTest::sendAsync(const LSPMessage &message) {
+    sendAsyncRaw(message.toJSON());
+}
+
+unique_ptr<LSPMessage> ProtocolTest::readAsync() {
+    auto &wrapper = dynamic_cast<MultiThreadedLSPWrapper &>(*lspWrapper);
+    auto msg = wrapper.read(20000);
+    if (msg) {
+        updateDiagnostics(*msg);
+    } else {
+        FAIL_CHECK("Timeout waiting for LSP response.");
+    }
+    return msg;
+}
+
+void ProtocolTest::updateDiagnostics(const LSPMessage &msg) {
+    if (msg.isNotification() && msg.method() == LSPMethod::TextDocumentPublishDiagnostics) {
+        if (auto diagnosticParams = getPublishDiagnosticParams(msg.asNotification())) {
+            // Will explicitly overwrite older diagnostics that are irrelevant.
+            vector<unique_ptr<Diagnostic>> diagnostics;
+            for (const auto &d : (*diagnosticParams)->diagnostics) {
+                diagnostics.push_back(d->copy());
             }
+            this->diagnostics[uriToFilePath(lspWrapper->config(), (*diagnosticParams)->uri)] = move(diagnostics);
         }
     }
 }
 
-std::string ProtocolTest::readFile(std::string_view uri) {
+void ProtocolTest::updateDiagnostics(const vector<unique_ptr<LSPMessage>> &messages) {
+    for (auto &msg : messages) {
+        updateDiagnostics(*msg);
+    }
+}
+
+string ProtocolTest::readFile(string_view uri) {
     auto readFileResponses = send(LSPMessage(make_unique<RequestMessage>(
         "2.0", nextId++, LSPMethod::SorbetReadFile, make_unique<TextDocumentIdentifier>(string(uri)))));
-    EXPECT_EQ(readFileResponses.size(), 1);
+    CHECK_EQ(readFileResponses.size(), 1);
     if (readFileResponses.size() == 1) {
         auto &readFileResponse = readFileResponses.at(0);
-        EXPECT_TRUE(readFileResponse->isResponse());
+        CHECK(readFileResponse->isResponse());
         auto &readFileResult = get<unique_ptr<TextDocumentItem>>(*readFileResponse->asResponse().result);
         return readFileResult->text;
     }
     return "";
 }
 
-vector<unique_ptr<Location>> ProtocolTest::getDefinitions(std::string_view uri, int line, int character) {
+vector<unique_ptr<Location>> ProtocolTest::getDefinitions(string_view uri, int line, int character) {
     auto defResponses = send(*getDefinition(uri, line, character));
-    EXPECT_EQ(defResponses.size(), 1);
+    CHECK_EQ(defResponses.size(), 1);
     if (defResponses.size() == 1) {
         auto &defResponse = defResponses.at(0);
-        EXPECT_TRUE(defResponse->isResponse());
+        CHECK(defResponse->isResponse());
         auto &defResult = get<variant<JSONNullObject, vector<unique_ptr<Location>>>>(*defResponse->asResponse().result);
         return move(get<vector<unique_ptr<Location>>>(defResult));
     }
     return {};
 }
 
-void ProtocolTest::assertDiagnostics(vector<unique_ptr<LSPMessage>> messages, vector<ExpectedDiagnostic> expected) {
+vector<unique_ptr<Location>> ProtocolTest::getReferences(string_view uri, int line, int character) {
+    auto refResponses = send(*getReference(uri, line, character));
+    CHECK_EQ(refResponses.size(), 1);
+    if (refResponses.size() == 1) {
+        auto &refResponse = refResponses.at(0);
+        CHECK(refResponse->isResponse());
+        auto &defResult = get<variant<JSONNullObject, vector<unique_ptr<Location>>>>(*refResponse->asResponse().result);
+        return move(get<vector<unique_ptr<Location>>>(defResult));
+    }
+    return {};
+}
+
+namespace {
+
+template <typename T>
+void assertDiagnostics(vector<unique_ptr<LSPMessage>> messages, vector<ExpectedDiagnostic> expected,
+                       const UnorderedMap<string, shared_ptr<core::File>> &sourceFileContents,
+                       map<string, vector<unique_ptr<Diagnostic>>> &diagnostics) {
     for (auto &msg : messages) {
-        ASSERT_NO_FATAL_FAILURE(assertNotificationMessage(LSPMethod::TextDocumentPublishDiagnostics, *msg));
+        // Ignore typecheck run and sorbet/fence messages. They do not impact semantics.
+        if (!isTypecheckRun(*msg) && !isSorbetFence(*msg)) {
+            assertNotificationMessage(LSPMethod::TextDocumentPublishDiagnostics, *msg);
+        }
     }
 
     // Convert ExpectedDiagnostic into ErrorAssertion objects.
-    vector<shared_ptr<ErrorAssertion>> errorAssertions;
+    vector<shared_ptr<T>> errorAssertions;
     for (auto e : expected) {
         auto range = RangeAssertion::makeRange(e.line);
-        errorAssertions.push_back(ErrorAssertion::make(e.path, range, e.line, e.message, "error"));
+        errorAssertions.push_back(T::make(e.path, range, e.line, e.message, "error"));
     }
 
     // Use same logic as main test runner.
-    ErrorAssertion::checkAll(sourceFileContents, errorAssertions, diagnostics);
+    T::checkAll(sourceFileContents, errorAssertions, diagnostics);
+}
+} // namespace
+
+void ProtocolTest::assertErrorDiagnostics(vector<unique_ptr<LSPMessage>> messages,
+                                          vector<ExpectedDiagnostic> expected) {
+    assertDiagnostics<ErrorAssertion>(std::move(messages), expected, sourceFileContents, diagnostics);
+}
+
+void ProtocolTest::assertUntypedDiagnostics(vector<unique_ptr<LSPMessage>> messages,
+                                            vector<ExpectedDiagnostic> expected) {
+    assertDiagnostics<UntypedAssertion>(std::move(messages), expected, sourceFileContents, diagnostics);
+}
+
+const CounterStateDatabase ProtocolTest::getCounters() {
+    auto results = getLSPResponsesFor(*lspWrapper, make_unique<LSPMessage>(make_unique<RequestMessage>(
+                                                       "2.0", nextId++, LSPMethod::GETCOUNTERS, nullopt)));
+    CHECK_EQ(results.size(), 1);
+    auto &result = results.at(0);
+    CHECK(result->isResponse());
+    auto &response = result->asResponse();
+    auto &counters = get<unique_ptr<SorbetCounters>>(response.result.value());
+    return CounterStateDatabase(move(counters->counters));
 }
 
 } // namespace sorbet::test::lsp

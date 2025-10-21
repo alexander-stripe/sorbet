@@ -21,30 +21,30 @@ module BigMath
   # If `decimal` is NaN, returns NaN.
   sig do
     params(
-        arg0: Integer,
-        arg1: Integer,
+        x: T.any(Integer, BigDecimal, Float),
+        prec: T.any(Integer, BigDecimal, Float),
     )
     .returns(BigDecimal)
   end
-  def self.exp(arg0, arg1); end
+  def self.exp(x, prec); end
 
   # Computes the natural logarithm of `decimal` to the specified number of
   # digits of precision, `numeric`.
   #
   # If `decimal` is zero or negative, raises
-  # [`Math::DomainError`](https://docs.ruby-lang.org/en/2.6.0/Math/DomainError.html).
+  # [`Math::DomainError`](https://docs.ruby-lang.org/en/2.7.0/Math/DomainError.html).
   #
   # If `decimal` is positive infinity, returns Infinity.
   #
   # If `decimal` is NaN, returns NaN.
   sig do
     params(
-        arg0: Integer,
-        arg1: Integer,
+        x: T.any(Integer, BigDecimal, Float),
+        prec: Integer,
     )
     .returns(BigDecimal)
   end
-  def self.log(arg0, arg1); end
+  def self.log(x, prec); end
 
   # Computes e (the base of natural logarithms) to the specified number of
   # digits of precision, `numeric`.
@@ -55,11 +55,11 @@ module BigMath
   # ```
   sig do
     params(
-        prec: Integer,
+        prec: T.any(Integer, BigDecimal, Float),
     )
     .returns(BigDecimal)
   end
-  def E(prec); end
+  module_function def E(prec); end
 
   # Computes the value of pi to the specified number of digits of precision,
   # `numeric`.
@@ -70,11 +70,11 @@ module BigMath
   # ```
   sig do
     params(
-        prec: Integer,
+      prec: T.any(Integer, BigDecimal, Float),
     )
     .returns(BigDecimal)
   end
-  def PI(prec); end
+  module_function def PI(prec); end
 
   # Computes the arctangent of `decimal` to the specified number of digits of
   # precision, `numeric`.
@@ -87,12 +87,12 @@ module BigMath
   # ```
   sig do
     params(
-        x: Integer,
-        prec: Integer,
+        x: BigDecimal,
+        prec: T.any(Integer, BigDecimal, Float),
     )
     .returns(BigDecimal)
   end
-  def atan(x, prec); end
+  module_function def atan(x, prec); end
 
   # Computes the cosine of `decimal` to the specified number of digits of
   # precision, `numeric`.
@@ -105,12 +105,12 @@ module BigMath
   # ```
   sig do
     params(
-        x: Integer,
-        prec: Integer,
+        x: BigDecimal,
+        prec: T.any(Integer, BigDecimal, Float),
     )
     .returns(BigDecimal)
   end
-  def cos(x, prec); end
+  module_function def cos(x, prec); end
 
   # Computes the sine of `decimal` to the specified number of digits of
   # precision, `numeric`.
@@ -123,12 +123,12 @@ module BigMath
   # ```
   sig do
     params(
-        x: Integer,
-        prec: Integer,
+        x: BigDecimal,
+        prec: T.any(Integer, BigDecimal, Float),
     )
     .returns(BigDecimal)
   end
-  def sin(x, prec); end
+  module_function def sin(x, prec); end
 
   # Computes the square root of `decimal` to the specified number of digits of
   # precision, `numeric`.
@@ -139,10 +139,10 @@ module BigMath
   # ```
   sig do
     params(
-        x: Integer,
-        prec: Integer,
+        x: BigDecimal,
+        prec: T.any(Integer, BigDecimal, Float),
     )
     .returns(BigDecimal)
   end
-  def sqrt(x, prec); end
+  module_function def sqrt(x, prec); end
 end
