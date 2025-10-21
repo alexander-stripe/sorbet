@@ -672,7 +672,8 @@ using ClassBehaviorLocsMap = UnorderedMap<core::ClassOrModuleRef, BehaviorLocs>;
 bool isBadHasAttachedClass(core::Context ctx, core::NameRef name) {
     auto owner = ctx.owner.asClassOrModuleRef();
     return name == core::Names::Constants::AttachedClass() && owner != core::Symbols::Class() &&
-           owner.data(ctx)->isClass() && !owner.data(ctx)->isSingletonClass(ctx);
+           owner != core::Symbols::Module() && owner.data(ctx)->isClass() &&
+           !owner.data(ctx)->isSingletonClass(ctx);
 }
 
 /**

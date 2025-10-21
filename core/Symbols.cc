@@ -22,11 +22,11 @@ namespace sorbet::core {
 
 using namespace std;
 
-const int Symbols::MAX_SYNTHETIC_CLASS_SYMBOLS = 215;
+const int Symbols::MAX_SYNTHETIC_CLASS_SYMBOLS = 216;
 const int Symbols::MAX_SYNTHETIC_METHOD_SYMBOLS = 51;
 const int Symbols::MAX_SYNTHETIC_FIELD_SYMBOLS = 20;
 const int Symbols::MAX_SYNTHETIC_TYPEPARAMETER_SYMBOLS = 6;
-const int Symbols::MAX_SYNTHETIC_TYPEMEMBER_SYMBOLS = 70;
+const int Symbols::MAX_SYNTHETIC_TYPEMEMBER_SYMBOLS = 108;
 
 namespace {
 constexpr string_view COLON_SEPARATOR = "::"sv;
@@ -1732,11 +1732,11 @@ ClassOrModuleRef ClassOrModule::singletonClass(GlobalState &gs) {
     singletonInfo->setIsModule(false);
 
     ENFORCE(self->isClassModuleSet(), "{}", selfRef.show(gs));
-    if (self->isClass()) {
+    if (self->isClass() || self->isModule()) {
         auto tp = gs.enterTypeMember(self->loc(), singleton, Names::Constants::AttachedClass(), Variance::CoVariant);
 
         // Initialize the bounds of AttachedClass as todo, as they will be updated
-        // to the externalType of the attached class for the upper bound, and bottom
+        // to the externalType of the attached class/module for the upper bound, and bottom
         // for the lower bound in the ResolveSignaturesWalk pass of the resolver.
         auto todo = make_type<ClassType>(Symbols::todo());
         tp.data(gs)->resultType = make_type<LambdaParam>(tp, todo, todo);

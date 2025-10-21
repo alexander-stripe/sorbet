@@ -519,6 +519,7 @@ NameDef names[] = {
     {"NilClass", "NilClass", true},
     {"Class", "Class", true},
     {"Module", "Module", true},
+    {"Interface", "Interface", true},
     {"Time", "Time", true},
     {"Todo", "<todo sym>", true},
     {"TodoMethod", "<todo method>", false},

@@ -651,6 +651,12 @@ void GlobalState::initEmpty() {
     klass = enterClassSymbol(Loc::none(), Symbols::T(), core::Names::Constants::Class());
     ENFORCE_NO_TIMER(klass == Symbols::T_Class());
 
+    klass = enterClassSymbol(Loc::none(), Symbols::T(), core::Names::Constants::Interface());
+    ENFORCE_NO_TIMER(klass == Symbols::T_Interface());
+    // Add AttachedClass type member to T::Interface (similar to Class)
+    typeMember = enterTypeMember(Loc::none(), Symbols::T_Interface(), Names::Constants::AttachedClass(), Variance::CoVariant);
+    typeMember.data(*this)->resultType = make_type<LambdaParam>(typeMember, Types::bottom(), Types::top());
+
     method = enterMethod(*this, Symbols::T_Generic(), Names::squareBrackets()).repeatedTopArg(Names::args()).build();
     ENFORCE_NO_TIMER(method == Symbols::T_Generic_squareBrackets());
 

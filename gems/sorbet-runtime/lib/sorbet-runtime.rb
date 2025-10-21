@@ -86,6 +86,7 @@ require_relative 'types/boolean'
 # Depends on types/utils
 require_relative 'types/types/typed_array'
 require_relative 'types/types/typed_class'
+require_relative 'types/types/typed_interface'
 
 # Props dependencies
 require_relative 'types/private/abstract/data'

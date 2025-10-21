@@ -367,4 +367,16 @@ module T
       end
     end
   end
+
+  module Interface
+    def self.[](type)
+      if type.is_a?(T::Types::Untyped)
+        T::Types::TypedInterface::Untyped::Private::INSTANCE
+      elsif type.is_a?(T::Types::Anything)
+        T::Types::TypedInterface::Anything::Private::INSTANCE
+      else
+        T::Types::TypedInterface::Private::Pool.type_for_module(type)
+      end
+    end
+  end
 end

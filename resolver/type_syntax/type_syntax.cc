@@ -1001,12 +1001,13 @@ optional<TypeSyntax::ResultType> interpretTCombinator(core::Context ctx, const a
                 return TypeSyntax::ResultType{core::Types::untypedUntracked(), core::Symbols::noClassOrModule()};
             } else {
                 ENFORCE(
-                    // T::Class[...] support
-                    owner == core::Symbols::Class() ||
+                    // T::Class[...] and T::Interface[...] support
+                    owner == core::Symbols::Class() || owner == core::Symbols::T_Interface() ||
                     // isModule is never true for a singleton class, which implies this is a module instance method
                     ownerData->isModule() ||
                     // In classes, can only use `T.attached_class` on singleton methods
-                    (ownerData->isSingletonClass(ctx) && ownerData->attachedClass(ctx).data(ctx)->isClass()));
+                    // (Module singletons now also have AttachedClass to support T::Interface)
+                    ownerData->isSingletonClass(ctx));
 
                 const auto attachedClass = maybeAttachedClass.asTypeMemberRef();
                 return TypeSyntax::ResultType{core::make_type<core::SelfTypeParam>(attachedClass),

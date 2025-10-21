@@ -1318,6 +1318,14 @@ bool isSubTypeUnderConstraintSingle(const GlobalState &gs, TypeConstraint &const
             return false;
         } else {
             result = classSymbolIsAsGoodAs(gs, a1->klass, a2->klass);
+            
+            // Special handling for T::Interface: allow module singletons to match T::Interface
+            // even though they don't derive from it
+            if (!result && a2->klass == Symbols::T_Interface()) {
+                if (isModuleSingletonClass(gs, a1->klass)) {
+                    result = true;
+                }
+            }
         }
         if (!result) {
             if constexpr (shouldAddErrorDetails) {

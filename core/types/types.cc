@@ -369,6 +369,12 @@ TypePtr Types::tClass(const TypePtr &attachedClass) {
     return make_type<AppliedType>(Symbols::Class(), move(targs));
 }
 
+TypePtr Types::tInterface(const TypePtr &attachedClass) {
+    vector<TypePtr> targs;
+    targs.emplace_back(attachedClass);
+    return make_type<AppliedType>(Symbols::Module(), move(targs));
+}
+
 TypePtr Types::dropNil(const GlobalState &gs, const TypePtr &from) {
     static auto nilClass = core::Symbols::NilClass();
     static auto toDrop = absl::MakeSpan(&nilClass, 1);
@@ -630,7 +636,12 @@ void MetaType::_sanityCheck(const GlobalState &gs) const {
  * */
 InlinedVector<TypeMemberRef, 4> Types::alignBaseTypeArgs(const GlobalState &gs, ClassOrModuleRef what,
                                                          const vector<TypePtr> &targs, ClassOrModuleRef asIf) {
-    ENFORCE(what == asIf || what.data(gs)->derivesFrom(gs, asIf) || asIf.data(gs)->derivesFrom(gs, what),
+    // Special case for T::Interface: module singletons don't derive from T_Interface,
+    // but they should still be alignable by matching AttachedClass type members
+    bool isInterfaceAlignment = asIf == Symbols::T_Interface() && what.data(gs)->attachedClass(gs).exists() &&
+                                what.data(gs)->attachedClass(gs).data(gs)->isModule();
+    
+    ENFORCE(isInterfaceAlignment || what == asIf || what.data(gs)->derivesFrom(gs, asIf) || asIf.data(gs)->derivesFrom(gs, what),
             "what={} asIf={}", what.data(gs)->name.showRaw(gs), asIf.data(gs)->name.showRaw(gs));
     InlinedVector<TypeMemberRef, 4> currentAlignment;
     if (targs.empty()) {
