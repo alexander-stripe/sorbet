@@ -1837,9 +1837,22 @@ public:
     }
 
     void checkLVarName(std::string name, core::LocOffsets loc) {
-        std::regex lvar_regex("^[a-z_][a-zA-Z0-9_]*$");
-        if (!std::regex_match(name, lvar_regex)) {
+        // Fast ASCII check equivalent to ^[a-z_][a-zA-Z0-9_]*$
+        if (name.empty()) {
             error_without_recovery(ruby_parser::dclass::PatternLVarName, loc, name);
+            return;
+        }
+        char first = name[0];
+        if (!((first >= 'a' && first <= 'z') || first == '_')) {
+            error_without_recovery(ruby_parser::dclass::PatternLVarName, loc, name);
+            return;
+        }
+        for (size_t i = 1; i < name.size(); i++) {
+            char c = name[i];
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')) {
+                error_without_recovery(ruby_parser::dclass::PatternLVarName, loc, name);
+                return;
+            }
         }
     }
 
