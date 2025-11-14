@@ -18,9 +18,6 @@ const string_view CommentsAssociator::BIND_PREFIX = "#: self as ";
 
 const regex TYPE_ALIAS_PATTERN("^#: type\\s*([a-z][A-Za-z0-9_]*)\\s*=\\s*([^\\n]*)$");
 
-// Static regex pattern to avoid recompilation
-static const regex HEREDOC_PATTERN("\\s*=?\\s*<<(-|~)[^,\\s\\n#]+(,\\s*<<(-|~)[^,\\s\\n#]+)*");
-
 /**
  * Check if the given range is the start of a heredoc assignment `= <<~FOO` and return the position of the end of the
  * heredoc marker.
@@ -30,13 +27,69 @@ static const regex HEREDOC_PATTERN("\\s*=?\\s*<<(-|~)[^,\\s\\n#]+(,\\s*<<(-|~)[^
 optional<uint32_t> hasHeredocMarker(core::Context ctx, const uint32_t fromPos, const uint32_t toPos) {
     string_view source(ctx.file.data(ctx).source().substr(fromPos, toPos - fromPos));
 
-    string source_str(source);
-    smatch match;
-    if (regex_search(source_str, HEREDOC_PATTERN)) {
-        return fromPos + source_str.length();
+    auto isSpace = [](char ch) -> bool {
+        return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f' || ch == '\v';
+    };
+    auto isLabelChar = [&](char ch) -> bool {
+        // Disallow comma, whitespace/newline, and '#'
+        return ch != ',' && ch != '#' && !isSpace(ch);
+    };
+
+    size_t i = 0;
+    const size_t n = source.size();
+
+    // Leading whitespace
+    while (i < n && isSpace(source[i])) {
+        i++;
+    }
+    // Optional '=' then whitespace
+    if (i < n && source[i] == '=') {
+        i++;
+        while (i < n && isSpace(source[i])) {
+            i++;
+        }
+    }
+    // Expect '<<'
+    if (i + 1 >= n || source[i] != '<' || source[i + 1] != '<') {
+        return nullopt;
+    }
+    i += 2;
+    // Expect '-' or '~'
+    if (i >= n || (source[i] != '-' && source[i] != '~')) {
+        return nullopt;
+    }
+    i++;
+    // Require at least one label character
+    if (i >= n || !isLabelChar(source[i])) {
+        return nullopt;
+    }
+    while (i < n && isLabelChar(source[i])) {
+        i++;
+    }
+    // Optionally handle additional markers: , <<-FOO or , <<~FOO
+    while (i < n && source[i] == ',') {
+        i++;
+        while (i < n && isSpace(source[i])) {
+            i++;
+        }
+        if (i + 2 >= n || source[i] != '<' || source[i + 1] != '<') {
+            return nullopt;
+        }
+        i += 2;
+        if (i >= n || (source[i] != '-' && source[i] != '~')) {
+            return nullopt;
+        }
+        i++;
+        if (i >= n || !isLabelChar(source[i])) {
+            return nullopt;
+        }
+        while (i < n && isLabelChar(source[i])) {
+            i++;
+        }
     }
 
-    return nullopt;
+    // Matched heredoc start; return end position of scanned range (consistent with previous behavior)
+    return fromPos + static_cast<uint32_t>(source.length());
 }
 
 optional<uint32_t> CommentsAssociator::locateTargetLine(parser::Node *node) {
