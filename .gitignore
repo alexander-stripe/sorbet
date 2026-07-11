@@ -40,6 +40,9 @@ gems/sorbet-static-and-runtime/Gemfile.lock
 # Used by tools/scripts/run_benchmarks.sh
 /tmp
 
+# Performance benchmark output artifacts
+/perf-out/
+
 # Used by tools/scripts/ll-view.sh
 /ll-view.out
 
